@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v0.8.0] - 2026-07-23
+
+### Added
+- **Verification Runner**: Introduced `VerificationRunner` service to sequentially execute build and test verification commands on the workspace.
+- **Verification Metrics**: Extended `ExecutionResult` with `verificationStatus`, `verificationSteps`, `verificationLogs`, `buildPassed`, `testsPassed`, and `verificationDuration`.
+- **Sequential Termination**: Terminates verification execution immediately on the first failed step to prevent unsafe updates.
+
 ## [v0.7.0] - 2026-07-23
 
 ### Added

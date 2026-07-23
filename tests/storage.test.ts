@@ -21,6 +21,7 @@ describe('SQLite Relational Repository & Telemetry Storage', () => {
       defaultContextBudget: 4096,
       providerType: 'mock',
       claudeExecutable: 'claude',
+      verificationCommands: ['npm run build', 'npm test'],
     }),
   };
 

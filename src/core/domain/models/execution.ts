@@ -1,6 +1,7 @@
 export type ExecutionStatus = 'SUCCESS' | 'FAILED' | 'ERROR';
 export type PatchStatus = 'applied' | 'failed' | 'skipped' | 'none';
 export type ValidationStatus = 'passed' | 'failed' | 'skipped';
+export type VerificationStatus = 'passed' | 'failed' | 'skipped';
 
 export interface EngineeringTask {
   id: string;
@@ -27,4 +28,10 @@ export interface ExecutionResult {
   validationErrors: string[];
   validationWarnings: string[];
   parserConfidence: number;
+  verificationStatus: VerificationStatus;
+  verificationSteps: string[];
+  verificationLogs: string;
+  buildPassed: boolean;
+  testsPassed: boolean;
+  verificationDuration: number;
 }

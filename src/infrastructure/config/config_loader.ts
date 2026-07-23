@@ -27,6 +27,7 @@ const configSchema = z.object({
   }, z.number().default(8192)),
   PROVIDER_TYPE: z.enum(['mock', 'claude']).default('mock'),
   CLAUDE_EXECUTABLE: z.string().default('claude'),
+  VERIFICATION_COMMANDS: z.string().default('npm run build,npm test'),
 });
 
 export class ConfigLoader implements IConfig {
@@ -49,6 +50,7 @@ export class ConfigLoader implements IConfig {
       defaultContextBudget: data.DEFAULT_CONTEXT_BUDGET,
       providerType: data.PROVIDER_TYPE,
       claudeExecutable: data.CLAUDE_EXECUTABLE,
+      verificationCommands: data.VERIFICATION_COMMANDS.split(',').map((c) => c.trim()).filter(Boolean),
     };
   }
 

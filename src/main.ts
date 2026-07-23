@@ -98,7 +98,7 @@ async function bootstrap() {
   container.register<IProvider>('Provider', provider);
 
   // 4e. Initialize Application Services
-  const taskExecutionService = new TaskExecutionService(contextBuilder, provider);
+  const taskExecutionService = new TaskExecutionService(contextBuilder, provider, configLoader, processRuntime);
   container.register<TaskExecutionService>('TaskExecutionService', taskExecutionService);
 
   // 5. Health Check

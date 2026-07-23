@@ -19,6 +19,7 @@ describe('JSON Lines Structured Logger', () => {
         defaultContextBudget: 4096,
         providerType: 'mock',
         claudeExecutable: 'claude',
+        verificationCommands: ['npm run build', 'npm test'],
       }),
     };
     if (fs.existsSync(tempLogPath)) {

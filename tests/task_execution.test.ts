@@ -18,7 +18,24 @@ describe('TaskExecutionService Application Service', () => {
       cancel: jest.fn(),
       providerName: jest.fn().mockReturnValue('mock-provider'),
     };
-    service = new TaskExecutionService(mockContextBuilder, mockProvider);
+    const mockConfig = {
+      get: () => ({
+        port: 3000,
+        env: 'test',
+        dbPath: ':memory:',
+        logPath: './test.jsonl',
+        maxConcurrentAgents: 5,
+        approvalMode: 'automatic' as const,
+        defaultContextBudget: 4096,
+        providerType: 'mock' as const,
+        claudeExecutable: 'claude',
+        verificationCommands: [],
+      }),
+    };
+    const mockRuntime = {
+      execute: jest.fn(),
+    };
+    service = new TaskExecutionService(mockContextBuilder, mockProvider, mockConfig, mockRuntime);
   });
 
   it('should successfully execute a valid engineering task', async () => {

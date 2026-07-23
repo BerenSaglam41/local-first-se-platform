@@ -8,6 +8,7 @@ export interface AppConfig {
   defaultContextBudget: number;
   providerType: 'mock' | 'claude';
   claudeExecutable?: string;
+  verificationCommands: string[];
 }
 
 export interface IConfig {

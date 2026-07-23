@@ -39,8 +39,23 @@ function printResult(result: ExecutionResult) {
   console.log(`Patch Status:      ${result.patchStatus}`);
   console.log(`Duration:          ${result.durationMs}ms`);
 
+  console.log('\n--- Verification Summary ---');
+  console.log(`Build:             ${result.buildPassed ? 'PASSED' : 'FAILED'}`);
+  console.log(`Tests:             ${result.testsPassed ? 'PASSED' : 'FAILED'}`);
+  console.log(`Verification:      ${result.verificationStatus.toUpperCase()}`);
+  if (result.verificationSteps.length > 0) {
+    console.log(`Verification Steps (${result.verificationSteps.length}):`);
+    result.verificationSteps.forEach(step => console.log(`  - ${step}`));
+  }
+
+  if (result.verificationLogs) {
+    console.log('--- Verification Logs ---');
+    console.log(result.verificationLogs);
+    console.log('-------------------------');
+  }
+
   if (result.modifiedFiles.length > 0) {
-    console.log(`✔ Modified Files (${result.modifiedFiles.length}):`);
+    console.log(`\n✔ Modified Files (${result.modifiedFiles.length}):`);
     result.modifiedFiles.forEach(file => {
       console.log(`  - [MODIFIED] ${path.basename(file)}`);
       if (fs.existsSync(file)) {
@@ -125,7 +140,7 @@ async function runDemo() {
   }
   container.register('Provider', providerInstance);
 
-  const taskExecutionService = new TaskExecutionService(contextBuilder, providerInstance);
+  const taskExecutionService = new TaskExecutionService(contextBuilder, providerInstance, config, runtime);
   container.register('TaskExecutionService', taskExecutionService);
 
   console.log('✔ Services registered in DI container successfully.');
