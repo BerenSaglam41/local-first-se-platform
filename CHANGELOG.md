@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.0.0] - 2026-07-23
+
+### Added
+- **Git Integration**: Built `GitManager` service to detect repository root, verify status, generate diffs, auto-commit verified changes, and execute rollbacks on failures.
+- **Rollback Points**: Reverts modifications to tracked files and removes untracked files safely if verification ultimately fails after all retry attempts.
+- **Git Telemetry**: Expanded `ExecutionResult` with `gitStatus`, `createdCommit`, `commitHash`, `rollbackPerformed`, and `rollbackReason`.
+- **Git Configuration**: Supported `AUTO_COMMIT`, `AUTO_ROLLBACK`, and conventional `COMMIT_MESSAGE_TEMPLATE` in configuration schemas.
+
 ## [v0.9.0] - 2026-07-23
 
 ### Added

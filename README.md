@@ -113,6 +113,17 @@ To recover from compiler errors, syntax anomalies, and test failures, the platfo
 3. **Correction Prompts**: Constructs a structured correction instruction detailing the previous attempt failures and errors.
 4. **Iterative Repair**: Invokes the provider with the correction instruction to re-attempt patching and verification, up to `MAX_RETRY_COUNT` (default: 3). If verification passes, the loop terminates immediately with success.
 
+### Git Integration Stage
+Git acts as the final stage of the engineering execution pipeline, providing safety commits on success and automatic rollbacks on failure.
+
+#### Configuration:
+- `AUTO_COMMIT=true|false`: Automatically stage and commit verified task changes to Git on success (default: `true`).
+- `AUTO_ROLLBACK=true|false`: Automatically discard modified and untracked files if verification ultimately fails after all retries (default: `true`).
+- `COMMIT_MESSAGE_TEMPLATE`: Structured commit message template supporting conventional commits. Templated fields include `{{taskId}}` and `{{taskDescription}}`.
+
+#### Rollback Execution:
+If verification fails, the system detects all files modified across all retry attempts. It performs a targeted `git checkout -- <file>` for tracked files and deletes untracked files, safely restoring the repository to its clean state before execution without disrupting other unrelated modifications.
+
 ---
 
 ## 🏃‍♂️ Quick Start Demo
