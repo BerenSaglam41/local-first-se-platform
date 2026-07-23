@@ -1,5 +1,6 @@
 export type ExecutionStatus = 'SUCCESS' | 'FAILED' | 'ERROR';
 export type PatchStatus = 'applied' | 'failed' | 'skipped' | 'none';
+export type ValidationStatus = 'passed' | 'failed' | 'skipped';
 
 export interface EngineeringTask {
   id: string;
@@ -22,4 +23,8 @@ export interface ExecutionResult {
   filesSkipped: string[];
   parserWarnings: string[];
   patchStatus: PatchStatus;
+  validationStatus: ValidationStatus;
+  validationErrors: string[];
+  validationWarnings: string[];
+  parserConfidence: number;
 }

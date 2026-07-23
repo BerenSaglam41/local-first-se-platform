@@ -4,11 +4,13 @@ import { EngineeringTask, ExecutionResult } from '../../domain/models/execution'
 import { ResponseParser } from './response_parser';
 import { PatchGenerator } from './patch_generator';
 import { WorkspaceUpdater } from './workspace_updater';
+import { ResponseValidator } from './response_validator';
 
 export class TaskExecutionService {
   private parser = new ResponseParser();
   private patchGenerator = new PatchGenerator();
   private updater = new WorkspaceUpdater();
+  private validator = new ResponseValidator();
 
   constructor(
     private contextBuilder: IContextBuilder,
@@ -30,6 +32,10 @@ export class TaskExecutionService {
         filesSkipped: [],
         parserWarnings: [],
         patchStatus: 'none',
+        validationStatus: 'skipped',
+        validationErrors: ['Invalid task request'],
+        validationWarnings: [],
+        parserConfidence: 0.0,
       };
     }
     if (!task.description || task.description.trim() === '') {
@@ -43,6 +49,10 @@ export class TaskExecutionService {
         filesSkipped: [],
         parserWarnings: [],
         patchStatus: 'none',
+        validationStatus: 'skipped',
+        validationErrors: ['Invalid task request'],
+        validationWarnings: [],
+        parserConfidence: 0.0,
       };
     }
     if (!task.entryFile || task.entryFile.trim() === '') {
@@ -56,6 +66,10 @@ export class TaskExecutionService {
         filesSkipped: [],
         parserWarnings: [],
         patchStatus: 'none',
+        validationStatus: 'skipped',
+        validationErrors: ['Invalid task request'],
+        validationWarnings: [],
+        parserConfidence: 0.0,
       };
     }
 
@@ -79,10 +93,17 @@ export class TaskExecutionService {
         filesSkipped: [],
         parserWarnings: [],
         patchStatus: 'none',
+        validationStatus: 'skipped',
+        validationErrors: [`Context compilation error: ${err.message || err}`],
+        validationWarnings: [],
+        parserConfidence: 0.0,
       };
     }
 
-    // 3. Invoke provider
+    // 3. Prepend task instructions to codebase context for the provider prompt
+    const prompt = `Task Instruction: ${task.description}\n\nCodebase Context:\n${contextContent}`;
+
+    // 4. Invoke provider
     let output = '';
     let errorMsg = '';
     let success = false;
@@ -90,7 +111,7 @@ export class TaskExecutionService {
     let providerDuration = 0;
 
     try {
-      const providerResult = await this.provider.execute(contextContent);
+      const providerResult = await this.provider.execute(prompt);
       output = providerResult.output;
       errorMsg = providerResult.error || '';
       success = providerResult.success;
@@ -107,6 +128,10 @@ export class TaskExecutionService {
         filesSkipped: [],
         parserWarnings: [],
         patchStatus: 'none',
+        validationStatus: 'skipped',
+        validationErrors: [`Provider process crashed: ${err.message || err}`],
+        validationWarnings: [],
+        parserConfidence: 0.0,
       };
     }
 
@@ -121,25 +146,37 @@ export class TaskExecutionService {
         filesSkipped: [],
         parserWarnings: [],
         patchStatus: 'failed',
+        validationStatus: 'skipped',
+        validationErrors: ['Provider execution returned non-zero code'],
+        validationWarnings: [],
+        parserConfidence: 0.0,
       };
     }
 
-    // 4. Parse Response & Extract Code Blocks
+    // 5. Parse Response & Extract Code Blocks
     const parsed = this.parser.parse(output, task.workspaceFiles, task.entryFile);
-    if (!parsed.success) {
+
+    // 6. Response Validation Pipeline
+    const validation = this.validator.validate(output, parsed, task.workspaceFiles);
+    if (!validation.isValid) {
       return {
         taskId: task.id,
-        status: 'SUCCESS',
+        status: 'FAILED',
         output,
+        error: `Response validation failed: ${validation.errors.join('; ')}`,
         durationMs: Date.now() - startTime,
         modifiedFiles: [],
         filesSkipped: [],
-        parserWarnings: [...parsed.warnings, 'No code blocks extracted from provider response.'],
+        parserWarnings: parsed.warnings,
         patchStatus: 'skipped',
+        validationStatus: 'failed',
+        validationErrors: validation.errors,
+        validationWarnings: validation.warnings,
+        parserConfidence: validation.confidence,
       };
     }
 
-    // 5. Generate patches
+    // 7. Generate patches
     const patchResult = this.patchGenerator.generatePatches(parsed.blocks, task.workspaceFiles);
     if (!patchResult.success) {
       return {
@@ -152,10 +189,14 @@ export class TaskExecutionService {
         filesSkipped: [],
         parserWarnings: parsed.warnings,
         patchStatus: 'failed',
+        validationStatus: 'passed',
+        validationErrors: [patchResult.error || 'Patch generation error'],
+        validationWarnings: validation.warnings,
+        parserConfidence: validation.confidence,
       };
     }
 
-    // 6. Update workspace
+    // 8. Update workspace
     const updateResult = this.updater.update(patchResult.patches);
     if (!updateResult.success) {
       return {
@@ -168,6 +209,10 @@ export class TaskExecutionService {
         filesSkipped: updateResult.filesSkipped,
         parserWarnings: parsed.warnings,
         patchStatus: 'failed',
+        validationStatus: 'passed',
+        validationErrors: [updateResult.error || 'Workspace update error'],
+        validationWarnings: validation.warnings,
+        parserConfidence: validation.confidence,
       };
     }
 
@@ -180,6 +225,10 @@ export class TaskExecutionService {
       filesSkipped: updateResult.filesSkipped,
       parserWarnings: parsed.warnings,
       patchStatus: 'applied',
+      validationStatus: 'passed',
+      validationErrors: [],
+      validationWarnings: validation.warnings,
+      parserConfidence: validation.confidence,
     };
   }
 }

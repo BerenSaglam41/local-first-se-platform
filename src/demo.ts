@@ -14,7 +14,7 @@ import { IProvider } from './core/domain/interfaces/iprovider';
 import { ClaudeProvider } from './infrastructure/runtime/claude_provider';
 import { MockProvider } from './infrastructure/runtime/mock_provider';
 import { TaskExecutionService } from './core/application/services/task_execution_service';
-import { EngineeringTask } from './core/domain/models/execution';
+import { EngineeringTask, ExecutionResult } from './core/domain/models/execution';
 import * as fs from 'fs';
 import * as path from 'path';
 import { execSync } from 'child_process';
@@ -30,12 +30,57 @@ function detectClaudeCli(): boolean {
   }
 }
 
+function printResult(result: ExecutionResult) {
+  console.log('\n--- Execution Finished ---');
+  console.log(`Task ID:           ${result.taskId}`);
+  console.log(`Status:            ${result.status}`);
+  console.log(`Validation Status: ${result.validationStatus}`);
+  console.log(`Parser Confidence: ${result.parserConfidence.toFixed(2)}`);
+  console.log(`Patch Status:      ${result.patchStatus}`);
+  console.log(`Duration:          ${result.durationMs}ms`);
+
+  if (result.modifiedFiles.length > 0) {
+    console.log(`✔ Modified Files (${result.modifiedFiles.length}):`);
+    result.modifiedFiles.forEach(file => {
+      console.log(`  - [MODIFIED] ${path.basename(file)}`);
+      if (fs.existsSync(file)) {
+        console.log('--- FILE CONTENT AFTER UPDATE ---');
+        console.log(fs.readFileSync(file, 'utf8'));
+        console.log('---------------------------------');
+      }
+    });
+  } else {
+    console.log('ℹ No files were modified in the workspace.');
+  }
+
+  if (result.filesSkipped.length > 0) {
+    console.log(`ℹ Skipped Files (${result.filesSkipped.length}):`);
+    result.filesSkipped.forEach(file => console.log(`  - [SKIPPED] ${path.basename(file)}`));
+  }
+
+  if (result.validationErrors.length > 0) {
+    console.log(`❌ Validation Errors (${result.validationErrors.length}):`);
+    result.validationErrors.forEach(err => console.log(`  - ${err}`));
+  }
+
+  if (result.validationWarnings.length > 0) {
+    console.log(`⚠ Validation Warnings (${result.validationWarnings.length}):`);
+    result.validationWarnings.forEach(w => console.log(`  - ${w}`));
+  }
+
+  if (result.status !== 'SUCCESS') {
+    console.log(`❌ Error: ${result.error}`);
+  }
+}
+
 async function runDemo() {
   console.log('--- Starting SE-OS E2E Executable Demo ---');
 
   // 1. Detect and configure provider selection dynamically
   const hasClaude = detectClaudeCli();
-  if (hasClaude) {
+  if (process.env.PROVIDER_TYPE === 'mock') {
+    console.log('ℹ PROVIDER_TYPE=mock explicitly configured. Selecting Mock Provider.');
+  } else if (hasClaude) {
     console.log('✔ Detected Claude CLI installed on host. Selecting Claude Provider.');
     process.env.PROVIDER_TYPE = 'claude';
   } else {
@@ -85,81 +130,77 @@ async function runDemo() {
 
   console.log('✔ Services registered in DI container successfully.');
 
-  // 3. Create a Mock TypeScript Workspace File
+  // Helper to reset workspace file
   const workspaceDir = path.join(__dirname, '..', 'demo_workspace');
-  if (!fs.existsSync(workspaceDir)) {
-    fs.mkdirSync(workspaceDir, { recursive: true });
-  }
-
   const helperFile = path.join(workspaceDir, 'math_helper.ts');
-  const helperContent = `
-    // Helper interface for calculations
-    export interface OperationConfig {
-      precision: number;
+
+  const resetWorkspace = () => {
+    if (!fs.existsSync(workspaceDir)) {
+      fs.mkdirSync(workspaceDir, { recursive: true });
     }
-
-    // Core math class
-    export class MathHelper {
-      constructor(private config: OperationConfig) {}
-
-      // Performs addition
-      add(a: number, b: number): number {
-        return a + b;
+    const helperContent = `
+      // Helper interface for calculations
+      export interface OperationConfig {
+        precision: number;
       }
-    }
-  `;
-  fs.writeFileSync(helperFile, helperContent, 'utf8');
-  console.log(`✔ Mock workspace file created at: ${helperFile}`);
 
-  // 4. Create an EngineeringTask
-  const task: EngineeringTask = {
-    id: 'task-101',
+      // Core math class
+      export class MathHelper {
+        constructor(private config: OperationConfig) {}
+
+        // Performs addition
+        add(a: number, b: number): number {
+          return a + b;
+        }
+      }
+    `;
+    fs.writeFileSync(helperFile, helperContent, 'utf8');
+  };
+
+  // ==========================================
+  // RUN 1: Valid Code Response
+  // ==========================================
+  resetWorkspace();
+  console.log(`\n✔ Mock workspace file reset at: ${helperFile}`);
+
+  const task1: EngineeringTask = {
+    id: 'task-101-valid',
     description: 'Refactor the add method in MathHelper',
     entryFile: helperFile,
     workspaceFiles: [helperFile],
   };
 
-  console.log(`\n--- Dispatching Task to TaskExecutionService [${task.id}] ---`);
-  console.log(`Description: "${task.description}"`);
+  console.log(`\n==================================================`);
+  console.log(`[RUN 1] Dispatching Task: ${task1.id}`);
+  console.log(`Description: "${task1.description}" (Should succeed & modify workspace)`);
+  console.log(`==================================================`);
 
-  // 5. Invoke Application Service
   const executionService = container.resolve<TaskExecutionService>('TaskExecutionService');
-  const result = await executionService.executeTask(task);
+  const result1 = await executionService.executeTask(task1);
+  printResult(result1);
 
-  console.log('\n--- Execution Finished ---');
-  console.log(`Task ID: ${result.taskId}`);
-  console.log(`Status: ${result.status}`);
-  console.log(`Patch Status: ${result.patchStatus}`);
-  console.log(`Duration: ${result.durationMs}ms`);
-  
-  if (result.modifiedFiles.length > 0) {
-    console.log(`✔ Modified Files (${result.modifiedFiles.length}):`);
-    result.modifiedFiles.forEach(file => {
-      console.log(`  - [MODIFIED] ${path.basename(file)}`);
-      // Print the new content of the updated file
-      if (fs.existsSync(file)) {
-        console.log('--- NEW FILE CONTENT ---');
-        console.log(fs.readFileSync(file, 'utf8'));
-        console.log('------------------------');
-      }
-    });
-  }
+  // ==========================================
+  // RUN 2: Conversational Response (Safety Validation Fail)
+  // ==========================================
+  resetWorkspace();
+  console.log(`\n✔ Mock workspace file reset at: ${helperFile}`);
 
-  if (result.filesSkipped.length > 0) {
-    console.log(`ℹ Skipped Files (${result.filesSkipped.length}):`);
-    result.filesSkipped.forEach(file => console.log(`  - [SKIPPED] ${path.basename(file)}`));
-  }
+  const task2: EngineeringTask = {
+    id: 'task-102-conversational',
+    description: 'conversational: Refactor the add method in MathHelper',
+    entryFile: helperFile,
+    workspaceFiles: [helperFile],
+  };
 
-  if (result.parserWarnings.length > 0) {
-    console.log(`⚠ Warnings (${result.parserWarnings.length}):`);
-    result.parserWarnings.forEach(w => console.log(`  - ${w}`));
-  }
+  console.log(`\n==================================================`);
+  console.log(`[RUN 2] Dispatching Task: ${task2.id}`);
+  console.log(`Description: "${task2.description}" (Should reject & NOT modify workspace)`);
+  console.log(`==================================================`);
 
-  if (result.status !== 'SUCCESS') {
-    console.error(`❌ Execution Error: ${result.error}`);
-  }
+  const result2 = await executionService.executeTask(task2);
+  printResult(result2);
 
-  // 6. Cleanup
+  // Cleanup
   fs.rmSync(workspaceDir, { recursive: true, force: true });
   await repository.close();
   console.log('\n✔ Workspace cleaned up and database connection closed.');

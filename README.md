@@ -92,6 +92,15 @@ The platform includes an automated pipeline that applies the generated code chan
 2. **PatchGenerator**: Inspects the parsed code blocks, validating them against the allowed `workspaceFiles` of the `EngineeringTask` to prevent writing unauthorized files.
 3. **WorkspaceUpdater**: Performs atomic writes to the workspace files, keeping identical files skipped to save filesystem cycles and preserving original formatting.
 
+### Execution Validation Pipeline
+To ensure safety and protect the codebase, the platform includes a validation gate that inspects raw AI responses and parsed blocks before any disk modifications are executed.
+
+#### Validation Checks:
+1. **Empty/Conversational Detection**: Detects empty or purely conversational responses (prose) and prevents them from overwriting source files.
+2. **Structural Integrity**: Checks for unbalanced brackets/braces and malformed fenced code blocks to prevent introducing syntax errors.
+3. **Language Matching**: Verifies that the language tag in markdown blocks (e.g. `typescript`) aligns with the file extension (e.g. `.ts`).
+4. **Confidence Score**: Dynamically calculates a parser confidence score (0.0 to 1.0) and rejects patches falling below the threshold.
+
 ---
 
 ## 🏃‍♂️ Quick Start Demo

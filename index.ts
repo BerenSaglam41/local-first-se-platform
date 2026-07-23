@@ -1,1 +1,1 @@
-refactored response
+const x = 1;

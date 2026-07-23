@@ -37,7 +37,7 @@ describe('TaskExecutionService Application Service', () => {
 
     const mockProviderResult: ProviderResult = {
       success: true,
-      output: 'refactored response',
+      output: 'Here is the code:\n```typescript\nconst x = 1;\n```',
       exitCode: 0,
       durationMs: 120,
     };
@@ -46,11 +46,13 @@ describe('TaskExecutionService Application Service', () => {
     const result = await service.executeTask(task);
 
     expect(result.status).toBe('SUCCESS');
-    expect(result.output).toBe('refactored response');
+    expect(result.output).toBe('Here is the code:\n```typescript\nconst x = 1;\n```');
     expect(result.error).toBeUndefined();
     expect(result.taskId).toBe(task.id);
     expect(mockContextBuilder.buildContext).toHaveBeenCalledWith(task.description, task.entryFile, task.workspaceFiles);
-    expect(mockProvider.execute).toHaveBeenCalledWith('sliced code content');
+    expect(mockProvider.execute).toHaveBeenCalledWith(
+      `Task Instruction: ${task.description}\n\nCodebase Context:\nsliced code content`
+    );
   });
 
   it('should return ERROR status on invalid task request', async () => {

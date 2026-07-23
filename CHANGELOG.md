@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v0.7.0] - 2026-07-23
+
+### Added
+- **Execution Validation Pipeline**: Integrated a validation pipeline to inspect raw response strings and parsed blocks.
+- **ResponseValidator**: Developed checks for empty/conversational responses, unbalanced braces/brackets (unclosed constructs), syntax completeness, and language/file extension mismatches.
+- **Confidence Gate**: Introduced a dynamic parser confidence scoring metric with a threshold gate to reject unsafe patches.
+
 ## [v0.6.0] - 2026-07-23
 
 ### Added

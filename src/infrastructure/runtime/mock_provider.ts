@@ -18,17 +18,22 @@ export class MockProvider implements IProvider {
     // Escape backticks within the template literal to avoid premature termination of the string literal
     const mockProviderScript = `
       process.stdin.on('data', (data) => {
-        console.log('\\n[Mock Provider stdout] Received context slice. Generating refactored response...');
+        const promptText = data.toString().trim();
+        console.log('\\n[Mock Provider stdout] Received context slice. Generating response...');
         console.log('[Mock Provider stdout] RESPONSE:');
-        console.log('Here is the refactored math helper file:');
-        console.log('\`\`\`typescript');
-        console.log('export class MathHelper {');
-        console.log('  add(a: number, b: number): number {');
-        console.log('    console.log(\\'Adding: \\' + a + \\' and \\' + b);');
-        console.log('    return a + b;');
-        console.log('  }');
-        console.log('}');
-        console.log('\`\`\`');
+        if (promptText.includes('conversational')) {
+          console.log('I see the contents of math_helper.ts, but there is no specific instruction — what would you like me to do with it?');
+        } else {
+          console.log('Here is the refactored math helper file:');
+          console.log('\`\`\`typescript');
+          console.log('export class MathHelper {');
+          console.log('  add(a: number, b: number): number {');
+          console.log('    console.log(\\'Adding: \\' + a + \\' and \\' + b);');
+          console.log('    return a + b;');
+          console.log('  }');
+          console.log('}');
+          console.log('\`\`\`');
+        }
         process.exit(0);
       });
     `;
