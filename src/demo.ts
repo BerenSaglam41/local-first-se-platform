@@ -10,11 +10,11 @@ import { TypeScriptASTParser } from './infrastructure/parser/ts_ast_parser';
 import { DependencyResolver } from './infrastructure/parser/dependency_resolver';
 import { ContextBuilder } from './infrastructure/parser/context_builder';
 import { ProcessRuntime } from './infrastructure/runtime/process_runtime';
-import { IContextBuilder } from './core/domain/interfaces/icontext_builder';
-import { IProcessRuntime } from './core/domain/interfaces/iprocess_runtime';
 import { IProvider } from './core/domain/interfaces/iprovider';
 import { ClaudeProvider } from './infrastructure/runtime/claude_provider';
 import { MockProvider } from './infrastructure/runtime/mock_provider';
+import { TaskExecutionService } from './core/application/services/task_execution_service';
+import { EngineeringTask } from './core/domain/models/execution';
 import * as fs from 'fs';
 import * as path from 'path';
 import { execSync } from 'child_process';
@@ -22,7 +22,6 @@ import { execSync } from 'child_process';
 function detectClaudeCli(): boolean {
   const executable = process.env.CLAUDE_EXECUTABLE || 'claude';
   try {
-    // Cross-platform check if executable exists
     const checkCmd = process.platform === 'win32' ? `where ${executable}` : `which ${executable}`;
     execSync(checkCmd, { stdio: 'ignore' });
     return true;
@@ -73,7 +72,6 @@ async function runDemo() {
   container.register('ContextBuilder', contextBuilder);
   container.register('ProcessRuntime', runtime);
 
-  // Register selected provider implementation
   let providerInstance: IProvider;
   if (config.get().providerType === 'claude') {
     providerInstance = new ClaudeProvider(runtime, config.get().claudeExecutable);
@@ -81,6 +79,9 @@ async function runDemo() {
     providerInstance = new MockProvider(runtime);
   }
   container.register('Provider', providerInstance);
+
+  const taskExecutionService = new TaskExecutionService(contextBuilder, providerInstance);
+  container.register('TaskExecutionService', taskExecutionService);
 
   console.log('✔ Services registered in DI container successfully.');
 
@@ -110,35 +111,33 @@ async function runDemo() {
   fs.writeFileSync(helperFile, helperContent, 'utf8');
   console.log(`✔ Mock workspace file created at: ${helperFile}`);
 
-  // 4. Run VFS and Context Builder on the target symbol "add"
-  const targetSymbol = 'add';
-  const taskDesc = `Refactor the ${targetSymbol} method in MathHelper`;
-  console.log(`\n--- Running VFS and Context Builder for: "${taskDesc}" ---`);
+  // 4. Create an EngineeringTask
+  const task: EngineeringTask = {
+    id: 'task-101',
+    description: 'Refactor the add method in MathHelper',
+    entryFile: helperFile,
+    workspaceFiles: [helperFile],
+  };
 
-  const resolvedContextBuilder = container.resolve<IContextBuilder>('ContextBuilder');
-  const contextResult = await resolvedContextBuilder.buildContext(taskDesc, helperFile, [helperFile]);
+  console.log(`\n--- Dispatching Task to TaskExecutionService [${task.id}] ---`);
+  console.log(`Description: "${task.description}"`);
 
-  console.log('✔ Sliced AST Context generated successfully:');
-  console.log('=========================================');
-  console.log(contextResult.codeContent);
-  console.log('=========================================');
-  console.log(`Estimated Token Count: ${contextResult.tokenEstimate}`);
-
-  // 5. Execute Resolved Provider (Claude or Mock fallback)
-  console.log(`\n--- Running AI Provider: [${providerInstance.providerName()}] ---`);
-  const provider = container.resolve<IProvider>('Provider');
-
-  console.log('Streaming refactoring prompt & context to provider...');
-  const result = await provider.stream(contextResult.codeContent, (chunk) => {
-    process.stdout.write(chunk);
-  });
+  // 5. Invoke Application Service
+  const executionService = container.resolve<TaskExecutionService>('TaskExecutionService');
+  const result = await executionService.executeTask(task);
 
   console.log('\n--- Execution Finished ---');
-  console.log(`Execution Success: ${result.success}`);
-  console.log(`Exit Code: ${result.exitCode}`);
+  console.log(`Task ID: ${result.taskId}`);
+  console.log(`Status: ${result.status}`);
   console.log(`Duration: ${result.durationMs}ms`);
-  if (result.error) {
-    console.error(`Provider Error: ${result.error}`);
+  
+  if (result.status === 'SUCCESS') {
+    console.log('\nOutput received from AI Provider:');
+    console.log('=========================================');
+    console.log(result.output);
+    console.log('=========================================');
+  } else {
+    console.error(`Execution Error: ${result.error}`);
   }
 
   // 6. Cleanup

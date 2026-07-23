@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v0.5.0] - 2026-07-23
+
+### Added
+- **TaskExecutionService Application Service**: Created the first application layer orchestration service to manage the end-to-end task execution lifecycle.
+- **Provider-Independent Execution Models**: Added core domain structures for `EngineeringTask`, `ExecutionRequest`, `ExecutionResult`, and `ExecutionStatus`.
+- **Application Validation & Error Mapping**: Implemented input validation and structured error output for context failures, provider crashes, and invalid tasks.
+
 ## [v0.4.0] - 2026-07-23
 
 ### Added

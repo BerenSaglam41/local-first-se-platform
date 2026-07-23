@@ -31,6 +31,9 @@ import { IProvider } from './core/domain/interfaces/iprovider';
 import { MockProvider } from './infrastructure/runtime/mock_provider';
 import { ClaudeProvider } from './infrastructure/runtime/claude_provider';
 
+// Application Services
+import { TaskExecutionService } from './core/application/services/task_execution_service';
+
 async function bootstrap() {
   const container = new DiContainer();
 
@@ -93,6 +96,10 @@ async function bootstrap() {
     provider = new MockProvider(processRuntime);
   }
   container.register<IProvider>('Provider', provider);
+
+  // 4e. Initialize Application Services
+  const taskExecutionService = new TaskExecutionService(contextBuilder, provider);
+  container.register<TaskExecutionService>('TaskExecutionService', taskExecutionService);
 
   // 5. Health Check
   const healthCheck = async () => {

@@ -71,6 +71,21 @@ The **Provider Runtime Kernel** provides a robust, cross-platform layer to spawn
 
 ---
 
+## 📂 Application Layer & Task Execution
+
+SE-OS separates low-level infrastructure (databases, terminals, parsers) from software engineering use cases via the **Application Layer**. 
+
+### TaskExecutionService
+The `TaskExecutionService` is the single entry point for orchestrating and executing engineering tasks. 
+
+#### Responsibilities:
+1. **Validation**: Validates incoming `EngineeringTask` models to prevent malformed requests.
+2. **Context Compilation**: Calls `IContextBuilder` to build a minimal code context slice matching the task description.
+3. **AI Execution**: Resolves the configured provider (`MockProvider` or `ClaudeProvider`) and executes the task against the gathered context.
+4. **Structured Results**: Wraps execution output, runtimes, status metrics, and errors into a clean, provider-independent `ExecutionResult`.
+
+---
+
 ## 🏃‍♂️ Quick Start Demo
 
 The platform includes an end-to-end executable demonstration that validates VFS file parsing, AST slicing, dependency resolution, process execution, and output streaming.
