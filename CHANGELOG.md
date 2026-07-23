@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v0.3.1] - 2026-07-23
+
+### Added
+- **E2E Executable Demo**: Added a comprehensive integration script (`src/demo.ts`) to validate the entire platform execution flow end-to-end (VFS file parsing, AST slicing, dependency resolution, process execution, and output streaming).
+
 ## [v0.3.0] - 2026-07-23
 
 ### Added

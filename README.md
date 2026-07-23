@@ -68,3 +68,22 @@ The **Provider Runtime Kernel** provides a robust, cross-platform layer to spawn
 | **Milestone 4** | State Machine & Task Scheduler | Event Bus, DAG State Transitions, FIFO Queue | Planned |
 | **Milestone 5** | DAG Workflow Compiler | Codebase Workflow Orchestrator, Human Review Gate | Planned |
 | **Milestone 6** | Sandboxed Workspace & TUI | Sandboxing, TUI Dashboard UI | Planned |
+
+---
+
+## 🏃‍♂️ Quick Start Demo
+
+You can execute a complete end-to-end demonstration of the platform (VFS parsing, AST context slicing, dependency resolution, and running a mock provider process) by running:
+
+```bash
+# Run E2E Executable Demo
+npx ts-node src/demo.ts
+```
+
+### Expected Output:
+1. Bootstraps the DI container and starts connection to SQLite.
+2. Creates a mock TypeScript file under `demo_workspace/math_helper.ts`.
+3. Runs the AST Context Builder on the target symbol `add`, resolving its class structure and `OperationConfig` interface dependencies.
+4. Spawns an interactive mock provider process, feeds the sliced context into its `stdin`, and streams back a simulated refactoring response.
+5. Displays final execution metrics (PID, duration, exit code 0).
+6. Cleans up the temporary workspace.
