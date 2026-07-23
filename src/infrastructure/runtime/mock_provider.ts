@@ -15,16 +15,20 @@ export class MockProvider implements IProvider {
   }
 
   async stream(prompt: string, onChunk: (chunk: string) => void): Promise<ProviderResult> {
+    // Escape backticks within the template literal to avoid premature termination of the string literal
     const mockProviderScript = `
       process.stdin.on('data', (data) => {
         console.log('\\n[Mock Provider stdout] Received context slice. Generating refactored response...');
         console.log('[Mock Provider stdout] RESPONSE:');
+        console.log('Here is the refactored math helper file:');
+        console.log('\`\`\`typescript');
         console.log('export class MathHelper {');
         console.log('  add(a: number, b: number): number {');
         console.log('    console.log(\\'Adding: \\' + a + \\' and \\' + b);');
         console.log('    return a + b;');
         console.log('  }');
         console.log('}');
+        console.log('\`\`\`');
         process.exit(0);
       });
     `;

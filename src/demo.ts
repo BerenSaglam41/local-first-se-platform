@@ -129,15 +129,34 @@ async function runDemo() {
   console.log('\n--- Execution Finished ---');
   console.log(`Task ID: ${result.taskId}`);
   console.log(`Status: ${result.status}`);
+  console.log(`Patch Status: ${result.patchStatus}`);
   console.log(`Duration: ${result.durationMs}ms`);
   
-  if (result.status === 'SUCCESS') {
-    console.log('\nOutput received from AI Provider:');
-    console.log('=========================================');
-    console.log(result.output);
-    console.log('=========================================');
-  } else {
-    console.error(`Execution Error: ${result.error}`);
+  if (result.modifiedFiles.length > 0) {
+    console.log(`✔ Modified Files (${result.modifiedFiles.length}):`);
+    result.modifiedFiles.forEach(file => {
+      console.log(`  - [MODIFIED] ${path.basename(file)}`);
+      // Print the new content of the updated file
+      if (fs.existsSync(file)) {
+        console.log('--- NEW FILE CONTENT ---');
+        console.log(fs.readFileSync(file, 'utf8'));
+        console.log('------------------------');
+      }
+    });
+  }
+
+  if (result.filesSkipped.length > 0) {
+    console.log(`ℹ Skipped Files (${result.filesSkipped.length}):`);
+    result.filesSkipped.forEach(file => console.log(`  - [SKIPPED] ${path.basename(file)}`));
+  }
+
+  if (result.parserWarnings.length > 0) {
+    console.log(`⚠ Warnings (${result.parserWarnings.length}):`);
+    result.parserWarnings.forEach(w => console.log(`  - ${w}`));
+  }
+
+  if (result.status !== 'SUCCESS') {
+    console.error(`❌ Execution Error: ${result.error}`);
   }
 
   // 6. Cleanup

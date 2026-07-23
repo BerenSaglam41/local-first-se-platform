@@ -1,4 +1,5 @@
 export type ExecutionStatus = 'SUCCESS' | 'FAILED' | 'ERROR';
+export type PatchStatus = 'applied' | 'failed' | 'skipped' | 'none';
 
 export interface EngineeringTask {
   id: string;
@@ -17,4 +18,8 @@ export interface ExecutionResult {
   output: string;
   error?: string;
   durationMs: number;
+  modifiedFiles: string[];
+  filesSkipped: string[];
+  parserWarnings: string[];
+  patchStatus: PatchStatus;
 }

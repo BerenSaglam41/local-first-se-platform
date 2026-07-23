@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v0.6.0] - 2026-07-23
+
+### Added
+- **Code Modification Pipeline**: Implemented a complete pipeline to apply generated code changes safely back to the workspace.
+- **ResponseParser**: Added extraction for fenced code blocks, comments, and plain text with cross-platform CRLF invariant matching.
+- **PatchGenerator & WorkspaceUpdater**: Built safety guards preventing modifications to files not present in the allowed task `workspaceFiles`, and atomic file writing while skipping unchanged files.
+
 ## [v0.5.0] - 2026-07-23
 
 ### Added

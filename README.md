@@ -84,6 +84,14 @@ The `TaskExecutionService` is the single entry point for orchestrating and execu
 3. **AI Execution**: Resolves the configured provider (`MockProvider` or `ClaudeProvider`) and executes the task against the gathered context.
 4. **Structured Results**: Wraps execution output, runtimes, status metrics, and errors into a clean, provider-independent `ExecutionResult`.
 
+### Code Modification Pipeline
+The platform includes an automated pipeline that applies the generated code changes back to the workspace safely.
+
+#### Pipeline Flow:
+1. **ResponseParser**: Extracts fenced markdown code blocks or plain source code from the raw AI response and associates them with target files based on filename headers, comments, or textual context clues.
+2. **PatchGenerator**: Inspects the parsed code blocks, validating them against the allowed `workspaceFiles` of the `EngineeringTask` to prevent writing unauthorized files.
+3. **WorkspaceUpdater**: Performs atomic writes to the workspace files, keeping identical files skipped to save filesystem cycles and preserving original formatting.
+
 ---
 
 ## 🏃‍♂️ Quick Start Demo
