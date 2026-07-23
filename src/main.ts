@@ -23,6 +23,10 @@ import { TypeScriptASTParser } from './infrastructure/parser/ts_ast_parser';
 import { DependencyResolver } from './infrastructure/parser/dependency_resolver';
 import { ContextBuilder } from './infrastructure/parser/context_builder';
 
+// Milestone 3 Interfaces & Implementations
+import { IProcessRuntime } from './core/domain/interfaces/iprocess_runtime';
+import { ProcessRuntime } from './infrastructure/runtime/process_runtime';
+
 async function bootstrap() {
   const container = new DiContainer();
 
@@ -71,6 +75,10 @@ async function bootstrap() {
 
   const contextBuilder = new ContextBuilder(vfs, astParser, dependencyResolver, cache);
   container.register<IContextBuilder>('ContextBuilder', contextBuilder);
+
+  // 4c. Initialize Process Runtime Kernel
+  const processRuntime = new ProcessRuntime();
+  container.register<IProcessRuntime>('ProcessRuntime', processRuntime);
 
   // 5. Health Check
   const healthCheck = async () => {

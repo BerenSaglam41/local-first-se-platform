@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v0.3.0] - 2026-07-23
+
+### Added
+- **Provider Runtime Kernel**: Implemented the asynchronous process execution engine (`ProcessRuntime` and `ExecutionHandle`) to launch and interact with external AI providers (Ollama, Gemini CLI, Claude CLI, etc.).
+- **Interactive PTY-like Streaming**: Added full support for streaming stdout/stderr outputs incrementally, writing to stdin, timeout gates, manual process kills, and exit signal monitoring.
+- **Asynchronous Tick Deferral**: Configured runtime execute to defer process spawns using `process.nextTick()`, eliminating event listener races for consumers.
+- **Verification Suite**: Implemented integration tests validating timeouts, cancellation, concurrency, streaming, and execution error recoveries.
+
 ## [v0.2.1] - 2026-07-23
 
 ### Fixed

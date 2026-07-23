@@ -29,7 +29,8 @@ export class TypeScriptASTParser implements IASTParser {
     const symbols: CodeSymbol[] = [];
 
     try {
-      const traverse = (node: Parser.SyntaxNode) => {
+      const traverse = (node: Parser.SyntaxNode | null | undefined) => {
+        if (!node) return;
         // Safe check for malformed syntax ERROR nodes
         if (node.type === 'ERROR') {
           // Log warning or throw exception if critical
