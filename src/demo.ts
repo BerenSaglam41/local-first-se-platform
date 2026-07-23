@@ -38,6 +38,12 @@ function printResult(result: ExecutionResult) {
   console.log(`Parser Confidence: ${result.parserConfidence.toFixed(2)}`);
   console.log(`Patch Status:      ${result.patchStatus}`);
   console.log(`Duration:          ${result.durationMs}ms`);
+  console.log(`Retry Count:       ${result.retryCount}`);
+
+  if (result.retryHistory.length > 0) {
+    console.log(`Retry History (${result.retryHistory.length}):`);
+    result.retryHistory.forEach(history => console.log(`  - ${history}`));
+  }
 
   console.log('\n--- Verification Summary ---');
   console.log(`Build:             ${result.buildPassed ? 'PASSED' : 'FAILED'}`);
@@ -214,6 +220,27 @@ async function runDemo() {
 
   const result2 = await executionService.executeTask(task2);
   printResult(result2);
+
+  // ==========================================
+  // RUN 3: Retry Simulation (Autonomous Retry Engine)
+  // ==========================================
+  resetWorkspace();
+  console.log(`\n✔ Mock workspace file reset at: ${helperFile}`);
+
+  const task3: EngineeringTask = {
+    id: 'task-103-retry',
+    description: 'retry-simulation: Refactor the add method in MathHelper',
+    entryFile: helperFile,
+    workspaceFiles: [helperFile],
+  };
+
+  console.log(`\n==================================================`);
+  console.log(`[RUN 3] Dispatching Task: ${task3.id}`);
+  console.log(`Description: "${task3.description}" (Should fail first attempt, then retry and succeed)`);
+  console.log(`==================================================`);
+
+  const result3 = await executionService.executeTask(task3);
+  printResult(result3);
 
   // Cleanup
   fs.rmSync(workspaceDir, { recursive: true, force: true });

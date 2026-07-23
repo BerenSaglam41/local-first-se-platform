@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v0.9.0] - 2026-07-23
+
+### Added
+- **Autonomous Retry Engine**: Developed `RetryEngine` service to automate code self-repair upon compilation, syntax, or test failures.
+- **Repair Metrics**: Extended `ExecutionResult` with `retryCount`, `retryHistory`, `finalVerificationResult`, and `finalProviderResponse` properties.
+- **Retry Prompts**: Built structured error capture injection that includes compiler logs, failure counts, and previous responses into correction instructions.
+
 ## [v0.8.0] - 2026-07-23
 
 ### Added

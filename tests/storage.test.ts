@@ -22,6 +22,7 @@ describe('SQLite Relational Repository & Telemetry Storage', () => {
       providerType: 'mock',
       claudeExecutable: 'claude',
       verificationCommands: ['npm run build', 'npm test'],
+      maxRetryCount: 3,
     }),
   };
 

@@ -23,6 +23,24 @@ export class MockProvider implements IProvider {
         console.log('[Mock Provider stdout] RESPONSE:');
         if (promptText.includes('conversational')) {
           console.log('I see the contents of math_helper.ts, but there is no specific instruction — what would you like me to do with it?');
+        } else if (promptText.includes('retry-simulation')) {
+          if (promptText.includes('self-repair')) {
+            console.log('Here is the corrected refactored code:');
+            console.log('\`\`\`typescript');
+            console.log('export class MathHelper {');
+            console.log('  add(a: number, b: number): number {');
+            console.log('    return a + b;');
+            console.log('  }');
+            console.log('}');
+            console.log('\`\`\`');
+          } else {
+            console.log('Here is the refactored math helper file:');
+            console.log('\`\`\`typescript');
+            console.log('export class MathHelper {');
+            console.log('  add(a: number, b: number): number {');
+            console.log('    return a +');
+            console.log('\`\`\`');
+          }
         } else {
           console.log('Here is the refactored math helper file:');
           console.log('\`\`\`typescript');

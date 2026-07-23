@@ -9,6 +9,7 @@ export interface AppConfig {
   providerType: 'mock' | 'claude';
   claudeExecutable?: string;
   verificationCommands: string[];
+  maxRetryCount: number;
 }
 
 export interface IConfig {

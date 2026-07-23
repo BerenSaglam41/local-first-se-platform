@@ -101,6 +101,18 @@ To ensure safety and protect the codebase, the platform includes a validation ga
 3. **Language Matching**: Verifies that the language tag in markdown blocks (e.g. `typescript`) aligns with the file extension (e.g. `.ts`).
 4. **Confidence Score**: Dynamically calculates a parser confidence score (0.0 to 1.0) and rejects patches falling below the threshold.
 
+### Autonomous Retry Engine
+To recover from compiler errors, syntax anomalies, and test failures, the platform implements an autonomous self-repair loop:
+
+#### Retry Algorithm:
+1. **Verification Gate**: After patches are applied, the `VerificationRunner` runs verification commands sequentially.
+2. **Failure Analysis**: If validation fails or a verification command exits with a non-zero code, the `RetryEngine` captures:
+   - The original task instructions.
+   - The previously generated response.
+   - Captured compiler errors/test outputs and logs.
+3. **Correction Prompts**: Constructs a structured correction instruction detailing the previous attempt failures and errors.
+4. **Iterative Repair**: Invokes the provider with the correction instruction to re-attempt patching and verification, up to `MAX_RETRY_COUNT` (default: 3). If verification passes, the loop terminates immediately with success.
+
 ---
 
 ## 🏃‍♂️ Quick Start Demo

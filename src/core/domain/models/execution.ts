@@ -34,4 +34,8 @@ export interface ExecutionResult {
   buildPassed: boolean;
   testsPassed: boolean;
   verificationDuration: number;
+  retryCount: number;
+  retryHistory: string[];
+  finalVerificationResult: string;
+  finalProviderResponse: string;
 }

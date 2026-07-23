@@ -20,6 +20,7 @@ describe('JSON Lines Structured Logger', () => {
         providerType: 'mock',
         claudeExecutable: 'claude',
         verificationCommands: ['npm run build', 'npm test'],
+        maxRetryCount: 3,
       }),
     };
     if (fs.existsSync(tempLogPath)) {

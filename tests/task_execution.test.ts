@@ -30,6 +30,7 @@ describe('TaskExecutionService Application Service', () => {
         providerType: 'mock' as const,
         claudeExecutable: 'claude',
         verificationCommands: [],
+        maxRetryCount: 3,
       }),
     };
     const mockRuntime = {

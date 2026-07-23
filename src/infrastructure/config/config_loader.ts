@@ -28,6 +28,11 @@ const configSchema = z.object({
   PROVIDER_TYPE: z.enum(['mock', 'claude']).default('mock'),
   CLAUDE_EXECUTABLE: z.string().default('claude'),
   VERIFICATION_COMMANDS: z.string().default('npm run build,npm test'),
+  MAX_RETRY_COUNT: z.preprocess((val) => {
+    if (val === undefined || val === '') return undefined;
+    const parsed = parseInt(val as string, 10);
+    return isNaN(parsed) ? undefined : parsed;
+  }, z.number().default(3)),
 });
 
 export class ConfigLoader implements IConfig {
@@ -51,6 +56,7 @@ export class ConfigLoader implements IConfig {
       providerType: data.PROVIDER_TYPE,
       claudeExecutable: data.CLAUDE_EXECUTABLE,
       verificationCommands: data.VERIFICATION_COMMANDS.split(',').map((c) => c.trim()).filter(Boolean),
+      maxRetryCount: data.MAX_RETRY_COUNT,
     };
   }
 
