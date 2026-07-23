@@ -73,17 +73,40 @@ The **Provider Runtime Kernel** provides a robust, cross-platform layer to spawn
 
 ## 🏃‍♂️ Quick Start Demo
 
-You can execute a complete end-to-end demonstration of the platform (VFS parsing, AST context slicing, dependency resolution, and running a mock provider process) by running:
+The platform includes an end-to-end executable demonstration that validates VFS file parsing, AST slicing, dependency resolution, process execution, and output streaming.
+
+### 1. Fallback / Mock Mode (Default)
+By default, if the Claude CLI is not detected on your system, the demo automatically falls back to a simulated `MockProvider`:
 
 ```bash
-# Run E2E Executable Demo
+# Run E2E Demo in Fallback/Mock Mode
 npx ts-node src/demo.ts
 ```
+
+### 2. Real AI Mode (Claude CLI)
+To run the demo with a real AI provider:
+1. **Install Claude CLI**: Install the official Anthropic Claude CLI tool on your system path.
+   ```bash
+   npm install -g @anthropic-ai/claude-code
+   ```
+2. **Authenticate**: Log in to your Anthropic account through the CLI.
+   ```bash
+   claude login
+   ```
+3. **Configure Provider**: Set the configuration environment variables in your `.env` or pass them inline:
+   ```bash
+   PROVIDER_TYPE=claude
+   CLAUDE_EXECUTABLE=claude
+   ```
+4. **Execute**:
+   ```bash
+   npx ts-node src/demo.ts
+   ```
 
 ### Expected Output:
 1. Bootstraps the DI container and starts connection to SQLite.
 2. Creates a mock TypeScript file under `demo_workspace/math_helper.ts`.
 3. Runs the AST Context Builder on the target symbol `add`, resolving its class structure and `OperationConfig` interface dependencies.
-4. Spawns an interactive mock provider process, feeds the sliced context into its `stdin`, and streams back a simulated refactoring response.
-5. Displays final execution metrics (PID, duration, exit code 0).
-6. Cleans up the temporary workspace.
+4. Detects the Claude CLI in the system path (or falls back to mock) and spawns it using `ProcessRuntime`.
+5. Feeds the sliced context into the provider, streaming back the actual refactored output or response chunk-by-chunk.
+6. Displays final execution metrics (PID, duration, success/exit status) and cleans up the workspace.

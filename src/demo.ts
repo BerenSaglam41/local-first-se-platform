@@ -12,13 +12,39 @@ import { ContextBuilder } from './infrastructure/parser/context_builder';
 import { ProcessRuntime } from './infrastructure/runtime/process_runtime';
 import { IContextBuilder } from './core/domain/interfaces/icontext_builder';
 import { IProcessRuntime } from './core/domain/interfaces/iprocess_runtime';
+import { IProvider } from './core/domain/interfaces/iprovider';
+import { ClaudeProvider } from './infrastructure/runtime/claude_provider';
+import { MockProvider } from './infrastructure/runtime/mock_provider';
 import * as fs from 'fs';
 import * as path from 'path';
+import { execSync } from 'child_process';
+
+function detectClaudeCli(): boolean {
+  const executable = process.env.CLAUDE_EXECUTABLE || 'claude';
+  try {
+    // Cross-platform check if executable exists
+    const checkCmd = process.platform === 'win32' ? `where ${executable}` : `which ${executable}`;
+    execSync(checkCmd, { stdio: 'ignore' });
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
 
 async function runDemo() {
   console.log('--- Starting SE-OS E2E Executable Demo ---');
 
-  // 1. Setup DI Container & Register Services
+  // 1. Detect and configure provider selection dynamically
+  const hasClaude = detectClaudeCli();
+  if (hasClaude) {
+    console.log('✔ Detected Claude CLI installed on host. Selecting Claude Provider.');
+    process.env.PROVIDER_TYPE = 'claude';
+  } else {
+    console.log('ℹ Claude CLI not detected in system path. Falling back to Mock Provider.');
+    process.env.PROVIDER_TYPE = 'mock';
+  }
+
+  // 2. Setup DI Container & Register Services
   const container = new DiContainer();
   const config = new ConfigLoader();
   const logger = new JsonLogger(config);
@@ -47,9 +73,18 @@ async function runDemo() {
   container.register('ContextBuilder', contextBuilder);
   container.register('ProcessRuntime', runtime);
 
+  // Register selected provider implementation
+  let providerInstance: IProvider;
+  if (config.get().providerType === 'claude') {
+    providerInstance = new ClaudeProvider(runtime, config.get().claudeExecutable);
+  } else {
+    providerInstance = new MockProvider(runtime);
+  }
+  container.register('Provider', providerInstance);
+
   console.log('✔ Services registered in DI container successfully.');
 
-  // 2. Create a Mock TypeScript Workspace File
+  // 3. Create a Mock TypeScript Workspace File
   const workspaceDir = path.join(__dirname, '..', 'demo_workspace');
   if (!fs.existsSync(workspaceDir)) {
     fs.mkdirSync(workspaceDir, { recursive: true });
@@ -75,7 +110,7 @@ async function runDemo() {
   fs.writeFileSync(helperFile, helperContent, 'utf8');
   console.log(`✔ Mock workspace file created at: ${helperFile}`);
 
-  // 3. Run VFS and Context Builder on the target symbol "add"
+  // 4. Run VFS and Context Builder on the target symbol "add"
   const targetSymbol = 'add';
   const taskDesc = `Refactor the ${targetSymbol} method in MathHelper`;
   console.log(`\n--- Running VFS and Context Builder for: "${taskDesc}" ---`);
@@ -89,53 +124,24 @@ async function runDemo() {
   console.log('=========================================');
   console.log(`Estimated Token Count: ${contextResult.tokenEstimate}`);
 
-  // 4. Run Process Runtime with a Mock Provider Process
-  console.log('\n--- Running Mock AI Provider Process Runtime ---');
-  const resolvedRuntime = container.resolve<IProcessRuntime>('ProcessRuntime');
+  // 5. Execute Resolved Provider (Claude or Mock fallback)
+  console.log(`\n--- Running AI Provider: [${providerInstance.providerName()}] ---`);
+  const provider = container.resolve<IProvider>('Provider');
 
-  // Spawn an inline node process acting as an AI Provider CLI
-  const mockProviderScript = `
-    process.stdin.on('data', (data) => {
-      const prompt = data.toString().trim();
-      console.log('\\n[Mock Provider stdout] Received context slice. Generating refactored response...');
-      console.log('[Mock Provider stdout] RESPONSE:');
-      console.log('export class MathHelper {');
-      console.log('  // Refactored method with logging');
-      console.log('  add(a: number, b: number): number {');
-      console.log('    console.log(\\'Adding: \\' + a + \\' and \\' + b);');
-      console.log('    return a + b;');
-      console.log('  }');
-      console.log('}');
-      process.exit(0);
-    });
-  `;
-
-  const handle = resolvedRuntime.execute({
-    executable: process.execPath,
-    args: ['-e', mockProviderScript],
-  });
-
-  handle.on('stdout', (chunk) => {
+  console.log('Streaming refactoring prompt & context to provider...');
+  const result = await provider.stream(contextResult.codeContent, (chunk) => {
     process.stdout.write(chunk);
   });
 
-  handle.on('stderr', (chunk) => {
-    process.stderr.write(`[Error Stream] ${chunk}`);
-  });
-
-  // Write the sliced context code as input (stdin) to the mock provider
-  await new Promise((resolve) => setTimeout(resolve, 100)); // wait for spawn
-  console.log('Feeding sliced context to Mock Provider stdin...');
-  await handle.write(contextResult.codeContent);
-
-  const result = await handle.wait();
   console.log('\n--- Execution Finished ---');
-  console.log(`Execution State: ${result.state}`);
+  console.log(`Execution Success: ${result.success}`);
   console.log(`Exit Code: ${result.exitCode}`);
-  console.log(`PID: ${result.metrics.pid}`);
-  console.log(`Duration: ${result.metrics.durationMs}ms`);
+  console.log(`Duration: ${result.durationMs}ms`);
+  if (result.error) {
+    console.error(`Provider Error: ${result.error}`);
+  }
 
-  // 5. Cleanup
+  // 6. Cleanup
   fs.rmSync(workspaceDir, { recursive: true, force: true });
   await repository.close();
   console.log('\n✔ Workspace cleaned up and database connection closed.');

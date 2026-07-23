@@ -3,7 +3,6 @@ import { z } from 'zod';
 import { IConfig, AppConfig } from '../../core/domain/interfaces/iconfig';
 import { ConfigurationException } from '../../core/domain/errors/exceptions';
 
-// Load env variables
 dotenv.config();
 
 const configSchema = z.object({
@@ -26,6 +25,8 @@ const configSchema = z.object({
     const parsed = parseInt(val as string, 10);
     return isNaN(parsed) ? undefined : parsed;
   }, z.number().default(8192)),
+  PROVIDER_TYPE: z.enum(['mock', 'claude']).default('mock'),
+  CLAUDE_EXECUTABLE: z.string().default('claude'),
 });
 
 export class ConfigLoader implements IConfig {
@@ -46,6 +47,8 @@ export class ConfigLoader implements IConfig {
       maxConcurrentAgents: data.MAX_CONCURRENT_AGENTS,
       approvalMode: data.APPROVAL_MODE,
       defaultContextBudget: data.DEFAULT_CONTEXT_BUDGET,
+      providerType: data.PROVIDER_TYPE,
+      claudeExecutable: data.CLAUDE_EXECUTABLE,
     };
   }
 

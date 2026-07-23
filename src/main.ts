@@ -23,9 +23,13 @@ import { TypeScriptASTParser } from './infrastructure/parser/ts_ast_parser';
 import { DependencyResolver } from './infrastructure/parser/dependency_resolver';
 import { ContextBuilder } from './infrastructure/parser/context_builder';
 
-// Milestone 3 Interfaces & Implementations
 import { IProcessRuntime } from './core/domain/interfaces/iprocess_runtime';
 import { ProcessRuntime } from './infrastructure/runtime/process_runtime';
+
+// Milestone 3 Provider Abstractions & Implementations
+import { IProvider } from './core/domain/interfaces/iprovider';
+import { MockProvider } from './infrastructure/runtime/mock_provider';
+import { ClaudeProvider } from './infrastructure/runtime/claude_provider';
 
 async function bootstrap() {
   const container = new DiContainer();
@@ -79,6 +83,16 @@ async function bootstrap() {
   // 4c. Initialize Process Runtime Kernel
   const processRuntime = new ProcessRuntime();
   container.register<IProcessRuntime>('ProcessRuntime', processRuntime);
+
+  // 4d. Initialize Provider based on configuration
+  const providerType = configLoader.get().providerType;
+  let provider: IProvider;
+  if (providerType === 'claude') {
+    provider = new ClaudeProvider(processRuntime, configLoader.get().claudeExecutable);
+  } else {
+    provider = new MockProvider(processRuntime);
+  }
+  container.register<IProvider>('Provider', provider);
 
   // 5. Health Check
   const healthCheck = async () => {

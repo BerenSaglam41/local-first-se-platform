@@ -19,6 +19,8 @@ describe('SQLite Relational Repository & Telemetry Storage', () => {
       maxConcurrentAgents: 5,
       approvalMode: 'automatic',
       defaultContextBudget: 4096,
+      providerType: 'mock',
+      claudeExecutable: 'claude',
     }),
   };
 

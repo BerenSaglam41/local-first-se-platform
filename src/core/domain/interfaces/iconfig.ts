@@ -6,6 +6,8 @@ export interface AppConfig {
   maxConcurrentAgents: number;
   approvalMode: 'interactive' | 'automatic' | 'disabled';
   defaultContextBudget: number;
+  providerType: 'mock' | 'claude';
+  claudeExecutable?: string;
 }
 
 export interface IConfig {

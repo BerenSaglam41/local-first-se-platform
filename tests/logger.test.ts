@@ -17,6 +17,8 @@ describe('JSON Lines Structured Logger', () => {
         maxConcurrentAgents: 5,
         approvalMode: 'automatic',
         defaultContextBudget: 4096,
+        providerType: 'mock',
+        claudeExecutable: 'claude',
       }),
     };
     if (fs.existsSync(tempLogPath)) {

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v0.4.0] - 2026-07-23
+
+### Added
+- **AI Provider Abstraction Layer**: Defined the `IProvider` interface contract supporting execution, streaming, and cancellation across CLI-based LLMs.
+- **Claude CLI Integration**: Implemented `ClaudeProvider` executing local Claude CLI tools via the core `ProcessRuntime` driver.
+- **Provider Fallback & Configuration**: Supported provider type selection through configuration loader and environment profiles with automatic fallback to mock execution in the E2E demo.
+
 ## [v0.3.1] - 2026-07-23
 
 ### Added
