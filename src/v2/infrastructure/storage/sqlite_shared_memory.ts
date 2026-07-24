@@ -10,9 +10,12 @@ export class SqliteSharedMemory implements ISharedMemory {
   async connect(): Promise<Database> {
     if (this.db) return this.db;
 
+    const sqlite3Mod = require('sqlite3');
+    const sqliteDriver = sqlite3Mod?.Database || sqlite3Mod?.default?.Database || sqlite3Mod?.default?.default?.Database || (sqlite3 as any).Database;
+
     this.db = await open({
       filename: this.dbPath,
-      driver: sqlite3.Database,
+      driver: sqliteDriver,
     });
 
     await this.db.run('PRAGMA foreign_keys = ON');

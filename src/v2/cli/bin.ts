@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { SeOsCli } from './se_os_cli';
+import { SeOsCli } from './se_os_cli.js';
 
 async function main() {
   try {

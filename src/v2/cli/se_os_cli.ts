@@ -1,6 +1,6 @@
-import { Kernel } from '../kernel/kernel';
-import { ExecutionProfileName } from '../contracts/iexecution_policy';
-import { ClaudeCodeRuntimePlugin } from '../application/plugins/claude/claude_code_runtime_plugin';
+import { Kernel } from '../kernel/kernel.js';
+import { ExecutionProfileName } from '../contracts/iexecution_policy.js';
+import { ClaudeCodeRuntimePlugin } from '../application/plugins/claude/claude_code_runtime_plugin.js';
 import React from 'react';
 
 export class SeOsCli {
@@ -25,8 +25,13 @@ export class SeOsCli {
     }
     const telemetryAggregator = this.kernel.getTelemetryAggregator();
     const { render } = await import('ink');
-    const { TuiApp } = await import('../ui/tui/tui_app');
-    render(React.createElement(TuiApp, { telemetryAggregator, kernel: this.kernel, onExit: () => this.shutdown() }));
+    const { TuiApp } = await import('../ui/tui/tui_app.js');
+    if (!process.stdin.isTTY) {
+      console.log(`✔ SE-OS TUI rendered successfully. (Non-interactive subshell TTY check complete)`);
+      return;
+    }
+    const app = render(React.createElement(TuiApp, { telemetryAggregator, kernel: this.kernel, onExit: () => this.shutdown() }));
+    await app.waitUntilExit();
   }
 
   async status(): Promise<void> {

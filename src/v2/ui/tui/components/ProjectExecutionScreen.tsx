@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, Text, useInput } from 'ink';
-import { TelemetrySnapshot } from '../../../contracts/itelemetry_aggregator';
+import { TelemetrySnapshot } from '../../../contracts/itelemetry_aggregator.js';
 
 interface ProjectExecutionScreenProps {
   snapshot: TelemetrySnapshot;
@@ -55,7 +55,7 @@ export const ProjectExecutionScreen: React.FC<ProjectExecutionScreenProps> = ({
           </Text>
           <Text color="white">Goal</Text>
           <Text color="white">└── Mission-001</Text>
-          {snapshot.tasks.map((task) => (
+          {snapshot.tasks.map((task: any) => (
             <Box key={task.id} marginLeft={4}>
               <Text color="gray">├── </Text>
               <Text color={task.status === 'COMPLETED' ? 'green' : task.status === 'RUNNING' ? 'cyan' : 'gray'}>
@@ -68,7 +68,7 @@ export const ProjectExecutionScreen: React.FC<ProjectExecutionScreenProps> = ({
             <Text bold color="yellow" underline>
               WORKER FLEET STATUS:
             </Text>
-            {snapshot.workers.map((w) => (
+            {snapshot.workers.map((w: any) => (
               <Box key={w.id} justifyContent="space-between">
                 <Text color="white">{w.name} ({w.role})</Text>
                 <Text color={w.status === 'EXECUTING' ? 'green' : 'gray'}>
@@ -92,7 +92,7 @@ export const ProjectExecutionScreen: React.FC<ProjectExecutionScreenProps> = ({
 
               <Box marginTop={1} flexDirection="column" borderStyle="single" borderColor="gray" padding={1}>
                 <Text bold color="yellow">STREAMING STDOUT LOG (Claude Code CLI):</Text>
-                {activeSession.streamingOutput.map((line, idx) => (
+                {activeSession.streamingOutput.map((line: string, idx: number) => (
                   <Text key={idx} color={line.includes('PASSED') ? 'green' : 'white'}>
                     &gt; {line}
                   </Text>
@@ -122,7 +122,7 @@ export const ProjectExecutionScreen: React.FC<ProjectExecutionScreenProps> = ({
         {/* Verification Checklist */}
         <Box flexDirection="column" width="40%">
           <Text bold color="cyan">VERIFICATION PIPELINE:</Text>
-          {snapshot.verification?.stepResults.map((s, idx) => (
+          {snapshot.verification?.stepResults.map((s: any, idx: number) => (
             <Text key={idx} color={s.passed ? 'green' : 'red'}>
               [{s.passed ? '✓' : '✗'}] {s.name.replace('Check', '')} ({s.durationMs}ms)
             </Text>
@@ -132,7 +132,7 @@ export const ProjectExecutionScreen: React.FC<ProjectExecutionScreenProps> = ({
         {/* System Log Feed */}
         <Box flexDirection="column" width="58%">
           <Text bold color="yellow">SYSTEM LOG STREAM:</Text>
-          {snapshot.systemConsoleLogs.slice(0, 4).map((log) => (
+          {snapshot.systemConsoleLogs.slice(0, 4).map((log: any) => (
             <Text key={log.id} color={log.level === 'SUCCESS' ? 'green' : 'gray'}>
               [{log.timestamp}] {log.message}
             </Text>

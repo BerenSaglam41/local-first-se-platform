@@ -1,7 +1,7 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import SelectInput from 'ink-select-input';
-import { TelemetrySnapshot } from '../../../contracts/itelemetry_aggregator';
+import { TelemetrySnapshot } from '../../../contracts/itelemetry_aggregator.js';
 
 interface RuntimeSelectorProps {
   snapshot: TelemetrySnapshot;
@@ -10,8 +10,8 @@ interface RuntimeSelectorProps {
 
 export const RuntimeSelector: React.FC<RuntimeSelectorProps> = ({ snapshot, onSelectRuntime }) => {
   const items = snapshot.runtimeProviders
-    .filter((p) => p.installed)
-    .map((p) => ({
+    .filter((p: any) => p.installed)
+    .map((p: any) => ({
       label: `${p.name} (Active: ${p.active ? 'YES' : 'NO'})`,
       value: p.id,
     }));

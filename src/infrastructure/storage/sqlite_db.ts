@@ -18,9 +18,11 @@ export class SqliteDb {
     if (this.db) return this.db;
 
     this.logger.info(`Connecting to SQLite database at ${this.dbPath}`);
+    const sqlite3Mod = require('sqlite3');
+    const sqliteDriver = sqlite3Mod?.Database || sqlite3Mod?.default?.Database || sqlite3Mod?.default?.default?.Database;
     this.db = await open({
       filename: this.dbPath,
-      driver: sqlite3.Database,
+      driver: sqliteDriver,
     });
 
     // Enable foreign keys constraint enforcement. Required to support ON DELETE CASCADE actions.

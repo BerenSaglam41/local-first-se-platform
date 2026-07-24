@@ -9,5 +9,6 @@ module.exports = {
   restoreMocks: true,
   moduleNameMapper: {
     '^uuid$': require.resolve('uuid'),
+    '^(\\.\\.?/.*)\\.js$': '$1',
   },
 };

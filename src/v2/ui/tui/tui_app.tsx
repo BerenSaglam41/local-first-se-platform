@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Text, useApp, useInput } from 'ink';
-import { TelemetryAggregator } from '../../application/telemetry/telemetry_aggregator';
-import { TelemetrySnapshot } from '../../contracts/itelemetry_aggregator';
-import { ScreenManager, TuiScreenType } from './managers/screen_manager';
-import { StartupScreen } from './components/StartupScreen';
-import { RuntimeSelector } from './components/RuntimeSelector';
-import { MainMenu } from './components/MainMenu';
-import { NewProjectPrompt } from './components/NewProjectPrompt';
-import { ProjectExecutionScreen } from './components/ProjectExecutionScreen';
-import { Kernel } from '../../kernel/kernel';
+import { TelemetryAggregator } from '../../application/telemetry/telemetry_aggregator.js';
+import { TelemetrySnapshot } from '../../contracts/itelemetry_aggregator.js';
+import { ScreenManager, TuiScreenType } from './managers/screen_manager.js';
+import { StartupScreen } from './components/StartupScreen.js';
+import { RuntimeSelector } from './components/RuntimeSelector.js';
+import { MainMenu } from './components/MainMenu.js';
+import { NewProjectPrompt } from './components/NewProjectPrompt.js';
+import { ProjectExecutionScreen } from './components/ProjectExecutionScreen.js';
+import { Kernel } from '../../kernel/kernel.js';
 
 interface TuiAppProps {
   telemetryAggregator: TelemetryAggregator;
@@ -53,7 +53,7 @@ export const TuiApp: React.FC<TuiAppProps> = ({ telemetryAggregator, kernel, onE
       {currentScreen === 'RUNTIME_SELECTION' && (
         <RuntimeSelector
           snapshot={snapshot}
-          onSelectRuntime={(providerId) => {
+          onSelectRuntime={(providerId: string) => {
             telemetryAggregator.setActiveRuntimeProvider(providerId);
             navigate('MAIN_MENU');
           }}
@@ -62,7 +62,7 @@ export const TuiApp: React.FC<TuiAppProps> = ({ telemetryAggregator, kernel, onE
 
       {currentScreen === 'MAIN_MENU' && (
         <MainMenu
-          onSelectOption={(option) => {
+          onSelectOption={(option: string) => {
             if (option === 'NEW_PROJECT') {
               navigate('NEW_PROJECT_PROMPT');
             } else if (option === 'RESUME' || option === 'WORKSPACE') {
@@ -77,12 +77,12 @@ export const TuiApp: React.FC<TuiAppProps> = ({ telemetryAggregator, kernel, onE
 
       {currentScreen === 'NEW_PROJECT_PROMPT' && (
         <NewProjectPrompt
-          onSubmitGoal={(goal) => {
+          onSubmitGoal={(goal: string) => {
             telemetryAggregator.logMessage('INFO', `Triggering autonomous project goal: '${goal}'`);
             if (kernel) {
               kernel.getProjectLifecycleOrchestrator().runProject(goal).then(() => {
                 telemetryAggregator.logMessage('SUCCESS', `Autonomous execution completed for '${goal}'`);
-              }).catch((err) => {
+              }).catch((err: any) => {
                 telemetryAggregator.logMessage('ERROR', `Execution error: ${err.message}`);
               });
             }

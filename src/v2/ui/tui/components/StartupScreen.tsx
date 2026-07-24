@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, Text, useInput } from 'ink';
-import { TelemetrySnapshot } from '../../../contracts/itelemetry_aggregator';
+import { TelemetrySnapshot } from '../../../contracts/itelemetry_aggregator.js';
 
 interface StartupScreenProps {
   snapshot: TelemetrySnapshot;
@@ -29,7 +29,7 @@ export const StartupScreen: React.FC<StartupScreenProps> = ({ snapshot, onContin
         <Text bold underline color="yellow">
           Detected Runtime Providers:
         </Text>
-        {snapshot.runtimeProviders.map((provider) => (
+        {snapshot.runtimeProviders.map((provider: any) => (
           <Box key={provider.id} gap={1}>
             {provider.installed ? (
               <Text color="green">[✓] {provider.name} ({provider.version}) - Ready</Text>

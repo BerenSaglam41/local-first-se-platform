@@ -7,17 +7,17 @@
     "se-os": "./dist/v2/cli/bin.js"
   },
   "scripts": {
-    "build": "tsc",
-    "start": "ts-node src/v2/cli/bin.ts",
-    "tui": "ts-node src/v2/cli/bin.ts",
-    "se-os": "ts-node src/v2/cli/bin.ts",
+    "build": "tsc && npx esbuild src/v2/cli/bin.ts --bundle --platform=node --target=node18 --format=esm --banner:js=\"import { createRequire as __createRequire } from 'module'; import { fileURLToPath as __fileURLToPath } from 'url'; import { dirname as __dirnameFn } from 'path'; const require = __createRequire(import.meta.url); const __filename = __fileURLToPath(import.meta.url); const __dirname = __dirnameFn(__filename);\" --alias:react-devtools-core=./src/v2/cli/empty_stub.ts --external:sqlite3 --external:tree-sitter --external:tree-sitter-typescript --outfile=dist/v2/cli/bundle.js && cp node_modules/yoga-wasm-web/dist/yoga.wasm dist/v2/cli/yoga.wasm && node -e 'const fs=require(\"fs\"); fs.writeFileSync(\"dist/v2/cli/bin.js\", \"#!/usr/bin/env node\\nimport(\\\"./bundle.js\\\");\\n\");' && chmod +x dist/v2/cli/bin.js",
+    "start": "node dist/v2/cli/bin.js",
+    "tui": "node dist/v2/cli/bin.js",
+    "se-os": "node dist/v2/cli/bin.js",
     "test": "jest --runInBand",
     "test:coverage": "jest --coverage --runInBand"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
+  "type": "module",
   "dependencies": {
     "dotenv": "^17.4.2",
     "ink": "^4.4.1",
@@ -38,6 +38,7 @@
     "@types/react": "^18.3.31",
     "@types/sqlite3": "^3.1.11",
     "@types/uuid": "^10.0.0",
+    "esbuild": "^0.25.0",
     "jest": "^30.4.2",
     "ts-jest": "^29.4.12",
     "ts-node": "^10.9.2",
