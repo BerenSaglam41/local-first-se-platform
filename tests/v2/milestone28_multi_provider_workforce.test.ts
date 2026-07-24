@@ -217,7 +217,7 @@ describe('SE-OS v2.0 Milestone 28 — Multi-Provider Workforce Suite', () => {
     log.writeLine('emp-test-tmux', 'hello from a real test');
 
     const tmux = new TmuxIntegration(uniqueSession, log);
-    const created = tmux.createLayout([{ paneIndex: 1, title: 'test-pane', workerId: 'emp-test-tmux' }]);
+    const created = await tmux.createLayout([{ paneIndex: 1, title: 'test-pane', workerId: 'emp-test-tmux' }]);
     expect(created).toBe(true);
 
     const windows = execSync(`tmux list-windows -t ${uniqueSession}`, { encoding: 'utf8' });

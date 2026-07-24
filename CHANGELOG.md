@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v2.0.0-m28-audit-2] - 2026-07-24
+
+### Fixed (Non-Blocking I/O — Milestone 28 Audit, Step 2)
+See `docs/adr/ADR-0006-async-telemetry-and-tmux-io.md`.
+
+- **`TelemetryAggregator` no longer blocks the event loop on `git`**: `getSnapshot()` — polled
+  every 500ms by the TUI for its entire lifetime — used to run a synchronous `execSync('git
+  rev-parse ...')` per busy worker on every tick. Replaced with `GitBranchCache`
+  (`src/v2/infrastructure/telemetry/git_branch_cache.ts`): reads are always synchronous and
+  instant (last-known value, or `'detecting...'` before the first resolution); refreshes happen
+  asynchronously in the background at most every 4 seconds per workspace.
+- **`TmuxIntegration` is now fully async** (`spawn` instead of `spawnSync`): at the project's
+  target scale, `createLayout()` issuing one blocking `tmux new-window` per worker would freeze
+  the entire process — not just the TUI — for as long as tmux takes to sequentially create
+  hundreds or thousands of windows. `Kernel.launchTmuxDashboard()` and `SeOsCli.tmuxLaunch()` now
+  `await` it.
+
+---
+
 ## [v2.0.0-m28-audit] - 2026-07-24
 
 ### Changed (Brutal Production-Readiness Audit of Milestone 28 — Architecture Unification)

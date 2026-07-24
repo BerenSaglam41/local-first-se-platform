@@ -1,5 +1,4 @@
 import * as os from 'os';
-import { execSync } from 'child_process';
 import {
   ITelemetryAggregator,
   TelemetrySnapshot,
@@ -16,28 +15,13 @@ import { VerificationPipeline } from '../verification/verification_pipeline';
 import { WorkerStore } from '../worker/worker_store';
 import { ProviderRegistry } from '../providers/provider_registry';
 import { WorkerTerminalLog } from '../worker/worker_terminal_log';
-
-// TODO(ADR-0006): this still calls execSync synchronously in the polling hot path. Left
-// unchanged deliberately for this architectural step (see ADR-0005 scope) — fixed under the
-// dedicated blocking-I/O step, not folded in here.
-function getGitBranchUncached(workspacePath?: string): string {
-  if (!workspacePath) return 'no-workspace';
-  try {
-    const branch = execSync('git rev-parse --abbrev-ref HEAD', {
-      cwd: workspacePath,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    }).trim();
-    return branch || 'no-repo';
-  } catch (err) {
-    return 'no-repo';
-  }
-}
+import { GitBranchCache } from '../../infrastructure/telemetry/git_branch_cache';
 
 export class TelemetryAggregator implements ITelemetryAggregator {
   private activeRuntimeProviderId = 'plugin-claude-code';
   private logs: Array<{ id: string; timestamp: string; level: string; message: string }> = [];
   private events: DomainEvent[] = [];
+  private gitBranchCache: GitBranchCache;
 
   constructor(
     private eventStore?: IEventStore,
@@ -46,8 +30,10 @@ export class TelemetryAggregator implements ITelemetryAggregator {
     private verificationPipeline?: VerificationPipeline,
     private workerStore?: WorkerStore,
     private providerRegistry?: ProviderRegistry,
-    private terminalLog?: WorkerTerminalLog
+    private terminalLog?: WorkerTerminalLog,
+    gitBranchCache?: GitBranchCache
   ) {
+    this.gitBranchCache = gitBranchCache || new GitBranchCache();
     this.logMessage('INFO', '[Kernel] SE-OS v2.0 TelemetryAggregator initialized (ONLINE)');
 
     if (this.eventStore && typeof (this.eventStore as any).subscribe === 'function') {
@@ -99,7 +85,7 @@ export class TelemetryAggregator implements ITelemetryAggregator {
       const execution = w.activeExecution;
       const providerName = runtimeProviders.find((p) => p.id === w.assignedProviderId)?.name || w.assignedProviderId || 'unassigned';
       const workingDirectory = execution?.workspacePath || '';
-      const gitBranch = getGitBranchUncached(execution?.workspacePath);
+      const gitBranch = this.gitBranchCache.getSync(execution?.workspacePath);
       const lastHistoryEntry = w.history[0];
 
       return {

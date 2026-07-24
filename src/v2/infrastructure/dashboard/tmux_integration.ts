@@ -1,4 +1,4 @@
-import { spawnSync } from 'child_process';
+import { spawn } from 'child_process';
 import * as fs from 'fs';
 import { WorkerTerminalLog } from '../../application/worker/worker_terminal_log';
 
@@ -9,12 +9,26 @@ export interface TmuxPaneConfig {
   workerId?: string;
 }
 
+function runTmux(args: string[]): Promise<boolean> {
+  return new Promise((resolve) => {
+    const child = spawn('tmux', args, { stdio: 'ignore' });
+    child.on('error', () => resolve(false));
+    child.on('close', (code) => resolve(code === 0));
+  });
+}
+
 /**
  * Real tmux integration: creates an actual detached tmux session and one real window per worker,
  * each tailing that worker's real terminal log (WorkerTerminalLog) — `tmux attach` shows genuine
- * process output, not a fabricated pane. All commands use spawnSync with an argument array (never
+ * process output, not a fabricated pane. All commands use spawn with an argument array (never
  * shell-interpolated strings) so paths/titles containing spaces or special characters can't break
  * or inject into the command.
+ *
+ * Every tmux invocation is async (`spawn`, not `spawnSync` — see ADR-0006): at the project's
+ * target scale (1000+ workers), `createLayout()` runs one `tmux new-window` per worker. A
+ * synchronous spawn there would freeze the entire Node.js process — including every other
+ * worker's in-flight I/O — for as long as it takes tmux to create a thousand windows serially.
+ * Awaiting an async spawn yields the event loop between each call instead.
  */
 export class TmuxIntegration {
   private sessionName: string;
@@ -26,27 +40,24 @@ export class TmuxIntegration {
     this.terminalLog = terminalLog || new WorkerTerminalLog();
   }
 
-  isAvailable(): boolean {
-    const res = spawnSync('tmux', ['-V'], { stdio: 'ignore' });
-    return res.status === 0;
+  async isAvailable(): Promise<boolean> {
+    return runTmux(['-V']);
   }
 
-  private hasSession(): boolean {
-    const res = spawnSync('tmux', ['has-session', '-t', this.sessionName], { stdio: 'ignore' });
-    return res.status === 0;
+  private async hasSession(): Promise<boolean> {
+    return runTmux(['has-session', '-t', this.sessionName]);
   }
 
-  /** Creates the tmux session if it doesn't already exist. Returns false (never throws) if tmux
+  /** Creates the tmux session if it doesn't already exist. Resolves false (never throws) if tmux
    * isn't installed — callers can fall back to the in-TUI terminal view. */
-  ensureSession(): boolean {
-    if (!this.isAvailable()) return false;
-    if (this.hasSession()) return true;
-    const res = spawnSync('tmux', ['new-session', '-d', '-s', this.sessionName, '-n', 'control']);
-    return res.status === 0;
+  async ensureSession(): Promise<boolean> {
+    if (!(await this.isAvailable())) return false;
+    if (await this.hasSession()) return true;
+    return runTmux(['new-session', '-d', '-s', this.sessionName, '-n', 'control']);
   }
 
-  createLayout(paneConfigs: TmuxPaneConfig[]): boolean {
-    if (!this.ensureSession()) return false;
+  async createLayout(paneConfigs: TmuxPaneConfig[]): Promise<boolean> {
+    if (!(await this.ensureSession())) return false;
 
     for (const config of paneConfigs) {
       this.panes.set(config.paneIndex, config);
@@ -57,24 +68,22 @@ export class TmuxIntegration {
         fs.writeFileSync(logPath, '');
       }
       // A window per worker, each just tailing that worker's real log file in real time.
-      spawnSync('tmux', ['new-window', '-t', this.sessionName, '-n', config.title, 'tail', '-f', '-n', '+1', logPath]);
+      await runTmux(['new-window', '-t', this.sessionName, '-n', config.title, 'tail', '-f', '-n', '+1', logPath]);
     }
     return true;
   }
 
   /** Sends real keystrokes into a worker's pane (e.g. a note or an interactive command). */
-  writePane(paneIndex: number, text: string): boolean {
+  async writePane(paneIndex: number, text: string): Promise<boolean> {
     const pane = this.panes.get(paneIndex);
     if (!pane) return false;
-    const res = spawnSync('tmux', ['send-keys', '-t', `${this.sessionName}:${pane.title}`, text, 'Enter']);
-    return res.status === 0;
+    return runTmux(['send-keys', '-t', `${this.sessionName}:${pane.title}`, text, 'Enter']);
   }
 
-  clearPane(paneIndex: number): boolean {
+  async clearPane(paneIndex: number): Promise<boolean> {
     const pane = this.panes.get(paneIndex);
     if (!pane) return false;
-    const res = spawnSync('tmux', ['send-keys', '-t', `${this.sessionName}:${pane.title}`, 'clear', 'Enter']);
-    return res.status === 0;
+    return runTmux(['send-keys', '-t', `${this.sessionName}:${pane.title}`, 'clear', 'Enter']);
   }
 
   /** The real command a user can run to watch every worker live. */

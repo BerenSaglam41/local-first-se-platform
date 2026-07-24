@@ -307,7 +307,7 @@ export class Kernel implements IKernel {
    * would pollute the host's tmux server and slow down the suite. Real product entry points
    * (SeOsCli) call this only when the user actually asks to watch workers in tmux.
    */
-  launchTmuxDashboard(): boolean {
+  async launchTmuxDashboard(): Promise<boolean> {
     const tmux = this.getTmuxIntegration();
     const workers = this.getWorkerStore().list();
     return tmux.createLayout(

@@ -432,7 +432,7 @@ export class SeOsCli {
 
   /** Launches the real tmux dashboard: one window per worker, each tailing its real terminal log. */
   async tmuxLaunch(): Promise<void> {
-    const launched = this.kernel.launchTmuxDashboard();
+    const launched = await this.kernel.launchTmuxDashboard();
     if (launched) {
       console.log(`✔ Tmux dashboard live. Attach with: ${this.kernel.getTmuxIntegration().attachCommand()}`);
     } else {
