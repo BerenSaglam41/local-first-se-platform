@@ -11,6 +11,8 @@ import { IStorage } from './core/domain/interfaces/istorage';
 import { randomUUID } from 'crypto';
 import { EngineeringTask } from './core/domain/models/execution';
 import { GitManager } from './core/application/services/git_manager';
+import { IDashboard } from './core/domain/interfaces/idashboard';
+import { TmuxDashboard } from './infrastructure/logging/tmux_dashboard';
 
 // Milestone 2 Interfaces & Implementations
 import { ICache } from './core/domain/interfaces/icache';
@@ -169,7 +171,24 @@ function scanWorkspaceFiles(dir: string): string[] {
 
 // Run CLI / bootstrap if script is executed directly
 if (require.main === module) {
-  const taskPrompt = process.argv.slice(2).join(' ').trim();
+  let taskPrompt = '';
+  let targetWorkspace = process.cwd();
+
+  const args = process.argv.slice(2);
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === 'run') continue;
+    if (arg === '--workspace' && args[i + 1]) {
+      targetWorkspace = path.resolve(args[i + 1]);
+      i++;
+    } else if (arg === '--task' && args[i + 1]) {
+      taskPrompt = args[i + 1];
+      i++;
+    } else if (!taskPrompt && !arg.startsWith('--')) {
+      taskPrompt = args.slice(i).join(' ').trim();
+      break;
+    }
+  }
 
   if (!taskPrompt) {
     console.log(`
@@ -178,24 +197,35 @@ Local-First AI Software Engineering Platform (SE-OS)
 ====================================================
 
 Usage:
+  se-os run --workspace <path> --task "<task_description>"
   npm start -- "<task_description>"
 
 Examples:
   npm start -- "Refactor the authentication module"
-  npm start -- "Implement a calculator class"
+  npm start -- --workspace . --task "Implement a calculator class"
 `);
     process.exit(0);
   }
 
   (async () => {
-    console.log('----------------------------------------');
-    console.log(`Task received: "${taskPrompt}"`);
-    console.log('Executing task through SE-OS pipeline...');
-    console.log('----------------------------------------');
+    const rootDir = targetWorkspace;
+    const dashboard = new TmuxDashboard(rootDir);
+    await dashboard.initialize('se-os');
 
-    const rootDir = process.cwd();
+    const mainLog = (msg: string) => {
+      console.log(msg);
+      dashboard.writeMain(msg);
+    };
+
+    mainLog('----------------------------------------');
+    mainLog(`Task received: "${taskPrompt}"`);
+    mainLog(`Workspace path: "${rootDir}"`);
+    mainLog('Executing task through SE-OS pipeline...');
+    mainLog('----------------------------------------');
+
     const scanStartTime = Date.now();
-    console.log('\n▶ Workspace Scan');
+    mainLog('\n▶ Workspace Scan');
+    dashboard.writeKnowledge(`[INFO] Starting Workspace Scan in directory: ${rootDir}`);
     const workspaceFiles = scanWorkspaceFiles(rootDir);
 
     // Extract target files mentioned in task prompt (e.g. src/calculator.ts)
@@ -211,9 +241,11 @@ Examples:
 
     const preferredEntry = workspaceFiles.find(f => f.endsWith('src/main.ts') || f.endsWith('src/index.ts')) || workspaceFiles.find(f => f.endsWith('.ts') && fs.existsSync(f) && fs.statSync(f).size > 0);
     const entryFile = preferredEntry || path.join(rootDir, 'src', 'main.ts');
-    console.log(`    Found ${workspaceFiles.length} source file(s)`);
-    console.log(`    Entry File: ${path.relative(rootDir, entryFile)}`);
-    console.log(`    ${Date.now() - scanStartTime} ms`);
+    
+    dashboard.writeKnowledge(`[SUCCESS] Workspace scan completed. Found ${workspaceFiles.length} file(s). Entry file: ${entryFile}`);
+    mainLog(`    Found ${workspaceFiles.length} source file(s)`);
+    mainLog(`    Entry File: ${path.relative(rootDir, entryFile)}`);
+    mainLog(`    ${Date.now() - scanStartTime} ms`);
 
     const { container } = await bootstrap();
 
@@ -230,74 +262,94 @@ Examples:
     const result = await taskExecutionService.executeTask(task, (event) => {
       const elapsed = event.durationMs !== undefined ? (event.durationMs >= 1000 ? `${(event.durationMs / 1000).toFixed(1)} s` : `${event.durationMs} ms`) : '';
 
+      if (event.stage === 'Provider Stream') {
+        if (event.metrics?.chunk) {
+          dashboard.writeProvider(event.metrics.chunk);
+        }
+        return;
+      }
+
+      if (event.stage === 'Verification Stream') {
+        if (event.metrics?.chunk) {
+          dashboard.writeVerification(event.metrics.chunk);
+        }
+        return;
+      }
+
       if (event.status === 'started') {
         if (event.stage === 'AI Provider Execution') {
-          console.log(`\n▶ AI Provider Execution`);
-          console.log(`    Provider: ${event.metrics?.providerName || 'Provider'}`);
-          console.log(`    Waiting for AI response...`);
+          mainLog(`\n▶ AI Provider Execution`);
+          mainLog(`    Provider: ${event.metrics?.providerName || 'Provider'}`);
+          mainLog(`    Waiting for AI response...`);
+          dashboard.writeProvider(`\n--- PROMPT SENT TO CLAUDE PROVIDER ---\nPrompt size: ${event.metrics?.promptLength || 0} chars\nWaiting for response...\n`);
         } else if (event.stage === 'Autonomous Retry Engine') {
-          console.log(`\n▶ Autonomous Retry Engine`);
-          console.log(`    Attempt: ${event.metrics?.attempt}/${event.metrics?.maxRetries}`);
-          console.log(`    Triggering self-repair loop...`);
+          mainLog(`\n▶ Autonomous Retry Engine`);
+          mainLog(`    Attempt: ${event.metrics?.attempt}/${event.metrics?.maxRetries}`);
+          mainLog(`    Triggering self-repair loop...`);
+          dashboard.writeMain(`[RETRY] Triggering self-repair attempt ${event.metrics?.attempt}/${event.metrics?.maxRetries}`);
         } else {
-          console.log(`\n▶ ${event.stage}`);
+          mainLog(`\n▶ ${event.stage}`);
         }
       } else if (event.status === 'completed') {
         if (event.stage === 'Project Knowledge Engine') {
-          console.log(`    Indexed Files: ${event.metrics?.workspaceFilesCount}`);
-          console.log(`    Tech Stack: ${event.metrics?.techStack?.join(', ') || 'TypeScript, Node.js'}`);
-          console.log(`    Schema Version: v${event.metrics?.schemaVersion || 1}`);
-          console.log(`    ${elapsed}`);
+          mainLog(`    Indexed Files: ${event.metrics?.workspaceFilesCount}`);
+          mainLog(`    Tech Stack: ${event.metrics?.techStack?.join(', ') || 'TypeScript, Node.js'}`);
+          mainLog(`    Schema Version: v${event.metrics?.schemaVersion || 1}`);
+          mainLog(`    ${elapsed}`);
+          dashboard.writeKnowledge(`[KNOWLEDGE] Indexed ${event.metrics?.workspaceFilesCount} files. Tech stack: ${event.metrics?.techStack?.join(', ')}. Schema: v${event.metrics?.schemaVersion}`);
           stageReports.push({ stage: event.stage, status: 'SUCCESS', summary: `Indexed ${event.metrics?.workspaceFilesCount} files (${event.metrics?.techStack?.join(', ') || 'TypeScript'})` });
         } else if (event.stage === 'Context Builder') {
-          console.log(`    Selected Files: ${event.metrics?.selectedFilesCount || 1}`);
-          console.log(`    Context Size: ${event.metrics?.contextSizeKB} KB (${event.metrics?.contextSizeChars} chars)`);
-          console.log(`    ${elapsed}`);
+          mainLog(`    Selected Files: ${event.metrics?.selectedFilesCount || 1}`);
+          mainLog(`    Context Size: ${event.metrics?.contextSizeKB} KB (${event.metrics?.contextSizeChars} chars)`);
+          mainLog(`    ${elapsed}`);
+          dashboard.writeKnowledge(`[CONTEXT] Compiled ${event.metrics?.contextSizeKB} KB context slice (${event.metrics?.contextSizeChars} chars)`);
           stageReports.push({ stage: event.stage, status: 'SUCCESS', summary: `Compiled ${event.metrics?.contextSizeKB} KB context slice` });
         } else if (event.stage === 'AI Provider Execution') {
-          console.log(`    Response received (${event.metrics?.responseLength || 0} chars)`);
-          console.log(`    ${elapsed}`);
+          mainLog(`    Response received (${event.metrics?.responseLength || 0} chars)`);
+          mainLog(`    ${elapsed}`);
+          dashboard.writeProvider(`\n[RESPONSE RECEIVED] Completed in ${elapsed}. Size: ${event.metrics?.responseLength} chars\n`);
           stageReports.push({ stage: event.stage, status: 'SUCCESS', summary: `Received AI response (${event.metrics?.responseLength} chars)` });
         } else if (event.stage === 'Response Validation & Parser') {
-          console.log(`    Extracted Code Blocks: ${event.metrics?.codeBlocksCount}`);
-          console.log(`    Validation Status: PASSED (Confidence: ${event.metrics?.confidence?.toFixed(2)})`);
-          console.log(`    ${elapsed}`);
+          mainLog(`    Extracted Code Blocks: ${event.metrics?.codeBlocksCount}`);
+          mainLog(`    Validation Status: PASSED (Confidence: ${event.metrics?.confidence?.toFixed(2)})`);
+          mainLog(`    ${elapsed}`);
           stageReports.push({ stage: event.stage, status: 'SUCCESS', summary: `Validated ${event.metrics?.codeBlocksCount} code block(s)` });
         } else if (event.stage === 'Patch Generator & Workspace Updater') {
-          console.log(`    Patch Status: APPLIED`);
+          mainLog(`    Patch Status: APPLIED`);
           if (event.metrics?.modifiedFiles && event.metrics.modifiedFiles.length > 0) {
-            console.log(`    Files modified:`);
-            event.metrics.modifiedFiles.forEach((f: string) => console.log(`      ${path.relative(rootDir, f)}`));
+            mainLog(`    Files modified:`);
+            event.metrics.modifiedFiles.forEach((f: string) => mainLog(`      ${path.relative(rootDir, f)}`));
           } else {
-            console.log(`    Files modified: None`);
+            mainLog(`    Files modified: None`);
           }
-          console.log(`    ${elapsed}`);
+          mainLog(`    ${elapsed}`);
           stageReports.push({ stage: event.stage, status: 'SUCCESS', summary: `Applied patches to ${event.metrics?.modifiedFiles?.length || 0} file(s)` });
         } else if (event.stage === 'Verification Runner') {
-          console.log(`    Build: ${event.metrics?.buildPassed ? 'PASS' : 'FAIL'}`);
-          console.log(`    Tests: ${event.metrics?.testsPassed ? 'PASS' : 'FAIL'}`);
-          console.log(`    ${elapsed}`);
+          mainLog(`    Build: ${event.metrics?.buildPassed ? 'PASS' : 'FAIL'}`);
+          mainLog(`    Tests: ${event.metrics?.testsPassed ? 'PASS' : 'FAIL'}`);
+          mainLog(`    ${elapsed}`);
+          dashboard.writeVerification(`\n[VERIFICATION RESULT] Build: ${event.metrics?.buildPassed ? 'PASS' : 'FAIL'}, Tests: ${event.metrics?.testsPassed ? 'PASS' : 'FAIL'} (${elapsed})\n`);
           stageReports.push({ stage: event.stage, status: 'SUCCESS', summary: `Verification passed (Build: PASS, Tests: PASS)` });
         }
       } else if (event.status === 'failed') {
-        console.log(`    Status: FAILED (${elapsed})`);
-        console.log(`\n❌ STAGE FAILURE IN [${event.stage}]`);
-        console.log(`    Component:       ${event.stage}`);
-        console.log(`    Error Message:   ${event.error}`);
+        mainLog(`    Status: FAILED (${elapsed})`);
+        mainLog(`\n❌ STAGE FAILURE IN [${event.stage}]`);
+        mainLog(`    Component:       ${event.stage}`);
+        mainLog(`    Error Message:   ${event.error}`);
         if (event.exceptionStack) {
-          console.log(`    Stack Trace:`);
-          console.log(`    --------------------------------------------------`);
-          console.log(`    ${event.exceptionStack.split('\n').slice(0, 8).join('\n    ')}`);
-          console.log(`    --------------------------------------------------`);
+          mainLog(`    Stack Trace:`);
+          mainLog(`    --------------------------------------------------`);
+          mainLog(`    ${event.exceptionStack.split('\n').slice(0, 8).join('\n    ')}`);
+          mainLog(`    --------------------------------------------------`);
         }
         if (event.metrics?.verificationLogs) {
-          console.log(`    Verification Logs:`);
-          console.log(`    --------------------------------------------------`);
-          console.log(`    ${event.metrics.verificationLogs.split('\n').slice(0, 10).join('\n    ')}`);
-          console.log(`    --------------------------------------------------`);
+          mainLog(`    Verification Logs:`);
+          mainLog(`    --------------------------------------------------`);
+          mainLog(`    ${event.metrics.verificationLogs.split('\n').slice(0, 10).join('\n    ')}`);
+          mainLog(`    --------------------------------------------------`);
         }
         if (event.recoveryAction) {
-          console.log(`    Recovery Action: ${event.recoveryAction}`);
+          mainLog(`    Recovery Action: ${event.recoveryAction}`);
         }
         stageReports.push({ stage: event.stage, status: 'FAILED', summary: `Failed: ${event.error}` });
       }
@@ -306,62 +358,78 @@ Examples:
     let gitCommitHash: string | undefined = undefined;
     if (result.status === 'SUCCESS' && result.modifiedFiles && result.modifiedFiles.length > 0) {
       const gitStartTime = Date.now();
-      console.log(`\n▶ Git Integration`);
+      mainLog(`\n▶ Git Integration`);
       const runtime = container.resolve<IProcessRuntime>('ProcessRuntime');
       const gitManager = new GitManager(runtime);
+      
+      const gitDiff = await gitManager.generateDiff(result.modifiedFiles);
+      dashboard.writeGit(`--- GIT DIFF ---\n${gitDiff || '(no diff)'}\n`);
+
+      const gitStatus = await gitManager.getStatus();
+      dashboard.writeGit(`--- GIT STATUS ---\nClean: ${gitStatus.isClean}, Files: ${gitStatus.modifiedFiles.join(', ')}\n`);
+
       const commitRes = await gitManager.commit(result.modifiedFiles, `feat(se-os): ${taskPrompt}`);
       if (commitRes.success) {
         gitCommitHash = commitRes.commitHash;
-        console.log(`    Commit Hash: ${gitCommitHash}`);
-        console.log(`    ${Date.now() - gitStartTime} ms`);
+        mainLog(`    Commit Hash: ${gitCommitHash}`);
+        mainLog(`    ${Date.now() - gitStartTime} ms`);
+        dashboard.writeGit(`[COMMIT CREATED] Hash: ${gitCommitHash}\nMessage: feat(se-os): ${taskPrompt}\n`);
         stageReports.push({ stage: 'Git Integration', status: 'SUCCESS', summary: `Created commit ${gitCommitHash}` });
       } else {
-        console.log(`    Commit Failed: ${commitRes.error}`);
+        mainLog(`    Commit Failed: ${commitRes.error}`);
+        dashboard.writeGit(`[COMMIT FAILED] ${commitRes.error}\n`);
         stageReports.push({ stage: 'Git Integration', status: 'FAILED', summary: `Commit failed: ${commitRes.error}` });
       }
+    } else {
+      const runtime = container.resolve<IProcessRuntime>('ProcessRuntime');
+      const gitManager = new GitManager(runtime);
+      const gitStatus = await gitManager.getStatus();
+      dashboard.writeGit(`--- GIT STATUS ---\nClean: ${gitStatus.isClean}, Files: ${gitStatus.modifiedFiles.join(', ')}\n`);
     }
 
-    console.log('\n====================================================');
-    console.log('              DETAILED EXECUTION REPORT             ');
-    console.log('====================================================');
-    console.log(`Task ID:            ${result.taskId}`);
-    console.log(`Task Summary:       "${taskPrompt}"`);
-    console.log(`Execution Status:   ${result.status}`);
-    console.log(`Total Duration:     ${(result.durationMs / 1000).toFixed(2)} s (${result.durationMs} ms)`);
-    console.log(`\nWhat Happened:`);
-    console.log(`  ✔ Workspace Scan: Found ${workspaceFiles.length} source file(s)`);
+    mainLog('\n====================================================');
+    mainLog('              DETAILED EXECUTION REPORT             ');
+    mainLog('====================================================');
+    mainLog(`Task ID:            ${result.taskId}`);
+    mainLog(`Task Summary:       "${taskPrompt}"`);
+    mainLog(`Execution Status:   ${result.status}`);
+    mainLog(`Total Duration:     ${(result.durationMs / 1000).toFixed(2)} s (${result.durationMs} ms)`);
+    mainLog(`\nWhat Happened:`);
+    mainLog(`  ✔ Workspace Scan: Found ${workspaceFiles.length} source file(s)`);
     stageReports.forEach((rep) => {
       if (rep.status === 'SUCCESS') {
-        console.log(`  ✔ ${rep.stage}: ${rep.summary}`);
+        mainLog(`  ✔ ${rep.stage}: ${rep.summary}`);
       } else {
-        console.log(`  ✖ ${rep.stage}: ${rep.summary}`);
+        mainLog(`  ✖ ${rep.stage}: ${rep.summary}`);
       }
     });
 
-    console.log(`\nWhat Did Not Happen:`);
+    mainLog(`\nWhat Did Not Happen:`);
     if (result.status === 'SUCCESS') {
       if (result.retryCount === 0) {
-        console.log(`  - Autonomous Retry Engine: Not triggered (execution succeeded on first attempt)`);
+        mainLog(`  - Autonomous Retry Engine: Not triggered (execution succeeded on first attempt)`);
       }
     } else {
       if (!gitCommitHash) {
-        console.log(`  - Git Commit: Skipped because task execution/verification did not succeed`);
+        mainLog(`  - Git Commit: Skipped because task execution/verification did not succeed`);
       }
     }
 
-    console.log(`\nWhy:`);
+    mainLog(`\nWhy:`);
     if (result.status === 'SUCCESS') {
-      console.log(`  The pipeline successfully parsed the codebase context, received a valid code block from the provider, applied file patches to the workspace, and verified that all build and test assertions passed cleanly.`);
+      mainLog(`  The pipeline successfully parsed the codebase context, received a valid code block from the provider, applied file patches to the workspace, and verified that all build and test assertions passed cleanly.`);
     } else {
-      console.log(`  Failure Root Cause: ${result.error || 'Execution did not produce verified workspace updates.'}`);
+      mainLog(`  Failure Root Cause: ${result.error || 'Execution did not produce verified workspace updates.'}`);
       if (result.validationErrors && result.validationErrors.length > 0) {
-        console.log(`  Validation Errors:\n    - ${result.validationErrors.join('\n    - ')}`);
+        mainLog(`  Validation Errors:\n    - ${result.validationErrors.join('\n    - ')}`);
       }
       if (result.verificationLogs) {
-        console.log(`  Verification Output Snippet:\n    - ${result.verificationLogs.split('\n').slice(0, 6).join('\n    - ')}`);
+        mainLog(`  Verification Output Snippet:\n    - ${result.verificationLogs.split('\n').slice(0, 6).join('\n    - ')}`);
       }
     }
-    console.log('====================================================\n');
+    mainLog('====================================================\n');
+
+    console.log(dashboard.attachBanner('se-os'));
 
     const storage = container.resolve<IStorage>('Storage');
     await storage.close();

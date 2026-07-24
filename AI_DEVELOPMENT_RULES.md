@@ -72,6 +72,8 @@ Every execution pipeline stage and long-running service MUST emit structured tel
 - **Finish**: Stage completion state, duration (ms/s), and key execution metrics.
 - **Duration**: Exact wall-clock execution time elapsed.
 - **Failure Diagnostics**: Component name, exact exception message, stack trace snippet, and actionable recovery step. Never mask errors as generic strings.
+- **Live Multi-Pane Tmux Dashboard**: Automatically spawn and pipe unbuffered stage telemetry to dedicated tmux log panes for Main Console (Pane 1), Knowledge Engine & AST Slicer (Pane 2), Claude Provider (Pane 3), Verification Runner (Pane 4), and Git Integration (Pane 5).
+- **Session Persistence**: Keep the `se-os` tmux session active after completion so developers can reconnect (`tmux attach -t se-os`) and inspect raw stdout, stderr, and exit codes.
 
 ---
 

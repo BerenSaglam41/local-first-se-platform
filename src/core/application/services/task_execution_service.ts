@@ -1,5 +1,5 @@
 import { IContextBuilder } from '../../domain/interfaces/icontext_builder';
-import { IProvider } from '../../domain/interfaces/iprovider';
+import { IProvider, ProviderResult } from '../../domain/interfaces/iprovider';
 import { IConfig } from '../../domain/interfaces/iconfig';
 import { IProcessRuntime } from '../../domain/interfaces/iprocess_runtime';
 import { EngineeringTask, ExecutionResult, StageProgressCallback } from '../../domain/models/execution';
@@ -257,8 +257,20 @@ export class TaskExecutionService {
       let success = false;
       let exitCode: number | null = null;
 
+      let providerResult: ProviderResult | undefined;
       try {
-        const providerResult = await this.provider.execute(currentPrompt);
+        if (typeof this.provider.stream === 'function') {
+          providerResult = await this.provider.stream(currentPrompt, (chunk) => {
+            onProgress?.({
+              stage: 'Provider Stream',
+              status: 'completed',
+              metrics: { chunk },
+            });
+          });
+        }
+        if (!providerResult) {
+          providerResult = await this.provider.execute(currentPrompt);
+        }
         output = providerResult.output;
         errorMsg = providerResult.error || '';
         success = providerResult.success;
@@ -409,7 +421,9 @@ export class TaskExecutionService {
       const verificationCmds = this.config.get().verificationCommands;
 
       if (verificationCmds && verificationCmds.length > 0) {
-        const vResult = await this.verificationRunner.run(verificationCmds);
+        const vResult = await this.verificationRunner.run(verificationCmds, (chunk, type) => {
+          onProgress?.({ stage: 'Verification Stream', status: 'completed', metrics: { chunk, streamType: type } });
+        });
         verificationStatus = vResult.success ? 'passed' : 'failed';
         buildPassed = vResult.buildPassed;
         testsPassed = vResult.testsPassed;

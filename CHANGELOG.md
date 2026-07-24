@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.2.0] - 2026-07-24
+
+### Added
+- **Live Multi-Pane Tmux Runtime Dashboard**: Implemented 5-pane real-time `tmux` dashboard session (`se-os`) with dedicated log streams for Main Console (Pane 1), Knowledge Engine & AST Slicer (Pane 2), Claude Provider (Pane 3), Verification Runner (Pane 4), and Git Integration (Pane 5).
+- **Interactive CLI Flags**: Added support for `se-os run --workspace <path> --task "<task>"` and `npm start -- --workspace <path> --task "<task>"`.
+- **Unbuffered Live Streaming**: Instrumented real-time stdout/stderr streaming from `ClaudeProvider` and `VerificationRunner` (`npm install`, `npm run build`, `npm test`) directly into pane output sinks without buffering.
+- **Tmux Session Persistence**: Maintained background `se-os` tmux session active upon task completion for reconnect inspection via `tmux attach -t se-os`.
+- **TmuxDashboard Domain Integration**: Created `IDashboard` domain interface and `TmuxDashboard` implementation in `src/infrastructure/logging/tmux_dashboard.ts` with unit test suite in `tests/dashboard.test.ts`.
+
 ## [v1.1.0] - 2026-07-24
 
 ### Added

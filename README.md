@@ -64,10 +64,40 @@ The **Provider Runtime Kernel** provides a robust, cross-platform layer to spawn
 | :--- | :--- | :--- | :--- |
 | **Milestone 1** | Kernel Core & Telemetry | SQLite Persistence, Structured Logging, DI Bootstrapping | **Completed & Merged** |
 | **Milestone 2** | VFS & AST Context Slicer | Tree-sitter Parser, Slicing Engine, Transitive Dependency Resolver | **Completed & Merged** |
-| **Milestone 3** | Provider Runtime Kernel | Pseudo-Terminal Spawner, Cancellation, Resource Monitoring | **Implemented - In Review** |
+| **Milestone 3** | Provider Runtime Kernel | Pseudo-Terminal Spawner, Cancellation, Resource Monitoring | **Completed & Merged** |
 | **Milestone 4** | State Machine & Task Scheduler | Event Bus, DAG State Transitions, FIFO Queue | Planned |
 | **Milestone 5** | DAG Workflow Compiler | Codebase Workflow Orchestrator, Human Review Gate | Planned |
-| **Milestone 6** | Sandboxed Workspace & TUI | Sandboxing, TUI Dashboard UI | Planned |
+| **Milestone 6** | Sandboxed Workspace & TUI | Sandboxing, Live Multi-Pane Tmux Dashboard UI | **Completed (v1.2.0)** |
+
+---
+
+## 🖥 Live Multi-Pane Tmux Runtime Dashboard
+
+SE-OS features an automated 5-pane `tmux` execution dashboard providing real-time unbuffered visibility into every stage of the engineering pipeline.
+
+### CLI Usage:
+```bash
+# Execute task with automated workspace detection and live tmux dashboard:
+se-os run --workspace /path/to/project --task "Implement a calculator class"
+
+# Alternatively via npm:
+npm start -- --workspace . --task "Implement a calculator class"
+```
+
+### Dashboard Pane Architecture:
+* **Pane 1 (Main Console)**: Main console user interaction, active stage indicators, overall progress meters, and detailed execution report summary.
+* **Pane 2 (Knowledge Engine)**: Live output from Workspace Scan, Project Knowledge Engine indexing, tech stack detector, and AST Context Builder compilations.
+* **Pane 3 (Provider)**: Real-time streaming output from `ClaudeProvider` (prompt sent length, thinking status, streamed tokens/response, duration).
+* **Pane 4 (Verification)**: Live stdout and stderr from `npm install`, `npm run build`, `npm test` exactly as executed.
+* **Pane 5 (Git)**: Real-time repository status, `git diff`, `git status`, `git commit` hash, and `git tag`.
+
+### Session Persistence & Reconnection:
+When execution finishes (SUCCESS or FAILURE), the dashboard leaves the `se-os` tmux session running in the background so developers can inspect raw stdout/stderr logs and exit codes.
+
+To reconnect to the active dashboard at any time:
+```bash
+tmux attach -t se-os
+```
 
 ---
 
