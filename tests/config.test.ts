@@ -5,7 +5,7 @@ describe('Configuration Loader', () => {
   const originalEnv = { ...process.env };
 
   beforeEach(() => {
-    jest.resetModules();
+    // Targeted restoration of process.env to prevent invalidating native module handles
     process.env = { ...originalEnv };
   });
 

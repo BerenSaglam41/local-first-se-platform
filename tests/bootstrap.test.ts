@@ -9,12 +9,17 @@ describe('System Bootstrapper Integration', () => {
   const originalEnv = { ...process.env };
 
   beforeEach(() => {
-    jest.resetModules();
+    // Targeted State Isolation:
+    // We intentionally avoid calling `jest.resetModules()` here. `jest.resetModules()`
+    // purges Node's native module cache table, which corrupts C++ native addon bindings
+    // (such as `tree-sitter.node`) loaded in shared process test runs.
+    // Targeted restoration of `process.env` and cleanup of temporary test files is
+    // sufficient to isolate bootstrap configuration without invalidating native C++ handles.
     process.env = { ...originalEnv };
     process.env.DB_PATH = tempDbPath;
     process.env.LOG_PATH = tempLogPath;
 
-    // Clean up files if they exist
+    // Clean up temporary database and log files if they exist
     if (fs.existsSync(tempDbPath)) fs.unlinkSync(tempDbPath);
     if (fs.existsSync(tempLogPath)) fs.unlinkSync(tempLogPath);
   });

@@ -39,3 +39,17 @@ export interface ExecutionResult {
   finalVerificationResult: string;
   finalProviderResponse: string;
 }
+
+export interface StageProgress {
+  stage: string;
+  status: 'started' | 'completed' | 'failed';
+  durationMs?: number;
+  metrics?: Record<string, any>;
+  error?: string;
+  exceptionStack?: string;
+  recoveryAction?: string;
+}
+
+export type StageProgressCallback = (progress: StageProgress) => void;
+
+

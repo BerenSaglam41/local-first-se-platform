@@ -145,6 +145,35 @@ export class SqliteDb {
           -- 6. Index on execution_records(status) to accelerate queries filtering execution attempts by status (e.g., successful vs failed retries).
           CREATE INDEX IF NOT EXISTS idx_execution_records_status ON execution_records(status);
         `
+      },
+      {
+        version: 2,
+        sql: `
+          CREATE TABLE IF NOT EXISTS project_metadata (
+            project_id TEXT PRIMARY KEY,
+            schema_version INTEGER NOT NULL,
+            language TEXT NOT NULL,
+            package_manager TEXT,
+            build_system TEXT,
+            test_framework TEXT,
+            tech_stack TEXT NOT NULL,
+            last_indexed_at TEXT NOT NULL,
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+          );
+
+          CREATE TABLE IF NOT EXISTS project_files (
+            path TEXT PRIMARY KEY,
+            project_id TEXT NOT NULL,
+            hash TEXT NOT NULL,
+            imports TEXT NOT NULL,
+            exports TEXT NOT NULL,
+            dependencies TEXT NOT NULL,
+            last_updated_at TEXT NOT NULL,
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+          );
+
+          CREATE INDEX IF NOT EXISTS idx_project_files_project_id ON project_files(project_id);
+        `
       }
     ];
 

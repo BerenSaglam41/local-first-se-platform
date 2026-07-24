@@ -25,7 +25,7 @@ export class TypeScriptASTParser implements IASTParser {
       this.parser.setLanguage(TypeScript.typescript);
     }
 
-    const tree = this.parser.parse(content);
+    const tree = this.parser.parse(content || '');
     const symbols: CodeSymbol[] = [];
 
     try {

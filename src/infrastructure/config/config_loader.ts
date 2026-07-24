@@ -25,7 +25,7 @@ const configSchema = z.object({
     const parsed = parseInt(val as string, 10);
     return isNaN(parsed) ? undefined : parsed;
   }, z.number().default(8192)),
-  PROVIDER_TYPE: z.enum(['mock', 'claude']).default('mock'),
+  PROVIDER_TYPE: z.enum(['mock', 'claude']).default('claude'),
   CLAUDE_EXECUTABLE: z.string().default('claude'),
   VERIFICATION_COMMANDS: z.string().default('npm run build,npm test'),
   MAX_RETRY_COUNT: z.preprocess((val) => {

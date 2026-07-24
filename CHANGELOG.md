@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.1.0] - 2026-07-24
+
+### Added
+- **AI Development Rules Playbook**: Created `AI_DEVELOPMENT_RULES.md` mandating repository-wide development, testing, release, documentation, and logging standards.
+- **Agent Policy Configuration**: Added `.agents/AGENTS.md` workspace rule requiring all future agent executions to automatically follow the development playbook.
+- **ClaudeProvider Default Integration**: Registered real `ClaudeProvider` executing local Claude Code CLI (`claude -p "<prompt>" --tools ""`) non-interactively across application services.
+- **Real-Time CLI Stage Observability**: Upgraded CLI runner in `src/main.ts` with timing diagnostics, stage progress meters, component-level failure tracebacks, and structured detailed execution summaries.
+
 ## [v1.0.0] - 2026-07-23
 
 ### Added

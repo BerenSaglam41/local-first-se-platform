@@ -15,6 +15,7 @@ import { ClaudeProvider } from './infrastructure/runtime/claude_provider';
 import { MockProvider } from './infrastructure/runtime/mock_provider';
 import { TaskExecutionService } from './core/application/services/task_execution_service';
 import { EngineeringTask, ExecutionResult } from './core/domain/models/execution';
+import { ProjectKnowledgeService } from './core/application/services/project_knowledge_service';
 import * as fs from 'fs';
 import * as path from 'path';
 import { execSync } from 'child_process';
@@ -123,7 +124,8 @@ async function runDemo() {
   const sliceEngine = new CodeSliceEngine();
   const astParser = new TypeScriptASTParser(sliceEngine);
   const dependencyResolver = new DependencyResolver();
-  const contextBuilder = new ContextBuilder(vfs, astParser, dependencyResolver, cache);
+  const projectKnowledgeService = new ProjectKnowledgeService(vfs, astParser, dependencyResolver, repository, db);
+  const contextBuilder = new ContextBuilder(vfs, astParser, dependencyResolver, cache, projectKnowledgeService);
   const runtime = new ProcessRuntime();
 
   container.register('Config', config);
@@ -135,6 +137,7 @@ async function runDemo() {
   container.register('SliceEngine', sliceEngine);
   container.register('ASTParser', astParser);
   container.register('DependencyResolver', dependencyResolver);
+  container.register('ProjectKnowledgeService', projectKnowledgeService);
   container.register('ContextBuilder', contextBuilder);
   container.register('ProcessRuntime', runtime);
 
@@ -146,7 +149,7 @@ async function runDemo() {
   }
   container.register('Provider', providerInstance);
 
-  const taskExecutionService = new TaskExecutionService(contextBuilder, providerInstance, config, runtime);
+  const taskExecutionService = new TaskExecutionService(contextBuilder, providerInstance, config, runtime, projectKnowledgeService);
   container.register('TaskExecutionService', taskExecutionService);
 
   console.log('✔ Services registered in DI container successfully.');

@@ -4,13 +4,15 @@ import { IASTParser } from '../../core/domain/interfaces/iast_parser';
 import { IDependencyResolver } from '../../core/domain/interfaces/idependency_resolver';
 import { FileAst, CodeSymbol } from '../../core/domain/models/ast';
 import { ICache } from '../../core/domain/interfaces/icache';
+import { ProjectKnowledgeService } from '../../core/application/services/project_knowledge_service';
 
 export class ContextBuilder implements IContextBuilder {
   constructor(
     private vfs: IVirtualFileSystem,
     private parser: IASTParser,
     private resolver: IDependencyResolver,
-    private cache: ICache
+    private cache: ICache,
+    private projectKnowledgeService?: ProjectKnowledgeService
   ) {}
 
   async buildContext(
@@ -32,9 +34,31 @@ export class ContextBuilder implements IContextBuilder {
         continue;
       }
 
-      const vfsFile = await this.vfs.readFile(normPath);
-      const symbols = this.parser.parse(vfsFile.content, vfsFile.language);
-      const fileAst: FileAst = { filePath: normPath, symbols };
+      let fileAst: FileAst | null = null;
+
+      if (this.projectKnowledgeService) {
+        try {
+          const knowledge = await this.projectKnowledgeService.getFileKnowledge(normPath);
+          if (knowledge) {
+            fileAst = {
+              filePath: normPath,
+              symbols: knowledge.symbols
+            };
+          }
+        } catch (e: any) {
+          console.warn(`[WARN] ContextBuilder: Knowledge cache lookup failed for ${normPath}, falling back to dynamic parsing: ${e.message}`);
+        }
+      }
+
+      if (!fileAst) {
+        const vfsFile = await this.vfs.readFile(normPath);
+        if (this.parser.supportsLanguage(vfsFile.language)) {
+          const symbols = this.parser.parse(vfsFile.content, vfsFile.language);
+          fileAst = { filePath: normPath, symbols };
+        } else {
+          fileAst = { filePath: normPath, symbols: [] };
+        }
+      }
 
       this.cache.set(`ast:${normPath}`, fileAst);
       allFileAsts.push(fileAst);

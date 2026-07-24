@@ -23,6 +23,15 @@ export class VirtualFileSystem implements IVirtualFileSystem {
     const cached = this.cache.get<VfsFile>(`file:${normPath}`);
 
     try {
+      if (!fs.existsSync(normPath)) {
+        return {
+          path: normPath,
+          content: '',
+          language: this.detectLanguage(normPath),
+          lastModifiedMs: 0,
+        };
+      }
+
       const stats = fs.statSync(normPath);
       const lastModifiedMs = stats.mtimeMs;
 

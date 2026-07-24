@@ -22,7 +22,7 @@ export class ClaudeProvider implements IProvider {
   async stream(prompt: string, onChunk: (chunk: string) => void): Promise<ProviderResult> {
     const handle = this.runtime.execute({
       executable: this.executablePath,
-      args: [prompt],
+      args: ['-p', prompt, '--tools', ''],
     });
     this.activeHandle = handle;
 

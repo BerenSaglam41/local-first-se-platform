@@ -2,13 +2,15 @@ import { IContextBuilder } from '../../domain/interfaces/icontext_builder';
 import { IProvider } from '../../domain/interfaces/iprovider';
 import { IConfig } from '../../domain/interfaces/iconfig';
 import { IProcessRuntime } from '../../domain/interfaces/iprocess_runtime';
-import { EngineeringTask, ExecutionResult } from '../../domain/models/execution';
+import { EngineeringTask, ExecutionResult, StageProgressCallback } from '../../domain/models/execution';
 import { ResponseParser } from './response_parser';
 import { PatchGenerator } from './patch_generator';
 import { WorkspaceUpdater } from './workspace_updater';
 import { ResponseValidator } from './response_validator';
 import { VerificationRunner } from './verification_runner';
 import { RetryEngine } from './retry_engine';
+import { GitManager } from './git_manager';
+import { ProjectKnowledgeService } from './project_knowledge_service';
 
 export class TaskExecutionService {
   private parser = new ResponseParser();
@@ -17,17 +19,20 @@ export class TaskExecutionService {
   private validator = new ResponseValidator();
   private verificationRunner: VerificationRunner;
   private retryEngine = new RetryEngine();
+  private gitManager: GitManager;
 
   constructor(
     private contextBuilder: IContextBuilder,
     private provider: IProvider,
     private config: IConfig,
-    private runtime: IProcessRuntime
+    private runtime: IProcessRuntime,
+    private projectKnowledgeService?: ProjectKnowledgeService
   ) {
     this.verificationRunner = new VerificationRunner(runtime);
+    this.gitManager = new GitManager(runtime);
   }
 
-  async executeTask(task: EngineeringTask): Promise<ExecutionResult> {
+  async executeTask(task: EngineeringTask, onProgress?: StageProgressCallback): Promise<ExecutionResult> {
     const startTime = Date.now();
 
     // 1. Validate task request
@@ -113,7 +118,44 @@ export class TaskExecutionService {
       };
     }
 
+    // 1.5. Index project knowledge before building context
+    if (this.projectKnowledgeService) {
+      const kStartTime = Date.now();
+      onProgress?.({ stage: 'Project Knowledge Engine', status: 'started' });
+      try {
+        const rootPath = process.cwd();
+        await this.projectKnowledgeService.indexProject(
+          task.id,
+          rootPath,
+          task.workspaceFiles
+        );
+        const meta = await this.projectKnowledgeService.getProjectMetadata(task.id);
+        onProgress?.({
+          stage: 'Project Knowledge Engine',
+          status: 'completed',
+          durationMs: Date.now() - kStartTime,
+          metrics: {
+            techStack: meta?.techStack || ['TypeScript', 'Node.js'],
+            schemaVersion: meta?.schemaVersion || 1,
+            workspaceFilesCount: task.workspaceFiles.length,
+          },
+        });
+      } catch (err: any) {
+        console.warn(`[WARN] ProjectKnowledgeService: Indexing failed, falling back to dynamic context generation: ${err.message}`);
+        onProgress?.({
+          stage: 'Project Knowledge Engine',
+          status: 'failed',
+          durationMs: Date.now() - kStartTime,
+          error: err.message,
+          exceptionStack: err.stack,
+          recoveryAction: 'Falling back to dynamic AST context generation.',
+        });
+      }
+    }
+
     // 2. Build context
+    const cbStartTime = Date.now();
+    onProgress?.({ stage: 'Context Builder', status: 'started' });
     let contextContent = '';
     try {
       const contextResult = await this.contextBuilder.buildContext(
@@ -122,7 +164,25 @@ export class TaskExecutionService {
         task.workspaceFiles
       );
       contextContent = contextResult.codeContent;
+      onProgress?.({
+        stage: 'Context Builder',
+        status: 'completed',
+        durationMs: Date.now() - cbStartTime,
+        metrics: {
+          contextSizeChars: contextContent.length,
+          contextSizeKB: (contextContent.length / 1024).toFixed(2),
+          selectedFilesCount: contextResult.extractedSymbols ? contextResult.extractedSymbols.length : 1,
+        },
+      });
     } catch (err: any) {
+      onProgress?.({
+        stage: 'Context Builder',
+        status: 'failed',
+        durationMs: Date.now() - cbStartTime,
+        error: `Context generation failure: ${err.message || err}`,
+        exceptionStack: err.stack,
+        recoveryAction: 'Ensure entry file exists and contains valid TypeScript syntax.',
+      });
       return {
         taskId: task.id,
         status: 'ERROR',
@@ -177,7 +237,21 @@ export class TaskExecutionService {
 
     while (true) {
       lastError = '';
+      if (retryCount > 0) {
+        onProgress?.({
+          stage: 'Autonomous Retry Engine',
+          status: 'started',
+          metrics: { attempt: retryCount, maxRetries: maxRetryCount, prompt: currentPrompt },
+        });
+      }
+
       // 4. Invoke provider
+      const provStartTime = Date.now();
+      onProgress?.({
+        stage: 'AI Provider Execution',
+        status: 'started',
+        metrics: { providerName: this.provider.providerName() },
+      });
       let output = '';
       let errorMsg = '';
       let success = false;
@@ -191,6 +265,14 @@ export class TaskExecutionService {
         exitCode = providerResult.exitCode;
       } catch (err: any) {
         lastError = `Provider execution failure: ${err.message || err}`;
+        onProgress?.({
+          stage: 'AI Provider Execution',
+          status: 'failed',
+          durationMs: Date.now() - provStartTime,
+          error: lastError,
+          exceptionStack: err.stack,
+          recoveryAction: 'Check AI provider availability or CLI executable.',
+        });
         break;
       }
 
@@ -198,6 +280,13 @@ export class TaskExecutionService {
 
       if (!success) {
         lastError = errorMsg || `Provider process exited with status code ${exitCode}`;
+        onProgress?.({
+          stage: 'AI Provider Execution',
+          status: 'failed',
+          durationMs: Date.now() - provStartTime,
+          error: lastError,
+          recoveryAction: 'Verify AI provider parameters and environment variables.',
+        });
         
         // If provider fails during retry, we decide if we can retry again
         if (retryCount < maxRetryCount) {
@@ -207,9 +296,18 @@ export class TaskExecutionService {
           continue;
         }
         break;
+      } else {
+        onProgress?.({
+          stage: 'AI Provider Execution',
+          status: 'completed',
+          durationMs: Date.now() - provStartTime,
+          metrics: { providerName: this.provider.providerName(), responseLength: output.length, exitCode },
+        });
       }
 
       // 5. Parse Response & Extract Code Blocks
+      const valStartTime = Date.now();
+      onProgress?.({ stage: 'Response Validation & Parser', status: 'started' });
       const parsed = this.parser.parse(output, task.workspaceFiles, task.entryFile);
       lastParserWarnings = parsed.warnings;
 
@@ -223,6 +321,14 @@ export class TaskExecutionService {
       if (!validation.isValid) {
         lastError = `Response validation failed: ${validation.errors.join('; ')}`;
         lastPatchStatus = 'skipped';
+        onProgress?.({
+          stage: 'Response Validation & Parser',
+          status: 'failed',
+          durationMs: Date.now() - valStartTime,
+          error: lastError,
+          metrics: { errors: lastValidationErrors, confidence: lastParserConfidence, warnings: lastValidationWarnings },
+          recoveryAction: 'Autonomous Retry Engine will feed validation errors back to provider for self-repair.',
+        });
 
         if (retryCount < maxRetryCount) {
           retryHistory.push(`Attempt ${retryCount + 1} failed: ${lastError}`);
@@ -231,13 +337,29 @@ export class TaskExecutionService {
           continue;
         }
         break;
+      } else {
+        onProgress?.({
+          stage: 'Response Validation & Parser',
+          status: 'completed',
+          durationMs: Date.now() - valStartTime,
+          metrics: { confidence: lastParserConfidence, codeBlocksCount: parsed.blocks.length },
+        });
       }
 
       // 7. Generate patches
+      const patchStartTime = Date.now();
+      onProgress?.({ stage: 'Patch Generator & Workspace Updater', status: 'started' });
       const patchResult = this.patchGenerator.generatePatches(parsed.blocks, task.workspaceFiles);
       if (!patchResult.success) {
         lastError = `Patch generation failed: ${patchResult.error}`;
         lastPatchStatus = 'failed';
+        onProgress?.({
+          stage: 'Patch Generator & Workspace Updater',
+          status: 'failed',
+          durationMs: Date.now() - patchStartTime,
+          error: lastError,
+          recoveryAction: 'The generated code blocks target file paths outside allowed workspace files.',
+        });
 
         if (retryCount < maxRetryCount) {
           retryHistory.push(`Attempt ${retryCount + 1} failed: ${lastError}`);
@@ -256,6 +378,13 @@ export class TaskExecutionService {
       if (!updateResult.success) {
         lastError = `Workspace update failed: ${updateResult.error}`;
         lastPatchStatus = 'failed';
+        onProgress?.({
+          stage: 'Patch Generator & Workspace Updater',
+          status: 'failed',
+          durationMs: Date.now() - patchStartTime,
+          error: lastError,
+          recoveryAction: 'Failed to write patch updates to disk filesystem.',
+        });
 
         if (retryCount < maxRetryCount) {
           retryHistory.push(`Attempt ${retryCount + 1} failed: ${lastError}`);
@@ -267,9 +396,16 @@ export class TaskExecutionService {
       }
 
       lastPatchStatus = 'applied';
+      onProgress?.({
+        stage: 'Patch Generator & Workspace Updater',
+        status: 'completed',
+        durationMs: Date.now() - patchStartTime,
+        metrics: { modifiedFiles: lastModifiedFiles, filesSkipped: lastFilesSkipped },
+      });
 
       // 9. Run Verification Runner
       const verificationStartTime = Date.now();
+      onProgress?.({ stage: 'Verification Runner', status: 'started' });
       const verificationCmds = this.config.get().verificationCommands;
 
       if (verificationCmds && verificationCmds.length > 0) {
@@ -282,10 +418,23 @@ export class TaskExecutionService {
         verificationDuration = Date.now() - verificationStartTime;
 
         if (vResult.success) {
-          // Verification passed! We break the loop and return success
+          onProgress?.({
+            stage: 'Verification Runner',
+            status: 'completed',
+            durationMs: verificationDuration,
+            metrics: { buildPassed, testsPassed, steps: verificationSteps },
+          });
           break;
         } else {
           lastError = `Verification failed: One or more verification steps did not pass.`;
+          onProgress?.({
+            stage: 'Verification Runner',
+            status: 'failed',
+            durationMs: verificationDuration,
+            error: lastError,
+            metrics: { buildPassed, testsPassed, verificationSteps, verificationLogs },
+            recoveryAction: 'Verification commands (build/test) failed. Passing test output back to Retry Engine for self-repair.',
+          });
 
           if (retryCount < maxRetryCount) {
             retryHistory.push(`Attempt ${retryCount + 1} failed: Verification failed.`);
@@ -299,6 +448,12 @@ export class TaskExecutionService {
         verificationStatus = 'skipped';
         buildPassed = true;
         testsPassed = true;
+        onProgress?.({
+          stage: 'Verification Runner',
+          status: 'completed',
+          durationMs: Date.now() - verificationStartTime,
+          metrics: { buildPassed: true, testsPassed: true, verificationStatus: 'skipped' },
+        });
         break;
       }
     }
