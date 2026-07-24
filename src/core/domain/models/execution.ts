@@ -3,6 +3,21 @@ export type PatchStatus = 'applied' | 'failed' | 'skipped' | 'none';
 export type ValidationStatus = 'passed' | 'failed' | 'skipped';
 export type VerificationStatus = 'passed' | 'failed' | 'skipped';
 
+export interface SubTask {
+  id: string;
+  targetFile: string;
+  objective: string;
+  dependencies: string[];
+  validationCriteria: string;
+  status?: 'pending' | 'in_progress' | 'completed' | 'failed' | 'rolled_back';
+}
+
+export interface TaskPlan {
+  taskId: string;
+  originalPrompt: string;
+  subTasks: SubTask[];
+}
+
 export interface EngineeringTask {
   id: string;
   description: string;
@@ -10,6 +25,7 @@ export interface EngineeringTask {
   workspaceFiles: string[];
   workspaceRoot?: string;
   verificationCommands?: string[];
+  plan?: TaskPlan;
 }
 
 export interface ExecutionRequest {

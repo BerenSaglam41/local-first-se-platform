@@ -339,7 +339,18 @@ Examples:
           mainLog(`\n${CliFormatter.iconActive} ${CliFormatter.bold(CliFormatter.cyan(event.stage))}`);
         }
       } else if (event.status === 'completed') {
-        if (event.stage === 'Project Knowledge Engine') {
+        if (event.stage === 'Task Decomposition & Planning') {
+          const count = event.metrics?.subTaskCount || 0;
+          mainLog(`    Decomposed Sub-Tasks: ${CliFormatter.brightYellow(String(count))}`);
+          if (event.metrics?.subTasks) {
+            event.metrics.subTasks.forEach((st: any, idx: number) => {
+              mainLog(`      [${idx + 1}/${count}] ${CliFormatter.bold(st.targetFile)}: ${st.objective}`);
+            });
+          }
+          mainLog(`    ${CliFormatter.dim(elapsed)}`);
+          dashboard.writeKnowledge(`[PLANNER] Planned ${event.metrics?.subTaskCount} sub-task(s) for prompt.`);
+          stageReports.push({ stage: event.stage, status: 'SUCCESS', summary: `Planned ${event.metrics?.subTaskCount} sub-task(s)` });
+        } else if (event.stage === 'Project Knowledge Engine') {
           mainLog(`    Indexed Files: ${CliFormatter.brightYellow(String(event.metrics?.workspaceFilesCount))}`);
           mainLog(`    Tech Stack:    ${CliFormatter.magenta(event.metrics?.techStack?.join(', ') || wsMeta.projectType)}`);
           mainLog(`    Schema:        v${event.metrics?.schemaVersion || 1}`);

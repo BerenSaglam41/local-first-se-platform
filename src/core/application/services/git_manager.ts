@@ -126,4 +126,25 @@ export class GitManager {
       error: errors.length > 0 ? errors.join('; ') : undefined,
     };
   }
+
+  async createCheckpoint(checkpointId: string): Promise<string> {
+    // Save untracked and tracked state as temporary stash checkpoint
+    await this.runGit(['stash', 'push', '--include-untracked', '-m', `se-os-checkpoint-${checkpointId}`]);
+    // Apply back so current working tree state is maintained
+    await this.runGit(['stash', 'apply']);
+    return checkpointId;
+  }
+
+  async rollbackToCheckpoint(checkpointId: string): Promise<{ success: boolean; error?: string }> {
+    // Reset hard and clean untracked files added during sub-task execution
+    const resetRes = await this.runGit(['reset', '--hard', 'HEAD']);
+    const cleanRes = await this.runGit(['clean', '-fd']);
+    if (resetRes.exitCode === 0 && cleanRes.exitCode === 0) {
+      return { success: true };
+    }
+    return {
+      success: false,
+      error: `Failed to rollback checkpoint ${checkpointId}: ${resetRes.stderr || cleanRes.stderr}`,
+    };
+  }
 }

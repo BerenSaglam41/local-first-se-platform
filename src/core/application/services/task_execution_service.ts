@@ -11,6 +11,8 @@ import { VerificationRunner } from './verification_runner';
 import { RetryEngine } from './retry_engine';
 import { GitManager } from './git_manager';
 import { ProjectKnowledgeService } from './project_knowledge_service';
+import { ITaskPlanner } from '../../domain/interfaces/itask_planner';
+import { TaskPlanner } from './task_planner';
 
 export class TaskExecutionService {
   private parser = new ResponseParser();
@@ -20,16 +22,19 @@ export class TaskExecutionService {
   private verificationRunner: VerificationRunner;
   private retryEngine = new RetryEngine();
   private gitManager: GitManager;
+  private taskPlanner: ITaskPlanner;
 
   constructor(
     private contextBuilder: IContextBuilder,
     private provider: IProvider,
     private config: IConfig,
     private runtime: IProcessRuntime,
-    private projectKnowledgeService?: ProjectKnowledgeService
+    private projectKnowledgeService?: ProjectKnowledgeService,
+    taskPlanner?: ITaskPlanner
   ) {
     this.verificationRunner = new VerificationRunner(runtime);
     this.gitManager = new GitManager(runtime);
+    this.taskPlanner = taskPlanner || new TaskPlanner();
   }
 
   async executeTask(task: EngineeringTask, onProgress?: StageProgressCallback): Promise<ExecutionResult> {
@@ -152,6 +157,24 @@ export class TaskExecutionService {
         });
       }
     }
+
+    // 1.8. Task Decomposition & Planning
+    const planStartTime = Date.now();
+    onProgress?.({ stage: 'Task Decomposition & Planning', status: 'started' });
+    let plan = task.plan;
+    if (!plan) {
+      plan = await this.taskPlanner.planTask(task.description, task.workspaceFiles);
+    }
+    task.plan = plan;
+    onProgress?.({
+      stage: 'Task Decomposition & Planning',
+      status: 'completed',
+      durationMs: Date.now() - planStartTime,
+      metrics: {
+        subTaskCount: plan.subTasks.length,
+        subTasks: plan.subTasks,
+      },
+    });
 
     // 2. Build context
     const cbStartTime = Date.now();
@@ -463,6 +486,15 @@ export class TaskExecutionService {
             currentPrompt = this.retryEngine.buildRetryPrompt(task, lastOutput, verificationLogs, retryCount);
             continue;
           }
+
+          // Verification failed after max retries: trigger Git checkpoint rollback
+          await this.gitManager.rollbackToCheckpoint(task.id);
+          onProgress?.({
+            stage: 'Git Integration',
+            status: 'failed',
+            error: `Sub-task execution failed verification after ${maxRetryCount} retries. Rolled back Git checkpoint to preserve workspace integrity.`,
+            recoveryAction: 'Rolled back workspace changes to last clean Git checkpoint.',
+          });
           break;
         }
       } else {
