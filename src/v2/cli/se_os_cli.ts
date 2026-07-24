@@ -362,6 +362,51 @@ export class SeOsCli {
     console.log(JSON.stringify(snapshot, null, 2));
   }
 
+  // ─── Planning Engine CLI ────────────────────────────────────────
+
+  async planMission(title: string, description: string): Promise<void> {
+    const plan = await this.kernel.getAutonomousPlanner().planMission({ title, description });
+    console.log(`✔ Mission Plan '${plan.planId}' created (Source: ${plan.planningSource} | Confidence: ${plan.confidence}%)`);
+    console.log(`  Epics: ${plan.epics.length} | Features: ${plan.features.length} | Tasks: ${plan.tasks.length}`);
+    console.log(`  AI Invocations: ${plan.aiInvocations.length}`);
+    console.log(`  Strategy: ${plan.executionStrategy.workerPolicy} → Departments: ${plan.executionStrategy.departments.join(', ')}`);
+  }
+
+  async planAnalyze(title: string, description: string): Promise<void> {
+    const analyzed = await this.kernel.getAutonomousPlanner().analyzeGoal({ title, description });
+    console.log(JSON.stringify(analyzed, null, 2));
+  }
+
+  async planArchitecture(title: string, description: string): Promise<void> {
+    const decisions = await this.kernel.getAutonomousPlanner().planArchitecture({ title, description });
+    console.log(`ARCHITECTURE DECISIONS (${decisions.length}):`);
+    for (const d of decisions) {
+      console.log(`  - [${d.id}] ${d.title} (Source: ${d.planningSource})`);
+    }
+  }
+
+  async planRisks(title: string, description: string): Promise<void> {
+    const report = await this.kernel.getAutonomousPlanner().analyzeRisks({ title, description });
+    console.log(`RISK REPORT (${report.risks.length} risks | Overall Score: ${report.overallRiskScore}):`);
+    for (const r of report.risks) {
+      console.log(`  - [${r.severity}] ${r.category}: ${r.description} (Probability: ${r.probability}%)`);
+    }
+  }
+
+  async planStrategy(title: string, description: string): Promise<void> {
+    const strategy = await this.kernel.getAutonomousPlanner().planStrategy({ title, description });
+    console.log(JSON.stringify(strategy, null, 2));
+  }
+
+  async planReport(planId: string): Promise<void> {
+    const plan = this.kernel.getAutonomousPlanner().getPlan(planId);
+    if (!plan) {
+      console.log(`✖ Plan ${planId} not found`);
+      return;
+    }
+    console.log(JSON.stringify(plan, null, 2));
+  }
+
   async shutdown(): Promise<void> {
     console.log(`[SE-OS Kernel] Initiating workforce shutdown...`);
     await this.kernel.shutdown();

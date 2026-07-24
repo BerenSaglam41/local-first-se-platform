@@ -43,6 +43,9 @@
                     │
                     ▼
 [Milestone 11: Cost Optimization & Execution Policy Engine] ──> COMPLETED
+                    │
+                    ▼
+[Milestone 12: Autonomous Planning & Reasoning Engine] ──> COMPLETED
 ```
 
 ---
@@ -219,6 +222,24 @@
 - **Complexity**: High
 - **Acceptance Criteria**: Profile-based resource constraints, prompt token cost estimation, hard/soft token budget limits, prompt cache hits & invalidation, mission cost reports with 35%+ token savings.
 
+### Milestone 12: Autonomous Planning & Reasoning Engine (COMPLETED)
+- **Objective**: Implement autonomous planning pipeline that converts high-level business goals into structured mission plans with architecture decisions, risk analysis, complexity estimation, execution strategy, and task graphs — all without manual task breakdown.
+- **Deliverables**:
+  - `src/v2/contracts/iplanning_engine.ts`
+  - `src/v2/application/planning/goal_analyzer.ts`
+  - `src/v2/application/planning/architecture_planner.ts`
+  - `src/v2/application/planning/dependency_analyzer.ts`
+  - `src/v2/application/planning/risk_analyzer.ts`
+  - `src/v2/application/planning/complexity_estimator.ts`
+  - `src/v2/application/planning/execution_strategy_planner.ts`
+  - `src/v2/application/planning/plan_generator.ts`
+  - `src/v2/application/planning/autonomous_planner.ts`
+  - `tests/v2/milestone12_planning_engine.test.ts`
+- **Dependencies**: Milestone 11
+- **Complexity**: High
+- **Planning Optimization**: Cache → ADR → Rule-based → Heuristic → AI fallback (threshold-gated, decision only)
+- **Acceptance Criteria**: Business goal → MissionPlan with planningSource tracking (CACHE/RULE_ENGINE/AI_REASONING/HYBRID), ADR generation & SharedMemory persistence, knowledge reuse via PromptCache, all 10 domain events emitted, AI invocation gate recorded but not invoked, CLI plan subcommands.
+
 ---
 
 ## Future Ideas / Backlog
@@ -235,6 +256,18 @@ The following non-essential features and long-term extensions are tracked here:
 - **Voice Interface & Mobile Companion App** — Status: BACKLOG
 - **AI Meeting Assistant & Auto-Documentation Website Generator** — Status: BACKLOG
 - **Plugin Marketplace & Marketplace Monetization Engine** — Status: BACKLOG
+
+---
+
+## Research / Experimental
+
+The following items are exploratory and may be investigated in future milestones:
+
+- **LLM-Assisted Planning Augmentation** — When rule-based confidence is insufficient, invoke a Runtime Plugin for targeted reasoning. Requires runtime session management, provider authentication, and model selection. — Status: RESEARCH
+- **Adaptive Planning from Historical Data** — Train planning heuristics from past mission outcomes to improve confidence scores and cost estimates over time. — Status: RESEARCH
+- **Natural Language Goal Decomposition** — Use LLM to parse ambiguous business goals into structured requirements when keyword matching fails. — Status: RESEARCH
+- **Cross-Mission Knowledge Graph** — Build a persistent knowledge graph linking ADRs, modules, risks, and planning decisions across all missions. — Status: RESEARCH
+- **Automatic Complexity Calibration** — Compare estimated vs actual complexity post-execution and auto-adjust MODULE_COMPLEXITY scores. — Status: RESEARCH
 
 ---
 

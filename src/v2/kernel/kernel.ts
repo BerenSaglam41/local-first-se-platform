@@ -22,6 +22,7 @@ import { MergeEngine } from '../application/verification/merge_engine';
 import { MergeQueue } from '../application/verification/merge_queue';
 import { DepartmentOrchestrator } from '../application/organization/department_orchestrator';
 import { ExecutionPolicyEngine } from '../application/policy/execution_policy_engine';
+import { AutonomousPlanner } from '../application/planning/autonomous_planner';
 import * as fs from 'fs';
 
 export class Kernel implements IKernel {
@@ -57,6 +58,7 @@ export class Kernel implements IKernel {
     const mergeQueue = new MergeQueue(eventStore);
     const departmentOrchestrator = new DepartmentOrchestrator(eventStore);
     const policyEngine = new ExecutionPolicyEngine(eventStore);
+    const autonomousPlanner = new AutonomousPlanner(eventStore, sharedMemory, policyEngine, departmentOrchestrator);
 
     supervisor.startSupervision();
 
@@ -77,6 +79,7 @@ export class Kernel implements IKernel {
     this.container.registerSingleton<MergeQueue>('MergeQueue', mergeQueue);
     this.container.registerSingleton<DepartmentOrchestrator>('DepartmentOrchestrator', departmentOrchestrator);
     this.container.registerSingleton<ExecutionPolicyEngine>('ExecutionPolicyEngine', policyEngine);
+    this.container.registerSingleton<AutonomousPlanner>('AutonomousPlanner', autonomousPlanner);
 
     if (fs.existsSync(configPath)) {
       try {
@@ -191,6 +194,10 @@ export class Kernel implements IKernel {
 
   getExecutionPolicyEngine(): ExecutionPolicyEngine {
     return this.container.resolve<ExecutionPolicyEngine>('ExecutionPolicyEngine');
+  }
+
+  getAutonomousPlanner(): AutonomousPlanner {
+    return this.container.resolve<AutonomousPlanner>('AutonomousPlanner');
   }
 
   getTelemetry(): TelemetryService {
