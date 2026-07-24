@@ -90,10 +90,10 @@
 [Milestone 25: Multi-Provider AI Team & Workspace Transparency] ──> COMPLETED
                     │
                     ▼
-[Milestone 26: Workspace Viewer & AI Session]
+[Milestone 26: Tabbed Interactive Chat-Driven Operating System] ──> COMPLETED
                     │
                     ▼
-[Milestone 26: Command Palette, Focus Mode & Event Control]
+[Milestone 27: Command Palette, Focus Mode & Event Control]
 ```
 
 ---
@@ -486,6 +486,25 @@
 - **Complexity**: High
 - **Full Transparency Engine**: Displays explicit absolute path confirmation prior to execution, per-worker provider assignments, terminal panes/PIDs, working directories (`pwd`), git branches, real-time timestamped file creation logs (`[16:32:01] Created: src/auth.ts`), physical disk verifications, and comprehensive `REPORT.md`.
 - **Acceptance Criteria**: Explicit path wizard confirmation, multi-provider worker assignment, real-time file event stream, physical disk verification, 253/253 tests passing across 47 test suites.
+
+### Milestone 26: Tabbed Interactive Chat-Driven Operating System (COMPLETED)
+- **Objective**: Redesign SE-OS into a tab-navigable, conversational operating system with auto-detected local AI providers, per-worker provider assignment team building, live streaming per-worker terminal panes, real-time timestamped file edit badges, physical disk inspector, and continuous chat-driven project lifecycle.
+- **Deliverables**:
+  - `src/v2/application/providers/provider_detector.ts`
+  - `src/v2/ui/tui/components/tabs/TabHeader.tsx`
+  - `src/v2/ui/tui/components/tabs/DashboardTab.tsx`
+  - `src/v2/ui/tui/components/tabs/WorkersTab.tsx`
+  - `src/v2/ui/tui/components/tabs/WorkspaceTab.tsx`
+  - `src/v2/ui/tui/components/tabs/TerminalsTab.tsx`
+  - `src/v2/ui/tui/components/tabs/ChatTab.tsx`
+  - `src/v2/ui/tui/components/tabs/VerificationTab.tsx`
+  - `src/v2/ui/tui/components/tabs/LogsTab.tsx`
+  - `src/v2/ui/tui/tui_app.tsx`
+  - `tests/v2/milestone26_interactive_tabs.test.ts`
+- **Dependencies**: Milestone 25
+- **Complexity**: High
+- **Conversational Multi-Tab TUI**: Organizes SE-OS into 7 clean tab views (`[1] Dashboard`, `[2] Workers`, `[3] Workspace`, `[4] Terminals`, `[5] Chat`, `[6] Verification`, `[7] Logs`). Interactive `Chat` tab allows users to type feature requests (`"Add JWT Authentication"`) that dispatch tasks to workers and evolve projects continuously without quitting or restarting SE-OS.
+- **Acceptance Criteria**: 7-tab TUI navigation, host binary provider auto-detection (`which`), per-worker streaming terminal output, real-time file edit badges (`Modified by Bob (Codex CLI) 16:40:01 +28 lines`), continuous chat prompt handling, 255/255 tests passing across 48 test suites.
 
 ---
 
