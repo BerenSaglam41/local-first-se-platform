@@ -27,7 +27,7 @@
 [Milestone 5: Mission Engine & Task Orchestration] ──> COMPLETED
                     │
                     ▼
-[Milestone 6: Multi-Pane Tmux TUI & End-to-End Release]
+[Milestone 6: Context Compiler & Workspace Engine] ──> COMPLETED
 ```
 
 ---
@@ -122,6 +122,22 @@
 - **Acceptance Criteria**: DAG topological sorting, cycle detection, capability-based worker matching, mission lifecycle state transitions (`CREATED` → `RUNNING` → `PAUSED` → `COMPLETED`), SQLite event emission.
 
 ---
+
+### Milestone 6: Context Compiler & Workspace Engine (COMPLETED)
+- **Objective**: Implement Context Compiler, AST Symbol Analyzer, Token Optimizer, Context Cache, Workspace Isolation Engine, and CLI context/workspace commands.
+- **Deliverables**:
+  - `src/v2/contracts/icontext_package.ts`
+  - `src/v2/application/context-compiler/ast_symbol_analyzer.ts`
+  - `src/v2/application/context-compiler/context_cache.ts`
+  - `src/v2/application/context-compiler/context_compiler.ts`
+  - `src/v2/application/workspace/workspace_engine.ts`
+  - `tests/v2/milestone6_context_compiler.test.ts`
+- **Dependencies**: Milestone 5
+- **Complexity**: High
+- **Acceptance Criteria**: AST symbol extraction (functions, classes, interfaces, imports), Context Package generation, token budget enforcement, cache invalidation, isolated workspace creation/destruction.
+
+---
+
 
 
 

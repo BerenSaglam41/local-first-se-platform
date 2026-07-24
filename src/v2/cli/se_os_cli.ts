@@ -137,6 +137,26 @@ export class SeOsCli {
     }
   }
 
+  async contextCompile(taskId: string, targetFile: string = 'src/main.ts'): Promise<void> {
+    const pkg = await this.kernel.getContextCompiler().compileContext(taskId, targetFile);
+    console.log(`✔ Compiled context package for task ${taskId} (${pkg.totalTokenSize} tokens)`);
+  }
+
+  async contextInspect(taskId: string, targetFile: string = 'src/main.ts'): Promise<void> {
+    const pkg = await this.kernel.getContextCompiler().compileContext(taskId, targetFile);
+    console.log(JSON.stringify(pkg, null, 2));
+  }
+
+  async workspaceCreate(taskId: string): Promise<void> {
+    const info = this.kernel.getWorkspaceEngine().createWorkspace(taskId);
+    console.log(`✔ Created isolated workspace '${info.workspaceId}' at ${info.isolatedPath}`);
+  }
+
+  async workspaceDestroy(workspaceId: string): Promise<void> {
+    const ok = this.kernel.getWorkspaceEngine().destroyWorkspace(workspaceId);
+    console.log(ok ? `✔ Destroyed workspace '${workspaceId}'` : `✖ Failed to destroy workspace '${workspaceId}'`);
+  }
+
   async workerStart(id: string): Promise<void> {
     const w = this.kernel.getSupervisor().spawnWorker({
       id,

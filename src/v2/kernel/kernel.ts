@@ -14,6 +14,8 @@ import { LocalProcessSupervisor } from '../application/runtime/local_process_sup
 import { TelemetryService } from '../infrastructure/telemetry/telemetry_service';
 import { RuntimePluginManager } from '../application/plugins/runtime_plugin_manager';
 import { MissionEngine } from '../application/missions/mission_engine';
+import { ContextCompiler } from '../application/context-compiler/context_compiler';
+import { WorkspaceEngine } from '../application/workspace/workspace_engine';
 import * as fs from 'fs';
 
 export class Kernel implements IKernel {
@@ -37,6 +39,8 @@ export class Kernel implements IKernel {
     const supervisor = new LocalProcessSupervisor(eventStore);
     const telemetry = new TelemetryService();
     const missionEngine = new MissionEngine(eventStore, pluginManager.getCapabilityRegistry());
+    const contextCompiler = new ContextCompiler(sharedMemory, eventStore);
+    const workspaceEngine = new WorkspaceEngine('./.se_workspaces', eventStore);
 
     supervisor.startSupervision();
 
@@ -49,6 +53,8 @@ export class Kernel implements IKernel {
     this.container.registerSingleton<LocalProcessSupervisor>('LocalProcessSupervisor', supervisor);
     this.container.registerSingleton<TelemetryService>('TelemetryService', telemetry);
     this.container.registerSingleton<MissionEngine>('MissionEngine', missionEngine);
+    this.container.registerSingleton<ContextCompiler>('ContextCompiler', contextCompiler);
+    this.container.registerSingleton<WorkspaceEngine>('WorkspaceEngine', workspaceEngine);
 
     if (fs.existsSync(configPath)) {
       try {
@@ -131,6 +137,14 @@ export class Kernel implements IKernel {
 
   getMissionEngine(): MissionEngine {
     return this.container.resolve<MissionEngine>('MissionEngine');
+  }
+
+  getContextCompiler(): ContextCompiler {
+    return this.container.resolve<ContextCompiler>('ContextCompiler');
+  }
+
+  getWorkspaceEngine(): WorkspaceEngine {
+    return this.container.resolve<WorkspaceEngine>('WorkspaceEngine');
   }
 
   getTelemetry(): TelemetryService {
