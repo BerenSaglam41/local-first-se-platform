@@ -51,6 +51,7 @@ After completing every milestone or major feature increment:
 3. **Backward Compatibility**: Preserve existing configurations, default fallbacks, and parameter structures.
 4. **Test Coverage**: Every new function, service, or conditional branch must be accompanied by unit tests.
 5. **No Dead or Temp Code**: Delete temporary logs, debug prints, unused variables, and abandoned trial code before final delivery.
+6. **Target Workspace Isolation**: Never modify the SE-OS platform repository unless the target workspace is explicitly set to the SE-OS repository itself. All file edits, verification commands, and Git commits MUST execute inside `workspace.rootPath`.
 
 ---
 

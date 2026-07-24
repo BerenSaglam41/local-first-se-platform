@@ -13,6 +13,8 @@ import { EngineeringTask } from './core/domain/models/execution';
 import { GitManager } from './core/application/services/git_manager';
 import { IDashboard } from './core/domain/interfaces/idashboard';
 import { TmuxDashboard } from './infrastructure/logging/tmux_dashboard';
+import { IWorkspaceManager } from './core/domain/interfaces/iworkspace_manager';
+import { WorkspaceManager } from './infrastructure/workspace/workspace_manager';
 
 // Milestone 2 Interfaces & Implementations
 import { ICache } from './core/domain/interfaces/icache';
@@ -144,12 +146,35 @@ async function bootstrap() {
 
 function scanWorkspaceFiles(dir: string): string[] {
   const results: string[] = [];
+  const ignoredDirs = [
+    'node_modules',
+    'dist',
+    'target',
+    'build',
+    '.venv',
+    'venv',
+    '__pycache__',
+    '.git',
+    'coverage',
+    'logs',
+    'brain',
+    '.gradle',
+    '.idea',
+    '.vscode',
+  ];
+  const allowedExts = [
+    '.ts', '.tsx', '.js', '.jsx', '.json',
+    '.py', '.rs', '.go', '.java',
+    '.toml', '.xml', '.gradle', '.properties',
+    '.yaml', '.yml', '.md',
+  ];
+
   try {
     const entries = fs.readdirSync(dir, { withFileTypes: true });
     for (const entry of entries) {
       const fullPath = path.join(dir, entry.name);
       if (entry.isDirectory()) {
-        if (['node_modules', 'dist', '.git', 'coverage', 'logs', 'brain'].includes(entry.name)) {
+        if (ignoredDirs.includes(entry.name)) {
           continue;
         }
         results.push(...scanWorkspaceFiles(fullPath));
@@ -158,7 +183,7 @@ function scanWorkspaceFiles(dir: string): string[] {
           continue;
         }
         const ext = path.extname(entry.name).toLowerCase();
-        if (['.ts', '.tsx', '.js', '.jsx', '.json'].includes(ext)) {
+        if (allowedExts.includes(ext) || entry.name === 'Dockerfile' || entry.name === 'Makefile') {
           results.push(fullPath);
         }
       }
@@ -208,7 +233,16 @@ Examples:
   }
 
   (async () => {
-    const rootDir = targetWorkspace;
+    const workspaceManager = new WorkspaceManager();
+    let wsMeta;
+    try {
+      wsMeta = await workspaceManager.resolveWorkspace(targetWorkspace);
+    } catch (err: any) {
+      console.error(`❌ Workspace Error: ${err.message}`);
+      process.exit(1);
+    }
+
+    const rootDir = wsMeta.rootPath;
     const dashboard = new TmuxDashboard(rootDir);
     await dashboard.initialize('se-os');
 
@@ -219,9 +253,22 @@ Examples:
 
     mainLog('----------------------------------------');
     mainLog(`Task received: "${taskPrompt}"`);
-    mainLog(`Workspace path: "${rootDir}"`);
+    mainLog(`Workspace Name: ${wsMeta.name}`);
+    mainLog(`Project Type:   ${wsMeta.projectType}`);
+    mainLog(`Project Root:   ${wsMeta.rootPath}`);
+    if (wsMeta.buildCommand) mainLog(`Build Command:  ${wsMeta.buildCommand}`);
+    if (wsMeta.testCommand)  mainLog(`Test Command:   ${wsMeta.testCommand}`);
     mainLog('Executing task through SE-OS pipeline...');
     mainLog('----------------------------------------');
+
+    dashboard.writeKnowledge(`\n====================================================`);
+    dashboard.writeKnowledge(` Workspace:      ${wsMeta.name}`);
+    dashboard.writeKnowledge(` Project Type:   ${wsMeta.projectType}`);
+    dashboard.writeKnowledge(` Project Root:   ${wsMeta.rootPath}`);
+    dashboard.writeKnowledge(` Detected Commands:`);
+    dashboard.writeKnowledge(`   Build: ${wsMeta.buildCommand || 'none'}`);
+    dashboard.writeKnowledge(`   Test:  ${wsMeta.testCommand || 'none'}`);
+    dashboard.writeKnowledge(`====================================================\n`);
 
     const scanStartTime = Date.now();
     mainLog('\n▶ Workspace Scan');
@@ -229,7 +276,7 @@ Examples:
     const workspaceFiles = scanWorkspaceFiles(rootDir);
 
     // Extract target files mentioned in task prompt (e.g. src/calculator.ts)
-    const fileMatches = taskPrompt.match(/([a-zA-Z0-9_\-\.\/]+\.(?:ts|js|tsx|jsx))/g);
+    const fileMatches = taskPrompt.match(/([a-zA-Z0-9_\-\.\/]+\.(?:ts|js|tsx|jsx|py|rs|go|java))/g);
     if (fileMatches) {
       for (const fm of fileMatches) {
         const fullFm = path.isAbsolute(fm) ? fm : path.join(rootDir, fm);
@@ -239,7 +286,7 @@ Examples:
       }
     }
 
-    const preferredEntry = workspaceFiles.find(f => f.endsWith('src/main.ts') || f.endsWith('src/index.ts')) || workspaceFiles.find(f => f.endsWith('.ts') && fs.existsSync(f) && fs.statSync(f).size > 0);
+    const preferredEntry = workspaceFiles.find(f => f.endsWith('src/main.ts') || f.endsWith('src/index.ts') || f.endsWith('main.py') || f.endsWith('main.rs') || f.endsWith('main.go')) || workspaceFiles.find(f => fs.existsSync(f) && fs.statSync(f).size > 0);
     const entryFile = preferredEntry || path.join(rootDir, 'src', 'main.ts');
     
     dashboard.writeKnowledge(`[SUCCESS] Workspace scan completed. Found ${workspaceFiles.length} file(s). Entry file: ${entryFile}`);
@@ -254,6 +301,8 @@ Examples:
       description: taskPrompt,
       entryFile,
       workspaceFiles: workspaceFiles.length > 0 ? workspaceFiles : [entryFile],
+      workspaceRoot: wsMeta.rootPath,
+      verificationCommands: wsMeta.verificationCommands,
     };
 
     const stageReports: { stage: string; status: string; summary: string }[] = [];
@@ -293,11 +342,11 @@ Examples:
       } else if (event.status === 'completed') {
         if (event.stage === 'Project Knowledge Engine') {
           mainLog(`    Indexed Files: ${event.metrics?.workspaceFilesCount}`);
-          mainLog(`    Tech Stack: ${event.metrics?.techStack?.join(', ') || 'TypeScript, Node.js'}`);
+          mainLog(`    Tech Stack: ${event.metrics?.techStack?.join(', ') || wsMeta.projectType}`);
           mainLog(`    Schema Version: v${event.metrics?.schemaVersion || 1}`);
           mainLog(`    ${elapsed}`);
-          dashboard.writeKnowledge(`[KNOWLEDGE] Indexed ${event.metrics?.workspaceFilesCount} files. Tech stack: ${event.metrics?.techStack?.join(', ')}. Schema: v${event.metrics?.schemaVersion}`);
-          stageReports.push({ stage: event.stage, status: 'SUCCESS', summary: `Indexed ${event.metrics?.workspaceFilesCount} files (${event.metrics?.techStack?.join(', ') || 'TypeScript'})` });
+          dashboard.writeKnowledge(`[KNOWLEDGE] Indexed ${event.metrics?.workspaceFilesCount} files. Tech stack: ${event.metrics?.techStack?.join(', ') || wsMeta.projectType}. Schema: v${event.metrics?.schemaVersion}`);
+          stageReports.push({ stage: event.stage, status: 'SUCCESS', summary: `Indexed ${event.metrics?.workspaceFilesCount} files (${wsMeta.projectType})` });
         } else if (event.stage === 'Context Builder') {
           mainLog(`    Selected Files: ${event.metrics?.selectedFilesCount || 1}`);
           mainLog(`    Context Size: ${event.metrics?.contextSizeKB} KB (${event.metrics?.contextSizeChars} chars)`);
@@ -360,7 +409,7 @@ Examples:
       const gitStartTime = Date.now();
       mainLog(`\n▶ Git Integration`);
       const runtime = container.resolve<IProcessRuntime>('ProcessRuntime');
-      const gitManager = new GitManager(runtime);
+      const gitManager = new GitManager(runtime, wsMeta.rootPath);
       
       const gitDiff = await gitManager.generateDiff(result.modifiedFiles);
       dashboard.writeGit(`--- GIT DIFF ---\n${gitDiff || '(no diff)'}\n`);
@@ -382,7 +431,7 @@ Examples:
       }
     } else {
       const runtime = container.resolve<IProcessRuntime>('ProcessRuntime');
-      const gitManager = new GitManager(runtime);
+      const gitManager = new GitManager(runtime, wsMeta.rootPath);
       const gitStatus = await gitManager.getStatus();
       dashboard.writeGit(`--- GIT STATUS ---\nClean: ${gitStatus.isClean}, Files: ${gitStatus.modifiedFiles.join(', ')}\n`);
     }

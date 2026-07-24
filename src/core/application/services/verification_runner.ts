@@ -21,7 +21,7 @@ export interface VerificationRunnerResult {
 export class VerificationRunner {
   constructor(private runtime: IProcessRuntime) {}
 
-  async run(commands: string[], onStream?: (chunk: string, type: 'stdout' | 'stderr') => void): Promise<VerificationRunnerResult> {
+  async run(commands: string[], onStream?: (chunk: string, type: 'stdout' | 'stderr') => void, cwd?: string): Promise<VerificationRunnerResult> {
     const startTime = Date.now();
     const steps: VerificationStepResult[] = [];
     let overallSuccess = true;
@@ -42,6 +42,7 @@ export class VerificationRunner {
       const handle = this.runtime.execute({
         executable,
         args,
+        cwd,
       });
 
       handle.on('stdout', (chunk) => {

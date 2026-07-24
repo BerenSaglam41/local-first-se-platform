@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.3.0] - 2026-07-24
+
+### Added
+- **WorkspaceManager & Arbitrary Workspace Support**: Developed `WorkspaceManager` service (`src/infrastructure/workspace/workspace_manager.ts`) to validate workspace paths, locate project roots upward, and extract project metadata.
+- **Polyglot Project Type Detection**: Automated detection of Node.js (`package.json`), Python (`pyproject.toml`, `setup.py`), Rust (`Cargo.toml`), Go (`go.mod`), and Java (`pom.xml`, `build.gradle`).
+- **Dynamic Verification Command Chooser**: Configured `VerificationRunner` to execute project-appropriate default commands (e.g. `npm test`, `pytest`, `cargo test`, `go test ./...`, `mvn test`).
+- **Target Workspace Git & Knowledge Engine Isolation**: Scoped `GitManager` and `ProjectKnowledgeService` strictly to target workspace root directories, ensuring SE-OS repository remains untouched during external project operations.
+- **Dashboard Workspace Banner**: Integrated live workspace metadata display in Pane 1 and Pane 2 reporting workspace name, project type, root path, and detected build/test commands.
+
 ## [v1.2.0] - 2026-07-24
 
 ### Added

@@ -101,6 +101,26 @@ tmux attach -t se-os
 
 ---
 
+## 📁 WorkspaceManager & Polyglot Support
+
+SE-OS operates on arbitrary target workspaces across multiple programming languages and project structures.
+
+### Supported Project Types & Default Commands:
+| Language / Ecosystem | Manifest File | Default Build Command | Default Test Command |
+| :--- | :--- | :--- | :--- |
+| **Node.js** | `package.json` | `npm run build` / `npx tsc --noEmit` | `npm test` |
+| **Python** | `pyproject.toml` / `setup.py` | `python -m py_compile` | `pytest` |
+| **Rust** | `Cargo.toml` | `cargo check` | `cargo test` |
+| **Go** | `go.mod` | `go build ./...` | `go test ./...` |
+| **Java** | `pom.xml` / `build.gradle` | `mvn compile` / `./gradlew build` | `mvn test` / `./gradlew test` |
+
+### Key Capabilities:
+* **Root Location**: Automatically searches parent directories to find the project root containing manifest markers or `.git`.
+* **Path Validation**: Validates path existence and directory permissions, handling `~` home expansions.
+* **Target Isolation**: All `GitManager` and `VerificationRunner` commands execute strictly inside `rootPath`. The SE-OS repository is never modified unless specified as the workspace.
+
+---
+
 ## 📂 Application Layer & Task Execution
 
 SE-OS separates low-level infrastructure (databases, terminals, parsers) from software engineering use cases via the **Application Layer**. 

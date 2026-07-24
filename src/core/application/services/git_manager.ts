@@ -8,7 +8,7 @@ export interface GitStatusResult {
 }
 
 export class GitManager {
-  constructor(private runtime: IProcessRuntime) {}
+  constructor(private runtime: IProcessRuntime, private workingDir?: string) {}
 
   private async runGit(args: string[]): Promise<{ exitCode: number; stdout: string; stderr: string }> {
     let stdout = '';
@@ -16,6 +16,7 @@ export class GitManager {
     const handle = this.runtime.execute({
       executable: 'git',
       args,
+      cwd: this.workingDir,
     });
     handle.on('stdout', (chunk) => {
       stdout += chunk;

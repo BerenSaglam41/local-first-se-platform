@@ -418,12 +418,19 @@ export class TaskExecutionService {
       // 9. Run Verification Runner
       const verificationStartTime = Date.now();
       onProgress?.({ stage: 'Verification Runner', status: 'started' });
-      const verificationCmds = this.config.get().verificationCommands;
+      const verificationCmds = task.verificationCommands && task.verificationCommands.length > 0
+        ? task.verificationCommands
+        : this.config.get().verificationCommands;
+      const targetCwd = task.workspaceRoot || process.cwd();
 
       if (verificationCmds && verificationCmds.length > 0) {
-        const vResult = await this.verificationRunner.run(verificationCmds, (chunk, type) => {
-          onProgress?.({ stage: 'Verification Stream', status: 'completed', metrics: { chunk, streamType: type } });
-        });
+        const vResult = await this.verificationRunner.run(
+          verificationCmds,
+          (chunk, type) => {
+            onProgress?.({ stage: 'Verification Stream', status: 'completed', metrics: { chunk, streamType: type } });
+          },
+          targetCwd
+        );
         verificationStatus = vResult.success ? 'passed' : 'failed';
         buildPassed = vResult.buildPassed;
         testsPassed = vResult.testsPassed;

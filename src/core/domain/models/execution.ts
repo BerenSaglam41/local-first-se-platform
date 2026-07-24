@@ -8,6 +8,8 @@ export interface EngineeringTask {
   description: string;
   entryFile: string;
   workspaceFiles: string[];
+  workspaceRoot?: string;
+  verificationCommands?: string[];
 }
 
 export interface ExecutionRequest {
