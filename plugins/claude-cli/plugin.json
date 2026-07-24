@@ -1,0 +1,19 @@
+{
+  "id": "plugin-claude-cli",
+  "name": "Claude CLI Runtime Plugin",
+  "version": "1.0.0",
+  "minKernelVersion": "2.0.0",
+  "entryPoint": "claude_runtime_plugin.ts",
+  "capabilities": [
+    "CODE_GENERATION",
+    "ARCHITECTURE",
+    "CODE_REVIEW",
+    "DEBUGGING",
+    "TEST_GENERATION"
+  ],
+  "supportedPlatforms": ["darwin", "linux", "win32"],
+  "healthCheck": {
+    "intervalMs": 10000
+  },
+  "dependencies": {}
+}

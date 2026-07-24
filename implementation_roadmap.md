@@ -21,13 +21,13 @@
 [Milestone 3: Runtime Plugin Framework] ──> COMPLETED
                     │
                     ▼
-[Milestone 4: Context Compiler & Git Worktree Engine]
+[Milestone 4: Claude CLI Reference Runtime Plugin] ──> COMPLETED
                     │
                     ▼
-[Milestone 5: Scheduler & Department State Machine]
+[Milestone 5: Context Compiler & Git Worktree Engine]
                     │
                     ▼
-[Milestone 6: Multi-Pane Tmux TUI & End-to-End Release]
+[Milestone 6: Scheduler & Department State Machine]
 ```
 
 ---
@@ -93,6 +93,22 @@
 - **Acceptance Criteria**: Dynamic registration, capability mapping, sandboxed error trapping, version validation, zero AI provider dependency.
 
 ---
+
+### Milestone 4: Claude CLI Reference Runtime Plugin (COMPLETED)
+- **Objective**: Implement the first production Runtime Plugin using Claude CLI as a reference implementation isolated inside `plugins/claude-cli/` with zero Kernel imports.
+- **Deliverables**:
+  - `plugins/claude-cli/plugin.json`
+  - `plugins/claude-cli/claude_process.ts`
+  - `plugins/claude-cli/claude_session.ts`
+  - `plugins/claude-cli/claude_executor.ts`
+  - `plugins/claude-cli/claude_runtime_plugin.ts`
+  - `tests/v2/milestone4_claude_plugin.test.ts`
+- **Dependencies**: Milestone 3
+- **Complexity**: High
+- **Acceptance Criteria**: Independent sessions per worker, task execution converting Claude output to Kernel-neutral `ExecutionResult`, 0 Claude imports in Kernel, CLI plugin management commands.
+
+---
+
 
 
 

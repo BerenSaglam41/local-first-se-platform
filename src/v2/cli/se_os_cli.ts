@@ -2,6 +2,7 @@ import { Kernel } from '../kernel/kernel';
 
 export class SeOsCli {
   private kernel = new Kernel();
+  private attachedPlugins = new Map<string, string>(); // workerId -> pluginId
 
   async boot(configPath: string = './company.json'): Promise<void> {
     console.log(`[SE-OS Kernel v2.0] Booting local workforce processes from ${configPath}...`);
@@ -52,6 +53,31 @@ export class SeOsCli {
     await this.ps();
   }
 
+  async pluginsList(): Promise<void> {
+    const manager = (this.kernel as any).pluginManager;
+    const plugins = manager ? manager.listPlugins() : [];
+    console.log(`LOADED RUNTIME PLUGINS (${plugins.length}):`);
+    for (const p of plugins) {
+      console.log(`  - [${p.id}] ${p.name} v${p.version} (Capabilities: ${p.capabilities.join(', ')})`);
+    }
+  }
+
+  async pluginsHealth(): Promise<void> {
+    const manager = (this.kernel as any).pluginManager;
+    const health = manager ? await manager.healthCheckAll() : {};
+    console.log(`RUNTIME PLUGIN HEALTH:`);
+    console.log(JSON.stringify(health, null, 2));
+  }
+
+  async workerAttach(workerId: string, pluginId: string): Promise<void> {
+    this.attachedPlugins.set(workerId, pluginId);
+    console.log(`✔ Attached plugin '${pluginId}' to worker '${workerId}'`);
+  }
+
+  async workerDetach(workerId: string): Promise<void> {
+    this.attachedPlugins.delete(workerId);
+    console.log(`✔ Detached plugin from worker '${workerId}'`);
+  }
 
   async workerStart(id: string): Promise<void> {
     const w = this.kernel.getSupervisor().spawnWorker({
@@ -65,7 +91,6 @@ export class SeOsCli {
     });
     console.log(`✔ Worker ${id} spawned with PID ${w.metrics.pid}`);
   }
-
 
   async workerStop(id: string): Promise<void> {
     const success = this.kernel.getSupervisor().stopWorker(id);
