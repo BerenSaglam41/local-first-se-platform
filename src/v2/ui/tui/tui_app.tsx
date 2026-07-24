@@ -7,13 +7,16 @@ import { StartupScreen } from './components/StartupScreen';
 import { RuntimeSelector } from './components/RuntimeSelector';
 import { MainMenu } from './components/MainMenu';
 import { NewProjectPrompt } from './components/NewProjectPrompt';
+import { ProjectExecutionScreen } from './components/ProjectExecutionScreen';
+import { Kernel } from '../../kernel/kernel';
 
 interface TuiAppProps {
   telemetryAggregator: TelemetryAggregator;
+  kernel?: Kernel;
   onExit?: () => void;
 }
 
-export const TuiApp: React.FC<TuiAppProps> = ({ telemetryAggregator, onExit }) => {
+export const TuiApp: React.FC<TuiAppProps> = ({ telemetryAggregator, kernel, onExit }) => {
   const { exit } = useApp();
   const [screenManager] = useState(() => new ScreenManager());
   const [currentScreen, setCurrentScreen] = useState<TuiScreenType>('STARTUP');
@@ -75,23 +78,24 @@ export const TuiApp: React.FC<TuiAppProps> = ({ telemetryAggregator, onExit }) =
       {currentScreen === 'NEW_PROJECT_PROMPT' && (
         <NewProjectPrompt
           onSubmitGoal={(goal) => {
-            telemetryAggregator.logMessage('INFO', `Starting project goal: '${goal}'`);
+            telemetryAggregator.logMessage('INFO', `Triggering autonomous project goal: '${goal}'`);
+            if (kernel) {
+              kernel.getProjectLifecycleOrchestrator().runProject(goal).then(() => {
+                telemetryAggregator.logMessage('SUCCESS', `Autonomous execution completed for '${goal}'`);
+              }).catch((err) => {
+                telemetryAggregator.logMessage('ERROR', `Execution error: ${err.message}`);
+              });
+            }
             navigate('PROJECT_EXECUTION');
           }}
         />
       )}
 
       {currentScreen === 'PROJECT_EXECUTION' && (
-        <Box flexDirection="column" padding={1} borderStyle="single" borderColor="green">
-          <Text bold color="green">
-            [ PROJECT EXECUTION MODE ]
-          </Text>
-          <Text color="cyan">Goal: {snapshot.businessGoal}</Text>
-          <Text color="yellow">Status: {snapshot.projectStatus} ({snapshot.progressPercent}%)</Text>
-          <Box marginTop={1}>
-            <Text color="gray">[ Press 'q' to Exit TUI ]</Text>
-          </Box>
-        </Box>
+        <ProjectExecutionScreen
+          snapshot={snapshot}
+          onReturnToMainMenu={() => navigate('MAIN_MENU')}
+        />
       )}
     </Box>
   );

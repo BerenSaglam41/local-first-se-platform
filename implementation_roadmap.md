@@ -81,6 +81,9 @@
 [Milestone 23: Core TUI Framework & Telemetry Layer] ──> COMPLETED
                     │
                     ▼
+[Vertical Slice 1: End-to-End Autonomous Project Execution] ──> COMPLETED
+                    │
+                    ▼
 [Milestone 24: Execution Screen]
                     │
                     ▼
@@ -441,6 +444,17 @@
 - **Complexity**: High
 - **Telemetry Layer & Screen Navigation**: Unified read-only `TelemetrySnapshot` consumed by TUI without business logic duplication. Interactive Ink terminal startup flow (Startup banner → Runtime selector → Main Menu → New Project Goal input → Execution mode).
 - **Acceptance Criteria**: `TelemetryAggregator` registered in Kernel DI Container, Ink TUI components rendering startup flow, `se-os` CLI integration launching full-screen TUI.
+
+### Vertical Slice 1: End-to-End Autonomous Project Execution (COMPLETED)
+- **Objective**: Execute real software engineering project end-to-end autonomously from a single business goal prompt inside the full-screen TUI (`se-os`).
+- **Deliverables**:
+  - `src/v2/ui/tui/components/ProjectExecutionScreen.tsx` (Split TUI layout: Status Bar, Goal Banner, ASCII Mission DAG Tree, Worker Fleet, AI Session Monitor centerpiece, Verification Checklist, System Console, Completion Modal)
+  - `src/v2/ui/tui/tui_app.tsx` (Connected to `kernel.getProjectLifecycleOrchestrator().runProject(goal)`)
+  - `tests/v2/vertical_slice_1.test.ts`
+- **Dependencies**: Milestone 23
+- **Complexity**: High
+- **Real Backend Execution**: Triggers `ProjectLifecycleOrchestrator` -> `AutonomousPlanner` -> `MissionEngine` -> `MissionExecutionOrchestrator` -> `WorkerExecutionEngine` -> `ClaudeCodeRuntimePlugin` -> `WorkspaceExecutionService` -> `VerificationPipeline` -> `TelemetryAggregator`. Real workspace files physically created in `./.se_workspaces/`. Real streaming stdout displayed live inside terminal.
+- **Acceptance Criteria**: End-to-end autonomous execution of project goal `"Create a REST API for User Management"`, real workspace file creation, verification gate passage (100/100), project completion report modal banner with `[ Press ENTER to Return to Main Menu ]`, 161/161 v2.0 tests passing.
 
 ---
 

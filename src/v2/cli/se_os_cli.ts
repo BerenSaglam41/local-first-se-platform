@@ -26,7 +26,7 @@ export class SeOsCli {
     const telemetryAggregator = this.kernel.getTelemetryAggregator();
     const { render } = await import('ink');
     const { TuiApp } = await import('../ui/tui/tui_app');
-    render(React.createElement(TuiApp, { telemetryAggregator, onExit: () => this.shutdown() }));
+    render(React.createElement(TuiApp, { telemetryAggregator, kernel: this.kernel, onExit: () => this.shutdown() }));
   }
 
   async status(): Promise<void> {
