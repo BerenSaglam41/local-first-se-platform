@@ -1,75 +1,85 @@
 import React from 'react';
 import { DashboardWorker } from '../types/dashboard';
-import { Users, Bot, HardDrive, Clock } from 'lucide-react';
+import { Users, Bot, HardDrive, Clock, ChevronRight } from 'lucide-react';
 
 interface WorkerFleetPanelProps {
   workers: DashboardWorker[];
+  selectedWorkerId?: string;
+  onSelectWorker?: (worker: DashboardWorker) => void;
 }
 
-export const WorkerFleetPanel: React.FC<WorkerFleetPanelProps> = ({ workers }) => {
+export const WorkerFleetPanel: React.FC<WorkerFleetPanelProps> = ({
+  workers,
+  selectedWorkerId,
+  onSelectWorker,
+}) => {
   return (
-    <div className="hud-card p-4 rounded-xl flex flex-col h-full">
-      <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-3">
-        <div className="flex items-center gap-2">
-          <Users className="w-4 h-4 text-emerald-400" />
-          <h3 className="font-bold text-sm text-slate-200 tracking-wide">WORKER FLEET MONITOR</h3>
+    <div className="panel-card p-3 rounded-lg flex flex-col h-full">
+      <div className="flex items-center justify-between border-b border-white/[0.06] pb-2 mb-2">
+        <div className="flex items-center gap-2 font-mono text-xs text-slate-200">
+          <Users className="w-3.5 h-3.5 text-emerald-400" />
+          <span className="font-bold tracking-wider uppercase">Worker Fleet</span>
         </div>
-        <span className="text-[11px] font-mono text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800/40">
-          {workers.length} Workers Fleet
+        <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-800/40">
+          {workers.length} Active
         </span>
       </div>
 
-      <div className="flex-1 overflow-y-auto space-y-3 pr-1">
-        {workers.map((worker) => (
-          <div
-            key={worker.id}
-            className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-emerald-500/40 transition-all"
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold font-mono text-xs">
-                  <Bot className="w-4 h-4" />
+      <div className="flex-1 overflow-y-auto space-y-2 pr-1 font-mono">
+        {workers.map((worker) => {
+          const isSelected = selectedWorkerId === worker.id;
+          const isExecuting = worker.status === 'EXECUTING' || worker.status === 'REASONING';
+
+          return (
+            <div
+              key={worker.id}
+              onClick={() => onSelectWorker && onSelectWorker(worker)}
+              className={`p-2.5 rounded-md border transition-all cursor-pointer ${
+                isSelected
+                  ? 'bg-purple-950/40 border-purple-400 shadow-md shadow-purple-500/10'
+                  : isExecuting
+                  ? 'bg-emerald-950/30 border-emerald-500/40'
+                  : 'bg-slate-900/40 border-slate-800 hover:border-slate-700'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="p-1 rounded bg-slate-800 text-emerald-400">
+                    <Bot className="w-3.5 h-3.5" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-200">{worker.name}</h4>
+                    <span className="text-[10px] text-slate-400">{worker.role} ({worker.departmentName})</span>
+                  </div>
                 </div>
-                <div>
-                  <h4 className="text-xs font-bold text-slate-100">{worker.name}</h4>
-                  <p className="text-[10px] font-mono text-slate-400">{worker.role} ({worker.departmentName})</p>
+
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
+                      isExecuting
+                        ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 animate-pulse'
+                        : 'bg-slate-800 text-slate-400'
+                    }`}
+                  >
+                    {worker.status}
+                  </span>
+                  <ChevronRight className="w-3.5 h-3.5 text-slate-500" />
                 </div>
               </div>
 
-              <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-slate-800 text-emerald-300 border border-slate-700">
-                {worker.status}
-              </span>
-            </div>
-
-            <div className="mt-3 pt-2.5 border-t border-slate-800/60 space-y-1.5 text-[11px] font-mono">
-              <div className="flex items-center justify-between text-slate-400">
-                <span className="text-slate-500">Provider:</span>
-                <span className="text-cyan-300 font-semibold">{worker.runtimeProvider}</span>
-              </div>
-
-              <div className="flex items-center justify-between text-slate-400">
-                <span className="text-slate-500">Task:</span>
-                <span className="text-slate-200 truncate max-w-[170px]">{worker.currentTaskTitle}</span>
-              </div>
-
-              <div className="flex items-center justify-between text-slate-400">
-                <span className="flex items-center gap-1 text-slate-500">
-                  <HardDrive className="w-3 h-3" />
-                  Workspace:
-                </span>
-                <span className="text-slate-400 text-[10px] truncate max-w-[150px]">{worker.currentWorkspace}</span>
-              </div>
-
-              <div className="flex items-center justify-between text-slate-400">
-                <span className="flex items-center gap-1 text-slate-500">
-                  <Clock className="w-3 h-3" />
-                  Duration:
-                </span>
-                <span className="text-emerald-400">{worker.durationMs} ms</span>
+              <div className="mt-2 pt-1.5 border-t border-white/[0.04] space-y-1 text-[10px] text-slate-400">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500">Provider:</span>
+                  <span className="text-cyan-300 font-semibold">{worker.runtimeProvider}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500">Task:</span>
+                  <span className="text-slate-200 truncate max-w-[150px]">{worker.currentTaskTitle}</span>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

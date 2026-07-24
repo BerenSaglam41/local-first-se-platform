@@ -29,9 +29,10 @@ describe('SE-OS v2.0 Milestone 22 — Mission Control Dashboard Suite', () => {
     expect(state.businessGoal).toContain('REST API');
     expect(state.tasks.length).toBe(6);
     expect(state.workers.length).toBe(3);
-    expect(state.aiSessions.length).toBe(2);
+    expect(state.aiSessions.length).toBe(3);
     expect(state.eventStream.length).toBeGreaterThan(0);
-    expect(state.artifacts.length).toBeGreaterThan(0);
+    expect(state.fileChanges.length).toBeGreaterThan(0);
+    expect(state.systemConsoleLogs.length).toBeGreaterThan(0);
     expect(state.verification.qualityScore).toBe(100);
   });
 
@@ -44,7 +45,7 @@ describe('SE-OS v2.0 Milestone 22 — Mission Control Dashboard Suite', () => {
     expect(claudeSession).toBeDefined();
     expect(claudeSession?.streamingOutput.length).toBeGreaterThan(0);
     expect(claudeSession?.tokenUsage).toBeGreaterThan(0);
-    expect(claudeSession?.status).toBe('COMPLETED');
+    expect(claudeSession?.status).toBe('STREAMING');
   });
 
   // ─── 3. Dashboard Web Files Structure ──────────────────────────────

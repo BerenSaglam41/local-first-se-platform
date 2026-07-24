@@ -28,6 +28,13 @@ export interface DashboardWorker {
   durationMs: number;
 }
 
+export interface DashboardToolCall {
+  toolName: string;
+  arguments: Record<string, any>;
+  durationMs: number;
+  status: 'SUCCESS' | 'FAILED';
+}
+
 export interface DashboardAiSession {
   sessionId: string;
   workerId: string;
@@ -36,8 +43,10 @@ export interface DashboardAiSession {
   prompt: string;
   streamingOutput: string[];
   finalResponse?: string;
+  toolCalls?: DashboardToolCall[];
   durationMs: number;
   tokenUsage?: number;
+  workspacePath: string;
   status: 'IDLE' | 'STREAMING' | 'COMPLETED' | 'FAILED';
   startedAt: string;
 }
@@ -51,13 +60,13 @@ export interface DashboardDomainEvent {
   payload: any;
 }
 
-export interface DashboardArtifact {
-  artifactId: string;
-  type: 'CREATED_FILE' | 'MODIFIED_FILE' | 'EXECUTION_LOG' | 'REASONING_SUMMARY';
+export interface GitFileChange {
   path: string;
-  sizeBytes: number;
-  createdAt: string;
-  contentSnippet?: string;
+  status: 'CREATED' | 'MODIFIED' | 'DELETED';
+  additions: number;
+  deletions: number;
+  fileSizeBytes: number;
+  diffSnippet?: string;
 }
 
 export interface DashboardVerificationStep {
@@ -77,15 +86,34 @@ export interface DashboardVerificationStatus {
   errors: string[];
 }
 
+export interface SystemTerminalLog {
+  id: string;
+  timestamp: string;
+  level: 'INFO' | 'WARN' | 'ERROR' | 'SUCCESS';
+  message: string;
+}
+
 export interface DashboardState {
   projectId: string;
   businessGoal: string;
   projectStatus: 'IDLE' | 'PLANNING' | 'EXECUTING' | 'COMPLETED' | 'FAILED';
+  currentStage: string;
+  estimatedCompletionMinutes: number;
   progressPercent: number;
   tasks: DashboardTaskNode[];
   workers: DashboardWorker[];
   aiSessions: DashboardAiSession[];
   eventStream: DashboardDomainEvent[];
-  artifacts: DashboardArtifact[];
+  fileChanges: GitFileChange[];
   verification: DashboardVerificationStatus;
+  systemConsoleLogs: SystemTerminalLog[];
+  systemHealth: {
+    kernelStatus: 'ONLINE' | 'OFFLINE';
+    runtimeProvider: string;
+    totalWorkersCount: number;
+    runningTasksCount: number;
+    queuedTasksCount: number;
+    memoryUsageMB: number;
+    cpuLoadPercent: number;
+  };
 }
