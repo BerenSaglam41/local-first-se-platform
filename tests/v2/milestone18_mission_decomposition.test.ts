@@ -4,8 +4,8 @@ import { TaskAssignmentEngine } from '../../src/v2/application/missions/task_ass
 import { DefaultMissionPlanningStrategy } from '../../src/v2/application/missions/default_mission_planning_strategy';
 import { IMissionPlanningStrategy } from '../../src/v2/contracts/imission_planning_strategy';
 import { MissionExecutionPlan } from '../../src/v2/contracts/imission_decomposition';
-import { ClaudeCodeRuntimePlugin } from '../../src/v2/application/plugins/claude/claude_code_runtime_plugin';
 import { SeOsCli } from '../../src/v2/cli/se_os_cli';
+import { createFakeClaudeCodeRuntimePlugin, createFakeClaudeSpawner, createAvailableDetector , createSafeTestProviderOverrides } from './helpers/fake_claude_process';
 import * as fs from 'fs';
 
 describe('SE-OS v2.0 Milestone 18 — Mission Decomposition & Task Assignment Suite', () => {
@@ -26,7 +26,9 @@ describe('SE-OS v2.0 Milestone 18 — Mission Decomposition & Task Assignment Su
 
   async function bootKernelWithClaude(): Promise<Kernel> {
     await kernel.boot('./non_existent_config.json');
-    await kernel.getRuntimePluginSystemManager().loadAndRegisterPlugin(new ClaudeCodeRuntimePlugin(kernel.getEventStore()));
+    await kernel.getRuntimePluginSystemManager().loadAndRegisterPlugin(
+      createFakeClaudeCodeRuntimePlugin({ eventStore: kernel.getEventStore() })
+    );
     return kernel;
   }
 
@@ -174,7 +176,7 @@ describe('SE-OS v2.0 Milestone 18 — Mission Decomposition & Task Assignment Su
   // ─── 7. CLI Integration ──────────────────────────────────────────
 
   it('should execute CLI mission plan, assign, and inspect subcommands cleanly', async () => {
-    const cli = new SeOsCli();
+    const cli = new SeOsCli(createSafeTestProviderOverrides());
     await cli.boot('./non_existent_config.json');
 
     await cli.missionPlanDecompose('REST API Mission', 'Create a REST API for User Management');

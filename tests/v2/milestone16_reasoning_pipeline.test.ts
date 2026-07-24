@@ -1,21 +1,28 @@
 import { Kernel } from '../../src/v2/kernel/kernel';
 import { ReasoningCoordinator } from '../../src/v2/application/reasoning/reasoning_coordinator';
-import { DefaultRuntimeSelectionStrategy } from '../../src/v2/application/reasoning/runtime_selection_strategy';
+import { WorkerAwareRuntimeSelectionStrategy } from '../../src/v2/application/reasoning/worker_aware_runtime_selection_strategy';
 import { IRuntimeSelectionStrategy } from '../../src/v2/contracts/iruntime_selection_strategy';
 import { IRuntimePlugin, RuntimeCapability } from '../../src/v2/contracts/iruntime_plugin_system';
 import { ReasoningRequest } from '../../src/v2/contracts/ireasoning_pipeline';
 import { AutonomousPlanner } from '../../src/v2/application/planning/autonomous_planner';
-import { ClaudeCodeRuntimePlugin } from '../../src/v2/application/plugins/claude/claude_code_runtime_plugin';
 import { SeOsCli } from '../../src/v2/cli/se_os_cli';
+import {
+  createFakeClaudeCodeRuntimePlugin,
+  createSpawnRecorder,
+  FakeClaudeSpawnRecorder,
+  createSafeTestProviderOverrides,
+} from './helpers/fake_claude_process';
 import * as fs from 'fs';
 
 describe('SE-OS v2.0 Milestone 16 — Runtime Reasoning Pipeline Suite', () => {
   const testDbPath = './se_company_m16_test.db';
   let kernel: Kernel;
+  let claudeSpawnRecorder: FakeClaudeSpawnRecorder;
 
   beforeEach(async () => {
     if (fs.existsSync(testDbPath)) fs.unlinkSync(testDbPath);
     kernel = new Kernel();
+    claudeSpawnRecorder = createSpawnRecorder();
   });
 
   afterEach(async () => {
@@ -27,17 +34,20 @@ describe('SE-OS v2.0 Milestone 16 — Runtime Reasoning Pipeline Suite', () => {
 
   async function bootKernelWithClaude(): Promise<Kernel> {
     await kernel.boot('./non_existent_config.json');
-    await kernel.getRuntimePluginSystemManager().loadAndRegisterPlugin(new ClaudeCodeRuntimePlugin(kernel.getEventStore()));
+    await kernel.getRuntimePluginSystemManager().loadAndRegisterPlugin(
+      createFakeClaudeCodeRuntimePlugin({ eventStore: kernel.getEventStore(), recorder: claudeSpawnRecorder })
+    );
     return kernel;
   }
 
-  // ─── 1. IRuntimeSelectionStrategy & Default Selection ─────────────
+  // ─── 1. IRuntimeSelectionStrategy & Worker-Aware Selection ────────
 
-  it('should select best available runtime plugin via DefaultRuntimeSelectionStrategy', async () => {
+  it('should select the plugin assigned to the requesting worker via WorkerAwareRuntimeSelectionStrategy', async () => {
     await bootKernelWithClaude();
     const systemMgr = kernel.getRuntimePluginSystemManager();
+    const workerStore = kernel.getWorkerStore();
 
-    const strategy = new DefaultRuntimeSelectionStrategy(systemMgr);
+    const strategy = new WorkerAwareRuntimeSelectionStrategy(systemMgr, workerStore);
     const request: ReasoningRequest = {
       requestId: 'req-01',
       missionId: 'm-100',
@@ -68,7 +78,11 @@ describe('SE-OS v2.0 Milestone 16 — Runtime Reasoning Pipeline Suite', () => {
     expect(result.response).toBeDefined();
     expect(result.response!.requestId).toBe('req-e2e');
     expect(result.response!.executionMetadata.pluginId).toBe('plugin-claude-code');
-    expect(result.response!.responseText).toContain('Design secure JWT authentication');
+    expect(result.response!.responseText).toBeTruthy();
+
+    // Prove the goal actually reached the spawned claude process, not a fabricated echo.
+    expect(claudeSpawnRecorder.calls.length).toBe(1);
+    expect(claudeSpawnRecorder.calls[0].args.join(' ')).toContain('Design secure JWT authentication');
   });
 
   // ─── 3. Planning Engine Request Reaching Claude Plugin via ReasoningCoordinator ─────
@@ -96,28 +110,27 @@ describe('SE-OS v2.0 Milestone 16 — Runtime Reasoning Pipeline Suite', () => {
     expect(invocation.decision).toContain('plugin-claude-code');
   });
 
-  // ─── 4. Output Streaming & Cancellation ─────────────────────────────
+  // ─── 4. Real Output Reaches the Worker's Terminal Log (see ADR-0005 — no session/streaming layer) ─
 
-  it('should support reasoning streaming and stream cancellation', async () => {
+  it('should append the real process output to the worker terminal log during a reasoning request', async () => {
     await bootKernelWithClaude();
     const coordinator = kernel.getReasoningCoordinator();
+    const terminalLog = kernel.getWorkerTerminalLog();
 
-    const chunks: string[] = [];
-    const request: ReasoningRequest = {
+    const result = await coordinator.requestReasoning({
       requestId: 'req-stream',
       missionId: 'm-300',
       workerId: 'emp-charlie',
       goal: 'Stream test reasoning',
-      streaming: true,
-    };
-
-    const result = await coordinator.requestReasoning(request, {
-      onStdoutChunk: (chunk) => chunks.push(chunk),
-      timeoutMs: 200,
+      timeoutMs: 5000,
     });
 
     expect(result.success).toBe(true);
     expect(result.response?.executionMetadata.pluginId).toBe('plugin-claude-code');
+
+    const tail = terminalLog.readTail('emp-charlie', 50);
+    expect(tail.length).toBeGreaterThan(0);
+    expect(tail.some((line) => line.includes('exit'))).toBe(true);
   });
 
   // ─── 5. Custom Selection Strategy Injection (SRP) ───────────────────
@@ -194,11 +207,10 @@ describe('SE-OS v2.0 Milestone 16 — Runtime Reasoning Pipeline Suite', () => {
   // ─── 8. CLI Integration ──────────────────────────────────────────
 
   it('should execute CLI reasoning subcommands cleanly', async () => {
-    const cli = new SeOsCli();
+    const cli = new SeOsCli(createSafeTestProviderOverrides());
     await cli.boot('./non_existent_config.json');
 
     await cli.reasoningExecute('Design API caching strategy');
-    await cli.reasoningStream('Implement Redis cache invalidation');
     await cli.reasoningInspect('req-cli-1');
 
     await cli.shutdown();

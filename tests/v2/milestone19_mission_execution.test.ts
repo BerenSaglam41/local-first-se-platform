@@ -3,8 +3,8 @@ import { MissionExecutionOrchestrator } from '../../src/v2/application/missions/
 import { DefaultWorkerDispatcher } from '../../src/v2/application/missions/worker_dispatcher';
 import { IWorkerDispatcher } from '../../src/v2/contracts/iworker_dispatcher';
 import { WorkerExecutionRequest, WorkerExecutionResult } from '../../src/v2/contracts/iautonomous_worker';
-import { ClaudeCodeRuntimePlugin } from '../../src/v2/application/plugins/claude/claude_code_runtime_plugin';
 import { SeOsCli } from '../../src/v2/cli/se_os_cli';
+import { createFakeClaudeCodeRuntimePlugin, createFakeClaudeSpawner, createAvailableDetector , createSafeTestProviderOverrides } from './helpers/fake_claude_process';
 import * as fs from 'fs';
 
 describe('SE-OS v2.0 Milestone 19 — Mission Execution Orchestrator Suite', () => {
@@ -25,7 +25,9 @@ describe('SE-OS v2.0 Milestone 19 — Mission Execution Orchestrator Suite', () 
 
   async function bootKernelWithClaude(): Promise<Kernel> {
     await kernel.boot('./non_existent_config.json');
-    await kernel.getRuntimePluginSystemManager().loadAndRegisterPlugin(new ClaudeCodeRuntimePlugin(kernel.getEventStore()));
+    await kernel.getRuntimePluginSystemManager().loadAndRegisterPlugin(
+      createFakeClaudeCodeRuntimePlugin({ eventStore: kernel.getEventStore() })
+    );
     return kernel;
   }
 
@@ -84,7 +86,9 @@ describe('SE-OS v2.0 Milestone 19 — Mission Execution Orchestrator Suite', () 
 
     const result = await orchestrator.executeMissionPlan(plan, { maxParallelWorkers: 2 });
     expect(result.success).toBe(true);
-    expect(result.state.completedTaskIds.length).toBe(6);
+    // "microservices" is a real LARGE-tier scope signal (see TeamSizeEstimator) — 10 tasks, not
+    // the old fixed 6, since team size now genuinely scales with the goal's stated scope.
+    expect(result.state.completedTaskIds.length).toBe(10);
   });
 
   // ─── 4. Custom IWorkerDispatcher Injection (Pluggable Routing) ──────
@@ -161,7 +165,7 @@ describe('SE-OS v2.0 Milestone 19 — Mission Execution Orchestrator Suite', () 
   // ─── 7. CLI Integration ──────────────────────────────────────────
 
   it('should execute CLI mission execute, status, and cancel subcommands cleanly', async () => {
-    const cli = new SeOsCli();
+    const cli = new SeOsCli(createSafeTestProviderOverrides());
     await cli.boot('./non_existent_config.json');
 
     await cli.missionExecute();

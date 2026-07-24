@@ -1,5 +1,6 @@
 import { Kernel } from '../../src/v2/kernel/kernel';
 import { SeOsCli } from '../../src/v2/cli/se_os_cli';
+import { createFakeClaudeSpawner, createAvailableDetector , createSafeTestProviderOverrides } from './helpers/fake_claude_process';
 import { SeOsApiService } from '../../dashboard/src/services/se_os_api';
 import { DashboardState } from '../../dashboard/src/types/dashboard';
 import * as fs from 'fs';
@@ -60,7 +61,7 @@ describe('SE-OS v2.0 Milestone 22 — Mission Control Dashboard Suite', () => {
   // ─── 4. CLI Integration ──────────────────────────────────────────
 
   it('should execute CLI dashboard subcommand cleanly', async () => {
-    const cli = new SeOsCli();
+    const cli = new SeOsCli(createSafeTestProviderOverrides());
     await cli.boot('./non_existent_config.json');
 
     await cli.dashboardLaunch();

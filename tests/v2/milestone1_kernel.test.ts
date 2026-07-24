@@ -1,8 +1,8 @@
 import { Kernel } from '../../src/v2/kernel/kernel';
 import { SqliteEventStore } from '../../src/v2/infrastructure/storage/sqlite_event_store';
 import { SqliteSharedMemory } from '../../src/v2/infrastructure/storage/sqlite_shared_memory';
-import { ProcessSupervisor } from '../../src/v2/application/runtime/process_supervisor';
 import { SeOsCli } from '../../src/v2/cli/se_os_cli';
+import { createFakeClaudeSpawner, createAvailableDetector , createSafeTestProviderOverrides } from './helpers/fake_claude_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -30,21 +30,25 @@ describe('SE-OS v2.0 Milestone 1 — Kernel Bootstrap Suite', () => {
     await kernel.boot('./non_existent_config.json');
 
     expect(kernel.isReady()).toBe(true);
-    const supervisor = kernel.getSupervisor();
-    const workers = supervisor.getRegistry().list();
+    const workers = kernel.getWorkerStore().list();
 
-    expect(workers.length).toBe(3); // Alice, Bob, Charlie
-    expect(workers[0].metadata.name).toBe('Alice');
-    expect(workers[0].metadata.role).toBe('Lead Architect');
-    expect(workers[1].metadata.name).toBe('Bob');
-    expect(workers[1].metadata.role).toBe('Backend Engineer');
-    expect(workers[2].metadata.name).toBe('Charlie');
-    expect(workers[2].metadata.role).toBe('QA Engineer');
+    expect(workers.length).toBe(5); // Alice, Bob, Charlie, Diana, Eve
+    expect(workers[0].name).toBe('Alice');
+    expect(workers[0].role).toBe('Lead Architect');
+    expect(workers[1].name).toBe('Bob');
+    expect(workers[1].role).toBe('Backend Engineer');
+    expect(workers[2].name).toBe('Charlie');
+    expect(workers[2].role).toBe('QA Engineer');
+    expect(workers[3].name).toBe('Diana');
+    expect(workers[3].role).toBe('Documentation Engineer');
+    expect(workers[4].name).toBe('Eve');
+    expect(workers[4].role).toBe('Research Engineer');
   });
 
-  it('should spawn, list, stop, and restart workers via ProcessSupervisor', async () => {
+  it('should spawn, list, stop, and restart workers via LocalProcessSupervisor', async () => {
     await kernel.boot('./non_existent_config.json');
     const supervisor = kernel.getSupervisor();
+    const workerStore = kernel.getWorkerStore();
 
     const newWorker = supervisor.spawnWorker({
       id: 'emp-dave',
@@ -53,16 +57,16 @@ describe('SE-OS v2.0 Milestone 1 — Kernel Bootstrap Suite', () => {
       department: 'Research',
     });
 
-    expect(newWorker.metrics.pid).toBeGreaterThan(0);
-    expect(supervisor.getRegistry().list().length).toBe(4);
+    expect(newWorker.process.pid).toBeGreaterThan(0);
+    expect(workerStore.list().length).toBe(6);
 
     const restarted = supervisor.restartWorker('emp-dave');
     expect(restarted).toBeDefined();
-    expect(restarted?.state).toBe('IDLE');
+    expect(restarted?.processState).toBe('IDLE');
 
     const stopped = supervisor.stopWorker('emp-dave');
     expect(stopped).toBe(true);
-    expect(supervisor.getRegistry().list().length).toBe(3);
+    expect(workerStore.list().length).toBe(5);
   });
 
 
@@ -133,9 +137,9 @@ describe('SE-OS v2.0 Milestone 1 — Kernel Bootstrap Suite', () => {
     telemetry.recordHeartbeat();
     telemetry.recordMission();
 
-    const snapshot = telemetry.getSnapshot(kernel.getSupervisor().getRegistry().list(), 0);
+    const snapshot = telemetry.getSnapshot(kernel.getWorkerStore().list(), 0);
 
-    expect(snapshot.activeWorkerCount).toBe(3);
+    expect(snapshot.activeWorkerCount).toBe(5);
     expect(snapshot.totalMissions).toBe(1);
     expect(snapshot.heartbeatsCount).toBe(2);
     expect(snapshot.memoryRssMb).toBeGreaterThan(0);
@@ -143,7 +147,7 @@ describe('SE-OS v2.0 Milestone 1 — Kernel Bootstrap Suite', () => {
 
 
   it('should execute CLI commands via SeOsCli cleanly', async () => {
-    const cli = new SeOsCli();
+    const cli = new SeOsCli(createSafeTestProviderOverrides());
     await cli.boot('./non_existent_config.json');
     await cli.workers();
     await cli.status();

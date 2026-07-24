@@ -1,21 +1,29 @@
 import { Kernel } from '../kernel/kernel.js';
 import { ExecutionProfileName } from '../contracts/iexecution_policy.js';
-import { ClaudeCodeRuntimePlugin } from '../application/plugins/claude/claude_code_runtime_plugin.js';
+import {
+  DefaultProviderOverrides,
+  registerDefaultProviders,
+  resolveDefaultProviderIdForRole,
+} from '../application/providers/default_provider_bootstrap.js';
 import React from 'react';
+
+export type SeOsCliProviderOverrides = DefaultProviderOverrides;
 
 export class SeOsCli {
   private kernel = new Kernel();
   private attachedPlugins = new Map<string, string>();
 
+  constructor(private providerOverrides?: SeOsCliProviderOverrides) {}
+
   async boot(configPath: string = './company.json'): Promise<void> {
     console.log(`[SE-OS Kernel v2.0] Booting local workforce processes from ${configPath}...`);
     await this.kernel.boot(configPath);
-    await this.kernel.getRuntimePluginSystemManager().loadAndRegisterPlugin(new ClaudeCodeRuntimePlugin(this.kernel.getEventStore()));
-    const workers = this.kernel.getSupervisor().getRegistry().list();
+    await registerDefaultProviders(this.kernel, this.providerOverrides);
+    const workers = this.kernel.getWorkerStore().list();
     console.log(`✔ Kernel booted successfully.`);
     console.log(`✔ Active Employees (${workers.length}):`);
     for (const w of workers) {
-      console.log(`  - [PID ${w.metrics.pid}] ${w.metadata.name} (${w.metadata.role}) - Status: ${w.state} - Pane: ${w.metadata.tmuxPaneIndex}`);
+      console.log(`  - [PID ${w.process.pid}] ${w.name} (${w.role}) - Status: ${w.processState} - Provider: ${w.assignedProviderId || 'unassigned'}`);
     }
   }
 
@@ -39,7 +47,7 @@ export class SeOsCli {
       console.log(`[SE-OS Kernel] System is OFFLINE.`);
       return;
     }
-    const workers = this.kernel.getSupervisor().getRegistry().list();
+    const workers = this.kernel.getWorkerStore().list();
     const metrics = this.kernel.getTelemetry().getSnapshot(workers, 0);
     console.log(`====================================================`);
     console.log(` SE-OS v2.0 LOCAL RUNTIME STATUS`);
@@ -59,12 +67,12 @@ export class SeOsCli {
       console.log(`[SE-OS Kernel] System is OFFLINE.`);
       return;
     }
-    const list = this.kernel.getSupervisor().getRegistry().list();
+    const list = this.kernel.getWorkerStore().list();
     console.log(`PROCESS TABLE (${list.length} processes):`);
     console.log(`PID\t\tID\t\tNAME\t\tROLE\t\t\tSTATE\t\tRESTARTS`);
     console.log(`----------------------------------------------------------------------------------------`);
     for (const w of list) {
-      console.log(`${w.metrics.pid}\t\t${w.metadata.id}\t${w.metadata.name}\t\t${w.metadata.role}\t\t${w.state}\t\t${w.metrics.restartCount}`);
+      console.log(`${w.process.pid}\t\t${w.id}\t${w.name}\t\t${w.role}\t\t${w.processState}\t\t${w.process.restartCount}`);
     }
   }
 
@@ -352,9 +360,11 @@ export class SeOsCli {
       department: 'Engineering',
       executable: process.execPath,
       args: ['-e', 'setInterval(() => {}, 1000)'],
-      tmuxPaneIndex: 4,
     });
-    console.log(`✔ Worker ${id} spawned with PID ${w.metrics.pid}`);
+    // A dynamically-started worker gets the same real default-provider assignment logic as the
+    // rest of the workforce, so it's never silently different (see ADR-0005).
+    w.assignedProviderId = resolveDefaultProviderIdForRole(w.role);
+    console.log(`✔ Worker ${id} spawned with PID ${w.process.pid}, assigned to ${w.assignedProviderId}`);
   }
 
   async workerStop(id: string): Promise<void> {
@@ -364,7 +374,7 @@ export class SeOsCli {
 
   async workerRestart(id: string): Promise<void> {
     const res = this.kernel.getSupervisor().restartWorker(id);
-    console.log(res ? `✔ Worker ${id} restarted with new PID ${res.metrics.pid}` : `✖ Failed to restart worker ${id}`);
+    console.log(res ? `✔ Worker ${id} restarted with new PID ${res.process.pid}` : `✖ Failed to restart worker ${id}`);
   }
 
   async workerKill(id: string): Promise<void> {
@@ -372,9 +382,75 @@ export class SeOsCli {
     console.log(success ? `✔ Worker ${id} killed with SIGKILL.` : `✖ Failed to kill worker ${id}`);
   }
 
+  async workerPause(id: string): Promise<void> {
+    const success = this.kernel.getSupervisor().pauseWorker(id);
+    console.log(success ? `✔ Worker ${id} paused.` : `✖ Failed to pause worker ${id}`);
+  }
+
+  async workerResume(id: string): Promise<void> {
+    const success = this.kernel.getSupervisor().resumeWorker(id);
+    console.log(success ? `✔ Worker ${id} resumed.` : `✖ Failed to resume worker ${id}`);
+  }
+
+  /** Sends a message directly to one worker, bypassing full mission decomposition — a real,
+   * individual "talk to Bob" channel rather than a whole-project chat turn. */
+  async workerTalk(workerId: string, message: string): Promise<void> {
+    const executionId = `talk-${Date.now()}`;
+    console.log(`[Talking to ${workerId}]: "${message}"`);
+    const result = await this.kernel.getWorkerExecutionEngine().executeTask({
+      executionId,
+      taskId: executionId,
+      missionId: 'direct-message',
+      workerId,
+      goal: message,
+    });
+    console.log(result.success ? `✔ ${workerId} responded.` : `✖ ${workerId} failed: ${result.error}`);
+    console.log(JSON.stringify(result.report?.summary, null, 2));
+  }
+
+  /** Real cancellation of whatever the worker is currently reasoning/executing. */
+  async workerInterrupt(workerId: string): Promise<void> {
+    const cancelled = await this.kernel.getReasoningCoordinator().cancelForWorker(workerId);
+    console.log(cancelled ? `✔ Interrupted ${workerId}.` : `✖ ${workerId} had nothing in-flight to interrupt.`);
+  }
+
+  /** Hot-swaps a worker's AI provider — takes effect on its very next task. */
+  async workerChangeProvider(workerId: string, providerId: string): Promise<void> {
+    const providers = this.kernel.getProviderRegistry().listProviders();
+    if (!providers.some((p) => p.id === providerId)) {
+      console.log(`✖ Unknown provider '${providerId}'. Known providers: ${providers.map((p) => p.id).join(', ')}`);
+      return;
+    }
+    const worker = this.kernel.getWorkerStore().get(workerId);
+    if (!worker) {
+      console.log(`✖ Unknown worker '${workerId}'.`);
+      return;
+    }
+    worker.assignedProviderId = providerId;
+    console.log(`✔ ${workerId} is now assigned to ${providerId}.`);
+  }
+
+  /** Launches the real tmux dashboard: one window per worker, each tailing its real terminal log. */
+  async tmuxLaunch(): Promise<void> {
+    const launched = this.kernel.launchTmuxDashboard();
+    if (launched) {
+      console.log(`✔ Tmux dashboard live. Attach with: ${this.kernel.getTmuxIntegration().attachCommand()}`);
+    } else {
+      console.log('✖ tmux is not available on this system — falling back to the in-TUI Terminals tab.');
+    }
+  }
+
+  async providersList(): Promise<void> {
+    const providers = this.kernel.getProviderRegistry().listProviders();
+    for (const p of providers) {
+      const status = p.installed ? '[✓] Installed' : '[ ] Not installed';
+      console.log(`  - ${p.name} (${p.id}) — ${status}${p.enabled ? '' : ' (disabled)'} — ${p.version || 'unknown version'}`);
+    }
+  }
+
   async telemetry(): Promise<void> {
     const snapshot = this.kernel.getTelemetry().getSnapshot(
-      this.kernel.getSupervisor().getRegistry().list(),
+      this.kernel.getWorkerStore().list(),
       0
     );
     console.log(JSON.stringify(snapshot, null, 2));
@@ -425,49 +501,13 @@ export class SeOsCli {
     console.log(JSON.stringify(plan, null, 2));
   }
 
-  // ─── Runtime Session Manager CLI ────────────────────────────────
-
-  async runtimeSessions(): Promise<void> {
-    const list = this.kernel.getRuntimeSessionManager().getRegistry().listMetadata();
-    console.log(`ACTIVE RUNTIME SESSIONS (${list.length}):`);
-    for (const s of list) {
-      console.log(`  - [${s.sessionId}] Worker: ${s.workerId} | Plugin: ${s.pluginId} | Transport: ${s.transportType} | State: ${s.state} | Missions: ${s.missionCount}`);
-    }
-  }
-
-  async runtimeStatus(): Promise<void> {
-    const report = this.kernel.getRuntimeSessionManager().getHealthReport();
-    console.log(`RUNTIME SESSION HEALTH STATUS:`);
-    console.log(JSON.stringify(report, null, 2));
-  }
-
-  async runtimeStart(workerId: string = 'emp-bob'): Promise<void> {
-    const session = this.kernel.getRuntimeSessionManager().getOrCreateSessionForWorker(workerId);
-    console.log(`✔ Started runtime session '${session.sessionId}' for worker '${workerId}' (State: ${session.getState()})`);
-  }
-
-  async runtimeStop(sessionId: string): Promise<void> {
-    const ok = this.kernel.getRuntimeSessionManager().stopSession(sessionId);
-    console.log(ok ? `✔ Stopped runtime session ${sessionId}` : `✖ Failed to stop session ${sessionId}`);
-  }
-
-  async runtimeRestart(sessionId: string): Promise<void> {
-    const newSession = this.kernel.getRuntimeSessionManager().restartSession(sessionId);
-    console.log(newSession ? `✔ Restarted session -> new session '${newSession.sessionId}'` : `✖ Failed to restart session ${sessionId}`);
-  }
-
-  async runtimeInspect(sessionId: string): Promise<void> {
-    const session = this.kernel.getRuntimeSessionManager().getRegistry().getSession(sessionId);
-    console.log(session ? JSON.stringify(session.metadata, null, 2) : `✖ Session ${sessionId} not found`);
-  }
-
   // ─── Runtime Plugin System CLI ──────────────────────────────────
 
   async runtimePluginList(): Promise<void> {
     const list = this.kernel.getRuntimePluginSystemManager().listPlugins();
     console.log(`LOADED RUNTIME PLUGINS (${list.length}):`);
     for (const p of list) {
-      console.log(`  - [${p.id}] ${p.name} v${p.version} (Transports: ${p.supportedTransports.join(', ')} | Capabilities: ${p.capabilities.join(', ')})`);
+      console.log(`  - [${p.id}] ${p.name} v${p.version} (Capabilities: ${p.capabilities.join(', ')})`);
     }
   }
 
@@ -534,24 +574,6 @@ export class SeOsCli {
     console.log(JSON.stringify(result, null, 2));
   }
 
-  async claudeStream(prompt: string = 'Hello Claude Streaming'): Promise<void> {
-    const plugin = this.kernel.getRuntimePluginSystemManager().getPlugin('plugin-claude-code');
-    if (!plugin) {
-      console.log(`✖ Claude Code Runtime Plugin ('plugin-claude-code') is not active`);
-      return;
-    }
-    const sessionManager = this.kernel.getRuntimeSessionManager();
-    const session = sessionManager.getOrCreateSessionForWorker('emp-bob');
-    await plugin.attachSession(session);
-
-    console.log(`[Streaming Claude Response for prompt '${prompt}']...`);
-    const streamResult = await plugin.stream(session.sessionId, prompt, {
-      onStdoutChunk: (chunk) => process.stdout.write(chunk),
-    });
-    console.log(`\n✔ Stream finished (Completed: ${streamResult.completed} | Duration: ${streamResult.durationMs}ms)`);
-    await plugin.detachSession(session.sessionId);
-  }
-
   // ─── Runtime Reasoning Pipeline CLI ─────────────────────────────
 
   async reasoningExecute(goal: string = 'Design secure token authentication'): Promise<void> {
@@ -566,28 +588,10 @@ export class SeOsCli {
     console.log(JSON.stringify(result, null, 2));
   }
 
-  async reasoningStream(goal: string = 'Implement JWT verification middleware'): Promise<void> {
-    const requestId = `req-stream-${Date.now()}`;
-    console.log(`[Streaming Reasoning Request '${requestId}' for goal: '${goal}']...`);
-    const result = await this.kernel.getReasoningCoordinator().requestReasoning(
-      {
-        requestId,
-        missionId: 'cli-mission',
-        workerId: 'emp-alice',
-        goal,
-        streaming: true,
-      },
-      {
-        onStdoutChunk: (chunk) => process.stdout.write(chunk),
-      }
-    );
-    console.log(`\n✔ Reasoning Stream complete (Success: ${result.success})`);
-  }
-
   async reasoningInspect(requestId: string): Promise<void> {
     console.log(`REASONING PIPELINE STATUS:`);
     console.log(`  - Active Requests Count: ${this.kernel.getReasoningCoordinator().getActiveRequestsCount()}`);
-    console.log(`  - Selection Strategy: DefaultRuntimeSelectionStrategy`);
+    console.log(`  - Selection Strategy: WorkerAwareRuntimeSelectionStrategy`);
   }
 
   // ─── Autonomous Worker Execution CLI ────────────────────────────

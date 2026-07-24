@@ -1,4 +1,5 @@
 import { EventEmitter } from 'events';
+import { spawn, ChildProcess } from 'child_process';
 import {
   IRuntimePlugin,
   RuntimePluginManifest,
@@ -7,31 +8,48 @@ import {
   RuntimePluginHealth,
   RuntimeConfiguration,
 } from '../../../contracts/iruntime_plugin_system';
-import { IRuntimeSession, SessionStreamOptions, SessionStreamResult } from '../../../contracts/iruntime_session';
 import { IEventStore } from '../../../contracts/ievent_store';
 import { ClaudeCliDetector, ClaudeCliDetectionResult } from './claude_cli_detector';
+import { CliProcessSpawner, runCliProcess } from '../cli_process_executor';
 
+/** Injectable so callers (and tests) can replace the real OS process spawn with a fake one. */
+export type ClaudeProcessSpawner = CliProcessSpawner;
+
+const DEFAULT_EXECUTION_TIMEOUT_MS = 180000;
+
+/**
+ * Executes at most one request per worker at a time — activeChildProcesses is keyed by workerId,
+ * which is safe because WorkerStore/ReasoningCoordinator guarantee a worker never has two
+ * concurrent executions (see ADR-0005). There is no session attach/detach and no streaming: real
+ * multi-turn continuity uses the verified --session-id/--resume flags directly via
+ * conversationSessionId/resumeConversation on the execute() payload.
+ */
 export class ClaudeCodeRuntimePlugin extends EventEmitter implements IRuntimePlugin {
-  private attachedSessions = new Map<string, IRuntimeSession>();
-  private detector = new ClaudeCliDetector();
+  private activeChildProcesses = new Map<string, ChildProcess>();
+  private detector: ClaudeCliDetector;
   private detectionResult: ClaudeCliDetectionResult = { available: false };
   private isInitialized = false;
+  private spawner: ClaudeProcessSpawner;
 
   private manifest: RuntimePluginManifest = {
     id: 'plugin-claude-code',
     name: 'Claude Code CLI Runtime Plugin',
     version: '1.0.0',
-    supportedTransports: ['PTY', 'STDIO'],
-    capabilities: ['Reasoning', 'Streaming', 'Cancellation', 'InteractiveSession', 'ToolExecution', 'FileAccess'],
+    capabilities: ['Reasoning', 'Cancellation', 'ToolExecution', 'FileAccess'],
     minKernelVersion: '2.0.0',
     maxKernelVersion: '2.9.9',
     healthCheckSupport: true,
-    streamingSupport: true,
     cancellationSupport: true,
   };
 
-  constructor(private eventStore?: IEventStore) {
+  constructor(
+    private eventStore?: IEventStore,
+    spawner: ClaudeProcessSpawner = spawn,
+    detector: ClaudeCliDetector = new ClaudeCliDetector()
+  ) {
     super();
+    this.spawner = spawner;
+    this.detector = detector;
   }
 
   async initialize(config?: RuntimeConfiguration): Promise<void> {
@@ -61,87 +79,86 @@ export class ClaudeCodeRuntimePlugin extends EventEmitter implements IRuntimePlu
     };
   }
 
-  async attachSession(session: IRuntimeSession): Promise<boolean> {
-    if (!this.isInitialized) return false;
-    this.attachedSessions.set(session.sessionId, session);
-    this.emitEvent('RuntimePluginAttached', this.manifest.id, {
-      workerId: session.workerId,
-      sessionId: session.sessionId,
-      transportType: session.metadata.transportType,
-    });
-    return true;
-  }
-
-  async detachSession(sessionId: string): Promise<boolean> {
-    const session = this.attachedSessions.get(sessionId);
-    if (!session) return false;
-
-    this.attachedSessions.delete(sessionId);
-    this.emitEvent('RuntimePluginDetached', this.manifest.id, {
-      workerId: session.workerId,
-      sessionId,
-    });
-    return true;
-  }
-
   async execute(taskPayload: Record<string, any>): Promise<Record<string, any>> {
     const prompt = taskPayload.prompt || taskPayload.title || 'Claude Execution Task';
-    const sessionId = taskPayload.sessionId || Array.from(this.attachedSessions.keys())[0] || 'default';
+    const workerId = taskPayload.workerId || 'unknown-worker';
+    const timeoutMs =
+      typeof taskPayload.timeoutMs === 'number' ? taskPayload.timeoutMs : DEFAULT_EXECUTION_TIMEOUT_MS;
+    const onOutputChunk: ((stream: 'stdout' | 'stderr', chunk: string) => void) | undefined =
+      taskPayload.onOutputChunk;
 
-    this.emitEvent('RuntimeExecutionStarted', this.manifest.id, {
-      sessionId,
-      prompt,
-    });
+    // Real multi-turn memory: the actual claude CLI supports --session-id/--resume even in
+    // non-interactive --print mode (verified: `claude --help`).
+    const conversationSessionId: string | undefined = taskPayload.conversationSessionId;
+    const isResume: boolean = !!taskPayload.resumeConversation;
 
-    const output = `[Claude Code CLI Output] Processed prompt: ${prompt}`;
+    this.emitEvent('RuntimeExecutionStarted', this.manifest.id, { workerId, prompt });
 
-    this.emitEvent('RuntimeExecutionCompleted', this.manifest.id, {
-      sessionId,
-      prompt,
-      success: true,
-    });
-
-    return {
-      success: true,
-      pluginId: this.manifest.id,
-      prompt,
-      output,
-      timestamp: new Date().toISOString(),
-    };
-  }
-
-  async cancel(sessionId: string): Promise<boolean> {
-    const session = this.attachedSessions.get(sessionId);
-    if (session) {
-      session.cancelStream();
-      this.emitEvent('RuntimeExecutionCancelled', this.manifest.id, { sessionId });
-      return true;
-    }
-    return false;
-  }
-
-  async stream(sessionId: string, input: string, options?: SessionStreamOptions): Promise<SessionStreamResult> {
-    const session = this.attachedSessions.get(sessionId);
-    if (!session) {
+    if (!this.detectionResult.available) {
+      const error = `Claude Code CLI is unavailable: ${this.detectionResult.error || 'executable not detected'}`;
+      this.emitEvent('RuntimeExecutionFailed', this.manifest.id, { workerId, prompt, reason: error });
       return {
-        completed: false,
-        cancelled: false,
+        success: false,
+        pluginId: this.manifest.id,
+        prompt,
         output: '',
-        errorOutput: `No attached session found for ID '${sessionId}' in ClaudeCodeRuntimePlugin`,
-        durationMs: 0,
+        error,
+        timestamp: new Date().toISOString(),
       };
     }
 
-    this.emitEvent('RuntimeExecutionStarted', this.manifest.id, { sessionId, prompt: input });
-    const result = await session.executeStream(input, options);
-
-    if (result.cancelled) {
-      this.emitEvent('RuntimeExecutionCancelled', this.manifest.id, { sessionId });
-    } else {
-      this.emitEvent('RuntimeExecutionCompleted', this.manifest.id, { sessionId, success: result.completed });
+    const executablePath = this.detectionResult.executablePath || 'claude';
+    const args = ['-p', prompt];
+    if (conversationSessionId) {
+      args.push(isResume ? '--resume' : '--session-id', conversationSessionId);
     }
 
-    return result;
+    try {
+      const result = await runCliProcess(this.spawner, executablePath, args, timeoutMs, onOutputChunk, (child) =>
+        this.activeChildProcesses.set(workerId, child)
+      );
+      this.activeChildProcesses.delete(workerId);
+
+      this.emitEvent(result.success ? 'RuntimeExecutionCompleted' : 'RuntimeExecutionFailed', this.manifest.id, {
+        workerId,
+        prompt,
+        success: result.success,
+        exitCode: result.exitCode,
+      });
+
+      return {
+        success: result.success,
+        pluginId: this.manifest.id,
+        prompt,
+        output: result.output,
+        error: result.success ? undefined : result.errorOutput || `Claude CLI exited with code ${result.exitCode}`,
+        exitCode: result.exitCode,
+        durationMs: result.durationMs,
+        conversationSessionId,
+        timestamp: new Date().toISOString(),
+      };
+    } catch (err: any) {
+      this.activeChildProcesses.delete(workerId);
+      const error = err.message || 'Claude CLI execution failed';
+      this.emitEvent('RuntimeExecutionFailed', this.manifest.id, { workerId, prompt, reason: error });
+      return {
+        success: false,
+        pluginId: this.manifest.id,
+        prompt,
+        output: '',
+        error,
+        timestamp: new Date().toISOString(),
+      };
+    }
+  }
+
+  async cancel(workerId: string): Promise<boolean> {
+    const child = this.activeChildProcesses.get(workerId);
+    if (!child) return false;
+    child.kill('SIGKILL');
+    this.activeChildProcesses.delete(workerId);
+    this.emitEvent('RuntimeExecutionCancelled', this.manifest.id, { workerId });
+    return true;
   }
 
   async heartbeat(): Promise<RuntimePluginHealth> {
@@ -154,14 +171,17 @@ export class ClaudeCodeRuntimePlugin extends EventEmitter implements IRuntimePlu
         cliAvailable: this.detectionResult.available,
         executablePath: this.detectionResult.executablePath || 'none',
         version: this.detectionResult.version || 'unknown',
-        attachedSessionsCount: this.attachedSessions.size,
+        activeExecutionsCount: this.activeChildProcesses.size,
       },
       lastCheck: new Date().toISOString(),
     };
   }
 
   async shutdown(): Promise<void> {
-    this.attachedSessions.clear();
+    for (const child of this.activeChildProcesses.values()) {
+      child.kill('SIGKILL');
+    }
+    this.activeChildProcesses.clear();
     this.isInitialized = false;
   }
 

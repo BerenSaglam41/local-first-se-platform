@@ -2,8 +2,8 @@ import { Kernel } from '../../src/v2/kernel/kernel';
 import { VerificationPipeline } from '../../src/v2/application/verification/verification_pipeline';
 import { IVerificationStep, VerificationStepResult } from '../../src/v2/contracts/iverification_step';
 import { VerificationContext, VerificationPolicy } from '../../src/v2/contracts/iverification_pipeline';
-import { ClaudeCodeRuntimePlugin } from '../../src/v2/application/plugins/claude/claude_code_runtime_plugin';
 import { SeOsCli } from '../../src/v2/cli/se_os_cli';
+import { createFakeClaudeCodeRuntimePlugin, createFakeClaudeSpawner, createAvailableDetector , createSafeTestProviderOverrides } from './helpers/fake_claude_process';
 import * as fs from 'fs';
 
 describe('SE-OS v2.0 Milestone 21 — Verification Pipeline Suite', () => {
@@ -24,7 +24,9 @@ describe('SE-OS v2.0 Milestone 21 — Verification Pipeline Suite', () => {
 
   async function bootKernelWithClaude(): Promise<Kernel> {
     await kernel.boot('./non_existent_config.json');
-    await kernel.getRuntimePluginSystemManager().loadAndRegisterPlugin(new ClaudeCodeRuntimePlugin(kernel.getEventStore()));
+    await kernel.getRuntimePluginSystemManager().loadAndRegisterPlugin(
+      createFakeClaudeCodeRuntimePlugin({ eventStore: kernel.getEventStore() })
+    );
     return kernel;
   }
 
@@ -154,7 +156,7 @@ describe('SE-OS v2.0 Milestone 21 — Verification Pipeline Suite', () => {
   // ─── 6. CLI Integration ──────────────────────────────────────────
 
   it('should execute CLI verify workspace, task, and project subcommands cleanly', async () => {
-    const cli = new SeOsCli();
+    const cli = new SeOsCli(createSafeTestProviderOverrides());
     await cli.boot('./non_existent_config.json');
 
     await cli.verifyWorkspace('./.se_workspaces');

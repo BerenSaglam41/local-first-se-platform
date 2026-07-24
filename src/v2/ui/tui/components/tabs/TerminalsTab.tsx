@@ -7,11 +7,13 @@ interface TerminalsTabProps {
 }
 
 export const TerminalsTab: React.FC<TerminalsTabProps> = ({ snapshot }) => {
-  const [selectedWorkerIndex, setSelectedWorkerIndex] = useState(1); // Default to Bob
+  const [selectedWorkerIndex, setSelectedWorkerIndex] = useState(0);
 
   const workers = snapshot.workers;
   const currentWorker = workers[selectedWorkerIndex] || workers[0];
-  const activeSession = snapshot.aiSessions[0];
+  // Real session for the SELECTED worker, not a hardcoded first entry — a session only exists
+  // once that specific worker has actually run something.
+  const activeSession = currentWorker ? snapshot.aiSessions.find((s) => s.workerId === currentWorker.id) : undefined;
 
   useInput((_input: string, key: any) => {
     if (key.leftArrow || key.upArrow) {
@@ -35,7 +37,7 @@ export const TerminalsTab: React.FC<TerminalsTabProps> = ({ snapshot }) => {
               backgroundColor={isSelected ? 'yellow' : undefined}
               bold={isSelected}
             >
-              [{idx + 1}] {w.name} ({w.assignedProvider || w.runtimeProvider})
+              [{idx + 1}] {w.name} ({w.assignedProvider})
             </Text>
           );
         })}
@@ -46,33 +48,33 @@ export const TerminalsTab: React.FC<TerminalsTabProps> = ({ snapshot }) => {
         <Box marginTop={1} flexDirection="column" borderStyle="double" borderColor="green" padding={1}>
           <Box justifyContent="space-between">
             <Text bold color="green">
-              TERMINAL PANE: {currentWorker.name} ({currentWorker.role}) — {currentWorker.assignedProvider || currentWorker.runtimeProvider}
+              TERMINAL: {currentWorker.name} ({currentWorker.role}) — {currentWorker.assignedProvider}
             </Text>
-            <Text color="gray">{currentWorker.terminalPane || 'tmux pane 2 (PID 48840)'}</Text>
+            <Text color="gray">{currentWorker.terminalPane}</Text>
           </Box>
 
           <Box marginY={0}>
-            <Text color="cyan">PWD: {currentWorker.workingDirectory || './src'} | Branch: {currentWorker.gitBranch || 'master'} | Command: {currentWorker.currentCommand || 'codex exec'}</Text>
+            <Text color="cyan">PWD: {currentWorker.workingDirectory || '(idle)'} | Branch: {currentWorker.gitBranch} | Command: {currentWorker.currentCommand}</Text>
           </Box>
 
-          {/* Streaming Output Box */}
+          {/* Streaming Output Box — real per-worker terminal log tail, or an honest empty state */}
           <Box marginTop={1} flexDirection="column" borderStyle="single" borderColor="gray" padding={1}>
-            <Text bold color="yellow">STREAMING TERMINAL STDOUT / STDERR LOG:</Text>
-            <Text color="gray">&gt; [PtyTransport] Connected worker session {currentWorker.id} (PID 48840)</Text>
-            <Text color="gray">&gt; [RuntimePlugin] Working directory: {currentWorker.workingDirectory || './src'}</Text>
-            <Text color="white">&gt; [RuntimePlugin] Executing: {currentWorker.currentCommand || 'codex exec'}</Text>
-            {activeSession?.streamingOutput.map((line, idx) => (
-              <Text key={idx} color={line.includes('PASSED') || line.includes('written') ? 'green' : 'white'}>
-                &gt; {line}
-              </Text>
-            ))}
-            <Text color="green">&gt; [Process] Execution active (0 exit code)</Text>
+            <Text bold color="yellow">REAL TERMINAL LOG (tail):</Text>
+            {activeSession && activeSession.streamingOutput.length > 0 ? (
+              activeSession.streamingOutput.map((line, idx) => (
+                <Text key={idx} color={line.startsWith('[exit 0]') ? 'green' : line.startsWith('[exit') ? 'red' : 'white'}>
+                  &gt; {line}
+                </Text>
+              ))
+            ) : (
+              <Text color="gray">(no output yet — this worker hasn't run a task in this session)</Text>
+            )}
           </Box>
 
           <Box marginTop={1} justifyContent="space-between">
             <Text color="gray">Status: {currentWorker.status}</Text>
             <Text color="cyan">Elapsed: {currentWorker.durationMs}ms</Text>
-            <Text color="yellow">Tokens: 1,420</Text>
+            <Text color="yellow">Tokens: {activeSession?.tokenUsage ?? 0}</Text>
           </Box>
         </Box>
       )}

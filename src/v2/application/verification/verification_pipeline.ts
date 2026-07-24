@@ -17,6 +17,7 @@ import { LintCheckStep } from './steps/lint_check_step';
 
 export class VerificationPipeline extends EventEmitter {
   private steps: IVerificationStep[] = [];
+  private lastResult?: VerificationResult;
   private defaultPolicy: VerificationPolicy = {
     requireBuild: true,
     requireTypeCheck: true,
@@ -125,7 +126,14 @@ export class VerificationPipeline extends EventEmitter {
 
     this.emitEvent('VerificationCompleted', context.taskId, { status, qualityScore });
 
+    this.lastResult = result;
     return result;
+  }
+
+  /** Real last verification outcome — used by telemetry so the UI shows what actually ran, not a
+   * hardcoded always-100 block. */
+  getLastResult(): VerificationResult | undefined {
+    return this.lastResult;
   }
 
   private emitEvent(eventType: string, aggregateId: string, payload: any): void {

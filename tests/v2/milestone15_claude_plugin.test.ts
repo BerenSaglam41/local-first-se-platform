@@ -2,6 +2,13 @@ import { Kernel } from '../../src/v2/kernel/kernel';
 import { ClaudeCliDetector } from '../../src/v2/application/plugins/claude/claude_cli_detector';
 import { ClaudeCodeRuntimePlugin } from '../../src/v2/application/plugins/claude/claude_code_runtime_plugin';
 import { SeOsCli } from '../../src/v2/cli/se_os_cli';
+import {
+  createFakeClaudeSpawner,
+  createSpawnRecorder,
+  createAvailableDetector,
+  createUnavailableDetector,
+  createSafeTestProviderOverrides,
+} from './helpers/fake_claude_process';
 import * as fs from 'fs';
 
 describe('SE-OS v2.0 Milestone 15 — Claude Code Runtime Plugin Suite', () => {
@@ -47,9 +54,7 @@ describe('SE-OS v2.0 Milestone 15 — Claude Code Runtime Plugin Suite', () => {
 
     expect(meta.id).toBe('plugin-claude-code');
     expect(meta.name).toBe('Claude Code CLI Runtime Plugin');
-    expect(meta.supportedTransports).toContain('PTY');
     expect(plugin.capabilities()).toContain('Reasoning');
-    expect(plugin.capabilities()).toContain('Streaming');
     expect(plugin.capabilities()).toContain('Cancellation');
   });
 
@@ -68,107 +73,93 @@ describe('SE-OS v2.0 Milestone 15 — Claude Code Runtime Plugin Suite', () => {
     await plugin.shutdown();
   });
 
-  // ─── 4. Session Attachment & Detachment ────────────────────────────
+  // ─── 4. Task Execution ─────────────────────────────────────────────
 
-  it('should attach and detach IRuntimeSession instances', async () => {
-    await kernel.boot('./non_existent_config.json');
-    const sessionManager = kernel.getRuntimeSessionManager();
-    const session = sessionManager.createSession('emp-bob');
-
-    const plugin = new ClaudeCodeRuntimePlugin();
+  it('should really spawn the claude executable and return its captured stdout', async () => {
+    const recorder = createSpawnRecorder();
+    const spawner = createFakeClaudeSpawner({ stdout: 'Real CLI stdout response', recorder });
+    const plugin = new ClaudeCodeRuntimePlugin(undefined, spawner, createAvailableDetector());
     await plugin.initialize();
 
-    const attached = await plugin.attachSession(session);
-    expect(attached).toBe(true);
-
-    const detached = await plugin.detachSession(session.sessionId);
-    expect(detached).toBe(true);
-
-    await plugin.shutdown();
-    session.close();
-  });
-
-  // ─── 5. Task Execution ─────────────────────────────────────────────
-
-  it('should execute prompts and return structured result', async () => {
-    const plugin = new ClaudeCodeRuntimePlugin();
-    await plugin.initialize();
-
-    const result = await plugin.execute({ prompt: 'Write a typescript interface' });
+    const result = await plugin.execute({ prompt: 'Write a typescript interface', workerId: 'emp-alice' });
     expect(result.success).toBe(true);
     expect(result.pluginId).toBe('plugin-claude-code');
-    expect(result.output).toContain('Write a typescript interface');
+    expect(result.output).toBe('Real CLI stdout response');
+
+    // Prove the prompt was actually handed to the spawned process, not just echoed back.
+    expect(recorder.calls.length).toBe(1);
+    expect(recorder.calls[0].args).toContain('Write a typescript interface');
 
     await plugin.shutdown();
   });
 
-  // ─── 6. Output Streaming & Cancellation ─────────────────────────────
-
-  it('should stream prompt output and support cancellation via attached session', async () => {
-    await kernel.boot('./non_existent_config.json');
-    const sessionManager = kernel.getRuntimeSessionManager();
-    const session = sessionManager.createSession('emp-alice');
-
-    const plugin = new ClaudeCodeRuntimePlugin();
+  it('should report an honest failure when the claude CLI is unavailable, instead of a fake success', async () => {
+    const spawner = createFakeClaudeSpawner();
+    const plugin = new ClaudeCodeRuntimePlugin(undefined, spawner, createUnavailableDetector());
     await plugin.initialize();
-    await plugin.attachSession(session);
 
-    const chunks: string[] = [];
-    const streamResult = await plugin.stream(session.sessionId, 'Refactor module', {
-      onStdoutChunk: (chunk) => chunks.push(chunk),
-      timeoutMs: 100,
-    });
-
-    expect(streamResult.completed).toBe(true);
-
-    const cancelResult = await plugin.cancel(session.sessionId);
-    expect(cancelResult).toBe(true);
+    const result = await plugin.execute({ prompt: 'Write a typescript interface', workerId: 'emp-alice' });
+    expect(result.success).toBe(false);
+    expect(result.error).toBeDefined();
 
     await plugin.shutdown();
-    session.close();
   });
 
-  // ─── 7. Domain Event Persistence ───────────────────────────────────
+  // ─── 5. Real Cancellation (keyed by workerId, see ADR-0005) ─────────
+
+  it('should really kill the in-flight process for a worker on cancel()', async () => {
+    let killed = false;
+    const hangingSpawner = () => {
+      const { EventEmitter } = require('events');
+      const child: any = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      child.kill = () => {
+        killed = true;
+        return true;
+      };
+      return child;
+    };
+
+    const plugin = new ClaudeCodeRuntimePlugin(undefined, hangingSpawner as any, createAvailableDetector());
+    await plugin.initialize();
+
+    const pending = plugin.execute({ prompt: 'long task', workerId: 'emp-alice' });
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const cancelled = await plugin.cancel('emp-alice');
+    expect(cancelled).toBe(true);
+    expect(killed).toBe(true);
+
+    await plugin.shutdown();
+  });
+
+  // ─── 6. Domain Event Persistence ───────────────────────────────────
 
   it('should emit generic Runtime* domain events with pluginId payload', async () => {
     const events: string[] = [];
-    const plugin = new ClaudeCodeRuntimePlugin();
+    const plugin = new ClaudeCodeRuntimePlugin(undefined, createFakeClaudeSpawner(), createAvailableDetector());
     await plugin.initialize();
 
-    plugin.on('RuntimePluginAttached', () => events.push('RuntimePluginAttached'));
     plugin.on('RuntimeExecutionStarted', () => events.push('RuntimeExecutionStarted'));
     plugin.on('RuntimeExecutionCompleted', () => events.push('RuntimeExecutionCompleted'));
-    plugin.on('RuntimePluginDetached', () => events.push('RuntimePluginDetached'));
 
-    await kernel.boot('./non_existent_config.json');
-    const sessionManager = kernel.getRuntimeSessionManager();
-    const session = sessionManager.createSession('emp-charlie');
+    await plugin.execute({ prompt: 'Test event emission', workerId: 'emp-charlie' });
 
-    await plugin.attachSession(session);
-    await plugin.execute({ prompt: 'Test event emission' });
-    await plugin.detachSession(session.sessionId);
-
-    expect(events).toEqual([
-      'RuntimePluginAttached',
-      'RuntimeExecutionStarted',
-      'RuntimeExecutionCompleted',
-      'RuntimePluginDetached',
-    ]);
+    expect(events).toEqual(['RuntimeExecutionStarted', 'RuntimeExecutionCompleted']);
 
     await plugin.shutdown();
-    session.close();
   });
 
-  // ─── 8. CLI Subcommands ──────────────────────────────────────────
+  // ─── 7. CLI Subcommands ──────────────────────────────────────────
 
   it('should execute CLI claude subcommands cleanly', async () => {
-    const cli = new SeOsCli();
+    const cli = new SeOsCli(createSafeTestProviderOverrides());
     await cli.boot('./non_existent_config.json');
 
     await cli.claudeStatus();
     await cli.claudeHealth();
     await cli.claudeExecute('Test CLI Prompt');
-    await cli.claudeStream('Test Stream CLI Prompt');
 
     await cli.shutdown();
   });

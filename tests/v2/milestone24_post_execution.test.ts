@@ -1,6 +1,6 @@
 import { WorkspaceScanner } from '../../src/v2/application/workspace/workspace_scanner';
 import { Kernel } from '../../src/v2/kernel/kernel';
-import { ClaudeCodeRuntimePlugin } from '../../src/v2/application/plugins/claude/claude_code_runtime_plugin';
+import { createFakeClaudeCodeRuntimePlugin } from './helpers/fake_claude_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -37,7 +37,7 @@ describe('SE-OS v2.0 Milestone 24 — Post-Execution Experience & Workspace Expl
     const kernel = new Kernel();
     await kernel.boot('./non_existent_config.json');
     await kernel.getRuntimePluginSystemManager().loadAndRegisterPlugin(
-      new ClaudeCodeRuntimePlugin(kernel.getEventStore())
+      createFakeClaudeCodeRuntimePlugin({ eventStore: kernel.getEventStore() })
     );
 
     const orchestrator = kernel.getProjectLifecycleOrchestrator();

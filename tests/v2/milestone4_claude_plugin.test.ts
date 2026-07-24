@@ -3,6 +3,7 @@ import { ClaudeRuntimePlugin } from '../../plugins/claude-cli/claude_runtime_plu
 import { ClaudeSession } from '../../plugins/claude-cli/claude_session';
 import { ClaudeExecutor } from '../../plugins/claude-cli/claude_executor';
 import { SeOsCli } from '../../src/v2/cli/se_os_cli';
+import { createFakeClaudeSpawner, createAvailableDetector , createSafeTestProviderOverrides } from './helpers/fake_claude_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -109,7 +110,7 @@ describe('SE-OS v2.0 Milestone 4 — Claude CLI Reference Runtime Plugin Suite',
   });
 
   it('should execute plugin CLI list, health, attach, and detach subcommands cleanly', async () => {
-    const cli = new SeOsCli();
+    const cli = new SeOsCli(createSafeTestProviderOverrides());
     await cli.boot('./non_existent_config.json');
     await cli.pluginsList();
     await cli.pluginsHealth();

@@ -5,6 +5,7 @@ import { RuntimePluginLoader } from '../../src/v2/application/plugins/runtime_pl
 import { MockRuntimePlugin } from '../../src/v2/application/plugins/mock_runtime_plugin';
 import { RuntimePluginManifest, IRuntimePlugin } from '../../src/v2/contracts/iruntime_plugin_system';
 import { SeOsCli } from '../../src/v2/cli/se_os_cli';
+import { createFakeClaudeSpawner, createAvailableDetector , createSafeTestProviderOverrides } from './helpers/fake_claude_process';
 import * as fs from 'fs';
 
 describe('SE-OS v2.0 Milestone 14 — Runtime Plugin System Suite', () => {
@@ -31,9 +32,7 @@ describe('SE-OS v2.0 Milestone 14 — Runtime Plugin System Suite', () => {
 
     const meta = plugin.metadata();
     expect(meta.id).toBe('mock-runtime-plugin');
-    expect(meta.supportedTransports).toContain('PTY');
     expect(meta.capabilities).toContain('Reasoning');
-    expect(meta.capabilities).toContain('Streaming');
     expect(meta.capabilities).toContain('Cancellation');
 
     const health = await plugin.heartbeat();
@@ -89,27 +88,17 @@ describe('SE-OS v2.0 Milestone 14 — Runtime Plugin System Suite', () => {
     expect(registry.getPlugin('mock-runtime-plugin')).toBeUndefined();
   });
 
-  // ─── 4. Session Attachment & Execution ────────────────────────────
+  // ─── 4. Real Execution (no session layer — see ADR-0005) ──────────
 
-  it('should attach sessions and execute tasks through MockRuntimePlugin', async () => {
+  it('should execute tasks directly through MockRuntimePlugin, keyed by workerId', async () => {
     await kernel.boot('./non_existent_config.json');
     const manager = kernel.getRuntimePluginSystemManager();
     const activePlugin = manager.getPlugin('mock-runtime-plugin')!;
     expect(activePlugin).toBeDefined();
 
-    const sessionManager = kernel.getRuntimeSessionManager();
-    const session = sessionManager.createSession('emp-worker-01');
-
-    const attached = await activePlugin.attachSession(session);
-    expect(attached).toBe(true);
-
-    const execResult = await activePlugin.execute({ title: 'Build Core Module' });
+    const execResult = await activePlugin.execute({ title: 'Build Core Module', workerId: 'emp-worker-01' });
     expect(execResult.success).toBe(true);
     expect(execResult.output).toContain('Build Core Module');
-
-    const detached = await activePlugin.detachSession(session.sessionId);
-    expect(detached).toBe(true);
-    session.close();
   });
 
   // ─── 5. Plugin Health Monitoring ──────────────────────────────────
@@ -153,7 +142,7 @@ describe('SE-OS v2.0 Milestone 14 — Runtime Plugin System Suite', () => {
   // ─── 7. CLI Subcommands ──────────────────────────────────────────
 
   it('should execute CLI plugin subcommands cleanly', async () => {
-    const cli = new SeOsCli();
+    const cli = new SeOsCli(createSafeTestProviderOverrides());
     await cli.boot('./non_existent_config.json');
 
     await cli.runtimePluginList();

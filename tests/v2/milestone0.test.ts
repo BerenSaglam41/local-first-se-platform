@@ -9,8 +9,6 @@ import { IPluginRegistry } from '../../src/v2/contracts/iplugin_registry';
 import { PluginRegistry } from '../../src/v2/application/plugins/plugin_registry';
 import { ISharedMemory } from '../../src/v2/contracts/ishared_memory';
 import { SharedMemorySkeleton } from '../../src/v2/domain/shared-memory/shared_memory_skeleton';
-import { IWorkerRuntime } from '../../src/v2/contracts/iworker_runtime';
-import { WorkerRuntimeSkeleton } from '../../src/v2/application/runtime/worker_runtime_skeleton';
 import { IContextCompiler } from '../../src/v2/contracts/icontext_compiler';
 import { ContextCompilerSkeleton } from '../../src/v2/application/context-compiler/context_compiler_skeleton';
 
@@ -24,7 +22,6 @@ describe('SE-OS v2.0 Milestone 0 Skeleton Suite', () => {
     container.registerSingleton<IScheduler>('IScheduler', new SchedulerSkeleton());
     container.registerSingleton<IPluginRegistry>('IPluginRegistry', new PluginRegistry());
     container.registerSingleton<ISharedMemory>('ISharedMemory', new SharedMemorySkeleton());
-    container.register<IWorkerRuntime>('IWorkerRuntime', () => new WorkerRuntimeSkeleton('emp-alice'));
     container.registerSingleton<IContextCompiler>('IContextCompiler', new ContextCompilerSkeleton());
   });
 
@@ -34,7 +31,6 @@ describe('SE-OS v2.0 Milestone 0 Skeleton Suite', () => {
     const scheduler = container.resolve<IScheduler>('IScheduler');
     const registry = container.resolve<IPluginRegistry>('IPluginRegistry');
     const memory = container.resolve<ISharedMemory>('ISharedMemory');
-    const runtime = container.resolve<IWorkerRuntime>('IWorkerRuntime');
     const compiler = container.resolve<IContextCompiler>('IContextCompiler');
 
     expect(bus).toBeDefined();
@@ -42,7 +38,6 @@ describe('SE-OS v2.0 Milestone 0 Skeleton Suite', () => {
     expect(scheduler).toBeDefined();
     expect(registry).toBeDefined();
     expect(memory).toBeDefined();
-    expect(runtime).toBeDefined();
     expect(compiler).toBeDefined();
   });
 

@@ -21,9 +21,6 @@ export class RuntimePluginLoader {
     if (!manifest.version || manifest.version.trim() === '') {
       errors.push('Manifest version is missing or empty');
     }
-    if (!manifest.supportedTransports || manifest.supportedTransports.length === 0) {
-      errors.push('Manifest must specify at least one supported transport');
-    }
     if (!manifest.capabilities || manifest.capabilities.length === 0) {
       warnings.push('Manifest specifies zero capabilities');
     }

@@ -9,7 +9,9 @@ import { AutonomousPlanner } from '../../src/v2/application/planning/autonomous_
 import { PromptCache } from '../../src/v2/application/policy/prompt_cache';
 import { ExecutionPolicyEngine } from '../../src/v2/application/policy/execution_policy_engine';
 import { DepartmentOrchestrator } from '../../src/v2/application/organization/department_orchestrator';
+import { WorkerStore } from '../../src/v2/application/worker/worker_store';
 import { SeOsCli } from '../../src/v2/cli/se_os_cli';
+import { createFakeClaudeSpawner, createAvailableDetector , createSafeTestProviderOverrides } from './helpers/fake_claude_process';
 import { BusinessGoal, AnalyzedGoal, PlanningSource } from '../../src/v2/contracts/iplanning_engine';
 import * as fs from 'fs';
 
@@ -144,7 +146,7 @@ describe('SE-OS v2.0 Milestone 12 — Autonomous Planning & Reasoning Engine Sui
   it('should select worker policy and departments via policy engine', async () => {
     const policyEngine = new ExecutionPolicyEngine();
     policyEngine.setProfile('Performance');
-    const deptOrch = new DepartmentOrchestrator();
+    const deptOrch = new DepartmentOrchestrator(new WorkerStore());
 
     const analyzer = new GoalAnalyzer();
     const analyzed = await analyzer.analyze(jwtGoal);
@@ -196,7 +198,7 @@ describe('SE-OS v2.0 Milestone 12 — Autonomous Planning & Reasoning Engine Sui
 
   it('should produce a complete MissionPlan from a business goal with planningSource', async () => {
     const policyEngine = new ExecutionPolicyEngine();
-    const deptOrch = new DepartmentOrchestrator();
+    const deptOrch = new DepartmentOrchestrator(new WorkerStore());
     const planner = new AutonomousPlanner(undefined, undefined, policyEngine, deptOrch);
 
     const plan = await planner.planMission(jwtGoal);
@@ -287,7 +289,7 @@ describe('SE-OS v2.0 Milestone 12 — Autonomous Planning & Reasoning Engine Sui
   // ─── 14. CLI Subcommands ───────────────────────────────────────
 
   it('should execute CLI plan subcommands cleanly', async () => {
-    const cli = new SeOsCli();
+    const cli = new SeOsCli(createSafeTestProviderOverrides());
     await cli.boot('./non_existent_config.json');
     await cli.planMission('Add JWT Auth', 'Implement JWT authentication with login and signup');
     await cli.planAnalyze('Add health check', 'Implement API health endpoint');

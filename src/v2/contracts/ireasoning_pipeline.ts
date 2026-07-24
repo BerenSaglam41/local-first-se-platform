@@ -3,10 +3,18 @@ export interface ReasoningContext {
   symbolDefinitions?: string[];
   previousADRs?: string[];
   constraints?: string[];
+  /** Plugins that support real multi-turn memory (verified: the actual claude CLI's
+   * --session-id/--resume, even in non-interactive --print mode) use this for genuine model-
+   * level continuity across a project's conversation turns, not just prompt-stuffed history. */
+  conversationSessionId?: string;
+  resumeConversation?: boolean;
 }
 
 export interface ReasoningRequest {
   requestId: string;
+  /** Real task id, when this request is on behalf of a specific mission task (as opposed to
+   * ad-hoc planning reasoning, which has none). */
+  taskId?: string;
   missionId: string;
   workerId: string;
   goal: string;
@@ -14,12 +22,11 @@ export interface ReasoningRequest {
   priority?: 'P0' | 'P1' | 'P2';
   budgetTokens?: number;
   timeoutMs?: number;
-  streaming?: boolean;
 }
 
 export interface ReasoningExecutionMetadata {
   pluginId: string;
-  sessionId: string;
+  workerId: string;
   durationMs: number;
   tokenUsage?: number;
 }

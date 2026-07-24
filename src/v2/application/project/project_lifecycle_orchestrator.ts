@@ -4,6 +4,7 @@ import * as path from 'path';
 import {
   ProjectExecutionState,
   ProjectExecutionResult,
+  ProjectConversationTurn,
 } from '../../contracts/iproject_lifecycle_orchestrator';
 import { IProjectLifecycleStrategy } from '../../contracts/iproject_lifecycle_strategy';
 import { IEventStore } from '../../contracts/ievent_store';
@@ -30,6 +31,7 @@ export class ProjectLifecycleOrchestrator extends EventEmitter {
       executionPlans: {},
       executionResults: {},
       startTime,
+      conversationHistory: [],
     };
 
     this.activeProjects.set(projectId, initialState);
@@ -46,6 +48,12 @@ export class ProjectLifecycleOrchestrator extends EventEmitter {
         this.emitEvent('MissionExecutionStarted', projectId, { plansCount: Object.keys(result.state.executionPlans).length });
         this.emitEvent('MissionExecutionCompleted', projectId, { resultsCount: Object.keys(result.state.executionResults).length });
         this.emitEvent('ProjectExecutionCompleted', projectId, { summary: result.summary });
+
+        const wsPathForState = context?.absolutePath || './.se_workspaces/ws-t-104';
+        result.state.workspacePath = wsPathForState;
+        result.state.conversationHistory = [
+          { turnId: `turn-${Date.now()}`, goal, timestamp: new Date().toISOString(), summary: result.summary },
+        ];
 
         // Generate REPORT.md in workspace
         try {
@@ -119,6 +127,88 @@ export class ProjectLifecycleOrchestrator extends EventEmitter {
 
       this.projectHistory.set(projectId, failedResult);
       this.emitEvent('ProjectExecutionFailed', projectId, { error: err.message });
+      return failedResult;
+    }
+  }
+
+  /**
+   * Continues an existing project with a follow-up goal instead of starting a fresh one — this
+   * is what makes "Create REST API" -> "Add JWT" -> "Move database to PostgreSQL" an ongoing
+   * engineering conversation rather than three unrelated one-shot runs. Reuses the same
+   * projectId and the same real workspace path; the follow-up mission is scoped against what
+   * already exists there, and the turn is appended to conversationHistory rather than replacing
+   * it.
+   */
+  async continueProject(projectId: string, followUpGoal: string): Promise<ProjectExecutionResult> {
+    const priorResult = this.projectHistory.get(projectId);
+    const priorState = this.activeProjects.get(projectId) || priorResult?.state;
+
+    if (!priorState) {
+      const error = `No existing project found with id '${projectId}' to continue. Use runProject() to start one.`;
+      const failedState: ProjectExecutionState = {
+        projectId,
+        goal: followUpGoal,
+        status: 'FAILED',
+        executionPlans: {},
+        executionResults: {},
+        startTime: new Date().toISOString(),
+        conversationHistory: [],
+      };
+      return { success: false, state: failedState, summary: error, reports: {}, error };
+    }
+
+    this.emitEvent('ProjectExecutionStarted', projectId, { goal: followUpGoal, continuation: true });
+
+    try {
+      const result = await this.strategy.executeProjectLifecycle(projectId, followUpGoal, {
+        absolutePath: priorState.workspacePath,
+        isFollowUp: true,
+        conversationHistory: priorState.conversationHistory,
+      });
+
+      const turn: ProjectConversationTurn = {
+        turnId: `turn-${Date.now()}`,
+        goal: followUpGoal,
+        timestamp: new Date().toISOString(),
+        summary: result.summary,
+      };
+
+      const mergedState: ProjectExecutionState = {
+        ...priorState,
+        goal: followUpGoal,
+        status: result.state.status,
+        executionPlans: { ...priorState.executionPlans, ...result.state.executionPlans },
+        executionResults: { ...priorState.executionResults, ...result.state.executionResults },
+        endTime: result.state.endTime,
+        workspacePath: priorState.workspacePath,
+        conversationHistory: [...priorState.conversationHistory, turn],
+      };
+
+      const mergedResult: ProjectExecutionResult = { ...result, state: mergedState };
+      this.projectHistory.set(projectId, mergedResult);
+
+      this.emitEvent(
+        result.success ? 'ProjectExecutionCompleted' : 'ProjectExecutionFailed',
+        projectId,
+        { summary: result.summary, continuation: true }
+      );
+
+      return mergedResult;
+    } catch (err: any) {
+      const failedState: ProjectExecutionState = {
+        ...priorState,
+        status: 'FAILED',
+        endTime: new Date().toISOString(),
+      };
+      const failedResult: ProjectExecutionResult = {
+        success: false,
+        state: failedState,
+        summary: `Project '${projectId}' continuation failed: ${err.message}`,
+        reports: priorResult?.reports || {},
+        error: err.message,
+      };
+      this.projectHistory.set(projectId, failedResult);
+      this.emitEvent('ProjectExecutionFailed', projectId, { error: err.message, continuation: true });
       return failedResult;
     }
   }

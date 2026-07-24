@@ -1,7 +1,7 @@
-import { ProviderManager } from '../../src/v2/application/providers/provider_manager';
 import { PhysicalDiskVerifier } from '../../src/v2/application/verification/physical_disk_verifier';
 import { Kernel } from '../../src/v2/kernel/kernel';
-import { ClaudeCodeRuntimePlugin } from '../../src/v2/application/plugins/claude/claude_code_runtime_plugin';
+import { registerDefaultProviders } from '../../src/v2/application/providers/default_provider_bootstrap';
+import { createFakeClaudeCodeRuntimePlugin, createAvailableDetector , createSafeTestProviderOverrides } from './helpers/fake_claude_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -17,22 +17,29 @@ describe('SE-OS v2.0 Milestone 25 — Multi-Provider AI Team & Workspace Transpa
     } catch (e) {}
   });
 
-  // ─── 1. ProviderManager Verification ─────────────────────────────────
+  // ─── 1. Real ProviderRegistry & per-worker assignment ─────────────────
 
-  it('should list all installed AI providers and worker role provider assignments', () => {
-    const pm = new ProviderManager();
-    const providers = pm.getProviders();
+  it('should list all real registered AI providers and per-worker provider assignments', async () => {
+    const kernel = new Kernel();
+    await kernel.boot('./non_existent_config.json');
+    await registerDefaultProviders(kernel, createSafeTestProviderOverrides());
 
+    const providers = kernel.getProviderRegistry().listProviders();
     expect(providers.length).toBeGreaterThanOrEqual(6);
-    expect(providers.some((p) => p.name === 'Claude Code CLI')).toBe(true);
-    expect(providers.some((p) => p.name === 'Codex CLI')).toBe(true);
-    expect(providers.some((p) => p.name === 'Gemini CLI')).toBe(true);
-    expect(providers.some((p) => p.name === 'Antigravity AI Engine')).toBe(true);
+    expect(providers.some((p) => p.id === 'plugin-claude-code')).toBe(true);
+    expect(providers.some((p) => p.id === 'plugin-codex-cli')).toBe(true);
+    expect(providers.some((p) => p.id === 'plugin-gemini-cli')).toBe(true);
+    expect(providers.some((p) => p.id === 'plugin-antigravity')).toBe(true);
 
-    const assignments = pm.getAssignments();
-    expect(assignments.some((a) => a.workerName === 'Alice' && a.assignedProviderId === 'claude-code-cli')).toBe(true);
-    expect(assignments.some((a) => a.workerName === 'Bob' && a.assignedProviderId === 'codex-cli')).toBe(true);
-    expect(assignments.some((a) => a.workerName === 'Charlie' && a.assignedProviderId === 'gemini-cli')).toBe(true);
+    const claude = providers.find((p) => p.id === 'plugin-claude-code');
+    expect(claude?.installed).toBe(true);
+
+    const workerStore = kernel.getWorkerStore();
+    expect(workerStore.get('emp-alice')?.assignedProviderId).toBe('plugin-claude-code');
+    expect(workerStore.get('emp-bob')?.assignedProviderId).toBe('plugin-codex-cli');
+    expect(workerStore.get('emp-charlie')?.assignedProviderId).toBe('plugin-gemini-cli');
+
+    await kernel.shutdown();
   });
 
   // ─── 2. PhysicalDiskVerifier Verification ──────────────────────────────
@@ -56,7 +63,7 @@ describe('SE-OS v2.0 Milestone 25 — Multi-Provider AI Team & Workspace Transpa
     const kernel = new Kernel();
     await kernel.boot('./non_existent_config.json');
     await kernel.getRuntimePluginSystemManager().loadAndRegisterPlugin(
-      new ClaudeCodeRuntimePlugin(kernel.getEventStore())
+      createFakeClaudeCodeRuntimePlugin({ eventStore: kernel.getEventStore() })
     );
 
     const orchestrator = kernel.getProjectLifecycleOrchestrator();

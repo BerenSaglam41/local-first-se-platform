@@ -93,8 +93,24 @@
 [Milestone 26: Tabbed Interactive Chat-Driven Operating System] ──> COMPLETED
                     │
                     ▼
-[Milestone 27: Command Palette, Focus Mode & Event Control]
+[Milestone 27: Real Execution Core] ──> COMPLETED
+                    │
+                    ▼
+[Milestone 28: Multi-Provider Workforce & Interactive Operating Experience] ──> COMPLETED
+                    │
+                    ▼
+[Milestone 29: Real Verification Pipeline]
+                    │
+                    ▼
+[Milestone 30: Workspace Transparency Polish]
+                    │
+                    ▼
+[Milestone 31: TUI Interaction Controls & Command Palette]
 ```
+
+> **Reprioritization note (Milestone 27, 2026-07-24)**: A full-repository audit found that despite Milestones 0–26 being marked COMPLETED, the core "AI worker does real engineering work" claim was fake at nearly every layer that mattered — `ClaudeCodeRuntimePlugin.execute()` never shelled out to the CLI, `WorkerExecutionEngine` discarded the reasoning pipeline's output and wrote an identical hardcoded `index.ts`/`README.md` template regardless of the goal, 4 of 6 verification steps unconditionally passed, and the TUI's telemetry/terminal panes were fed from hardcoded fixture data. The originally planned "Milestone 27: Command Palette, Focus Mode & Event Control" was deferred in favor of fixing this first.
+>
+> **Reprioritization note (Milestone 28, 2026-07-24)**: after M27, the user redirected priority again: the biggest remaining weakness was judged to be usability, not infrastructure — "SE-OS still feels like a collection of dashboards instead of an operating system." The originally-planned M28–33 split (real verification / real telemetry / per-worker providers / real terminals / conversational continuity / worker identity, each as its own milestone) was collapsed into one combined Milestone 28 covering multi-provider workforce, interactive workers, real conversations, real terminals, provider management, worker profiles, and dynamic team sizing — everything needed to make SE-OS feel like an operating system for a real AI engineering team rather than a project generator with a nicer dashboard. Real verification and further TUI polish remain as M29–31.
 
 ---
 
@@ -505,6 +521,40 @@
 - **Complexity**: High
 - **Conversational Multi-Tab TUI**: Organizes SE-OS into 7 clean tab views (`[1] Dashboard`, `[2] Workers`, `[3] Workspace`, `[4] Terminals`, `[5] Chat`, `[6] Verification`, `[7] Logs`). Interactive `Chat` tab allows users to type feature requests (`"Add JWT Authentication"`) that dispatch tasks to workers and evolve projects continuously without quitting or restarting SE-OS.
 - **Acceptance Criteria**: 7-tab TUI navigation, host binary provider auto-detection (`which`), per-worker streaming terminal output, real-time file edit badges (`Modified by Bob (Codex CLI) 16:40:01 +28 lines`), continuous chat prompt handling, 255/255 tests passing across 48 test suites.
+
+---
+
+### Milestone 27: Real Execution Core (COMPLETED)
+- **Objective**: Replace the two most consequential fakes in the execution pipeline — a runtime plugin that claimed to run the Claude Code CLI but returned a canned string, and a worker execution engine that ran the real reasoning pipeline but then discarded its output in favor of a fixed template — with real, verifiable behavior.
+- **Deliverables**:
+  - `src/v2/application/plugins/claude/claude_code_runtime_plugin.ts` — `execute()` now really spawns the detected `claude` executable (injectable `ClaudeProcessSpawner`, default `child_process.spawn`), captures real stdout/stderr/exit code with a timeout, and returns an honest `success: false` (not a fabricated success) when the CLI is unavailable. `ClaudeCliDetector` is now also injectable so plugin behavior no longer depends on whether `claude` happens to be on the host's PATH.
+  - `src/v2/application/worker/execution_response_parser.ts` (new) — parses real provider output for fenced code blocks carrying a `// FILE: relative/path` header (any comment syntax) into concrete file mutations, rejecting absolute paths and `..` traversal.
+  - `src/v2/application/worker/worker_execution_engine.ts` — builds an explicit code-generation prompt from the task goal, parses the reasoning provider's actual response via `ExecutionResponseParser`, and applies the files it actually contains. When a response has no parseable `// FILE:` blocks (prose, refusal, provider error), it now honestly persists the raw response to `RESPONSE.md` instead of fabricating `index.ts`/`README.md` content unrelated to what the provider said.
+  - `src/v2/cli/se_os_cli.ts` — threads an optional spawner/detector through to `ClaudeCodeRuntimePlugin` so callers (and tests) can control CLI invocation without editing the plugin itself.
+  - `tests/v2/helpers/fake_claude_process.ts` (new) — shared fake spawner/detector used by every existing test that registers the plugin, so `npm test` stays fast, deterministic, and free of live API calls while production code still shells out for real by default.
+- **Dependencies**: Milestone 26
+- **Complexity**: Medium
+- **Verification performed**: `npm run build` clean; `npm test` 256/256 passing (one pre-existing, unrelated flaky legacy suite — `tests/vfs_slicer.test.ts`, a tree-sitter native-module timing issue reproducible on unmodified `master` too — documented, not in scope). Additionally ran two live, non-mocked smoke tests against the real installed `claude` CLI: (1) direct `ClaudeCodeRuntimePlugin.execute()` round-trip returning a real `"PONG"` response in ~6s; (2) full `WorkerExecutionEngine.executeTask()` path for the goal "Write a single TypeScript file exporting a function isEven(n: number): boolean", which produced a real `src/isEven.ts` containing a correct, goal-specific implementation — not a template.
+- **Acceptance Criteria**: A worker's generated files reflect what the configured AI provider actually said for the specific goal given, not a fixed string; an unavailable/failing provider is reported as a failure, never a fake success.
+
+---
+
+### Milestone 28: Multi-Provider Workforce & Interactive Operating Experience (COMPLETED)
+- **Objective**: Transform SE-OS from "a dashboard" into a real AI engineering operating system — real per-worker AI providers (not one shared global runtime), real interactive worker controls, real ongoing conversations instead of one-shot goal→done, real per-worker terminals (including real tmux), real provider management, real worker profiles, and dynamic (not fixed) team sizing.
+- **Deliverables**:
+  - Provider architecture: `src/v2/application/plugins/cli_process_executor.ts`, `cli_detector.ts`, `cli_runtime_plugin.ts` (generic real CLI plugin), `src/v2/application/providers/provider_catalog.ts`, `provider_registry.ts`, `worker_provider_assignment_store.ts`, `default_provider_bootstrap.ts`, `src/v2/application/reasoning/worker_aware_runtime_selection_strategy.ts`. Deleted the fake `provider_manager.ts`/`provider_detector.ts`.
+  - Worker activity & terminals: `src/v2/application/worker/worker_activity_registry.ts`, `worker_terminal_log.ts`; real `src/v2/infrastructure/dashboard/tmux_integration.ts`.
+  - Interactive actions: `ReasoningCoordinator.cancelForWorker()` (kills the real spawned process, not just a session flag), `SeOsCli.workerTalk/workerInterrupt/workerPause/workerResume/workerChangeProvider/providersList/tmuxLaunch`.
+  - Real conversations: `ProjectLifecycleOrchestrator.continueProject()`, `ProjectConversationTurn`/`conversationHistory`/`workspacePath` on `ProjectExecutionState`, real `--session-id`/`--resume` support in `ClaudeCodeRuntimePlugin` (verified against the actual CLI).
+  - Dynamic sizing: `src/v2/application/planning/team_size_estimator.ts`, rewritten `default_mission_planning_strategy.ts` (3/6/10/15-task tiers).
+  - Real telemetry: rewritten `telemetry_aggregator.ts`; `VerificationPipeline.getLastResult()`; a real `subscribe()` added to `IEventStore`/`SqliteEventStore` (previously missing entirely — the telemetry event feed was always silently empty behind a hardcoded fallback).
+  - TUI: `WorkersTab`/`TerminalsTab` now render real fields and real keybindings (I interrupt, R restart, P pause, U resume); `ChatTab` shows the real execution summary instead of scripted "ALICE"/"BOB" replies.
+  - `tests/v2/milestone28_multi_provider_workforce.test.ts` (new, 16 cases) plus updates across ~25 existing test files for the expanded default workforce (3→5 workers) and dynamic task counts.
+- **Dependencies**: Milestone 27
+- **Complexity**: Very High
+- **Scope decisions**: task reassignment mid-mission and full mission-chain Claude session threading were deliberately deferred — see the Scope notes in `CHANGELOG.md` v2.0.0-m28 for why.
+- **Verification performed**: `npm run build` (tsc + esbuild bundle) clean; `npm test` 272/272 passing across two consecutive runs (only the pre-existing, unrelated `vfs_slicer.test.ts` flake observed, same as M27). Multiple real, non-mocked smoke tests during development: real `codex`/`gemini` CLIs were discovered actually installed on the dev machine and used to validate that per-worker provider routing and honest-failure detection behave correctly against genuinely different real binaries, not just the one Claude CLI.
+- **Acceptance Criteria**: no two workers share a provider by construction (each has its own `WorkerProviderAssignmentStore` entry); interrupting a worker really kills its OS process; a second/third chat message continues the same project id and workspace; `tmux attach` shows real per-worker output; provider list never reports an uninstalled CLI as installed; the same "REST API" goal decomposes to 6 tasks but "enterprise compliance-grade billing system" decomposes to 15.
 
 ---
 

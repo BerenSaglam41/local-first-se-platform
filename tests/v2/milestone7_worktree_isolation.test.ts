@@ -1,6 +1,7 @@
 import { Kernel } from '../../src/v2/kernel/kernel';
 import { GitWorktreeManager } from '../../src/v2/infrastructure/workspace/git_worktree_manager';
 import { SeOsCli } from '../../src/v2/cli/se_os_cli';
+import { createFakeClaudeSpawner, createAvailableDetector , createSafeTestProviderOverrides } from './helpers/fake_claude_process';
 import * as fs from 'fs';
 
 describe('SE-OS v2.0 Milestone 7 — Git Worktree Isolation Suite', () => {
@@ -70,7 +71,7 @@ describe('SE-OS v2.0 Milestone 7 — Git Worktree Isolation Suite', () => {
   });
 
   it('should execute CLI worktree list, create, destroy, attach, detach, and branches subcommands cleanly', async () => {
-    const cli = new SeOsCli();
+    const cli = new SeOsCli(createSafeTestProviderOverrides());
     await cli.boot('./non_existent_config.json');
     await cli.worktreeCreate('alice', 'm99');
     const list = (cli as any).kernel.getWorkspaceEngine().getGitWorktreeManager().listWorktrees();

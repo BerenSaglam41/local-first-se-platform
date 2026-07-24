@@ -1,6 +1,6 @@
 import { Kernel } from '../../src/v2/kernel/kernel';
-import { ClaudeCodeRuntimePlugin } from '../../src/v2/application/plugins/claude/claude_code_runtime_plugin';
 import { SeOsCli } from '../../src/v2/cli/se_os_cli';
+import { createFakeClaudeCodeRuntimePlugin, createFakeClaudeSpawner, createAvailableDetector , createSafeTestProviderOverrides } from './helpers/fake_claude_process';
 import * as fs from 'fs';
 
 describe('SE-OS v2.0 Vertical Slice 1 — End-to-End Autonomous Project Execution Suite', () => {
@@ -22,7 +22,7 @@ describe('SE-OS v2.0 Vertical Slice 1 — End-to-End Autonomous Project Executio
   async function bootKernelWithClaude(): Promise<Kernel> {
     await kernel.boot('./non_existent_config.json');
     await kernel.getRuntimePluginSystemManager().loadAndRegisterPlugin(
-      new ClaudeCodeRuntimePlugin(kernel.getEventStore())
+      createFakeClaudeCodeRuntimePlugin({ eventStore: kernel.getEventStore() })
     );
     return kernel;
   }
@@ -62,7 +62,7 @@ describe('SE-OS v2.0 Vertical Slice 1 — End-to-End Autonomous Project Executio
   // ─── 2. CLI End-to-End Project Execution Integration ──────────────
 
   it('should run project execution via CLI projectRun helper cleanly', async () => {
-    const cli = new SeOsCli();
+    const cli = new SeOsCli(createSafeTestProviderOverrides());
     await cli.boot('./non_existent_config.json');
 
     await cli.projectRun('Create a REST API for User Management');

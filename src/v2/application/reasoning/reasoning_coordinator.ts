@@ -6,12 +6,20 @@ import {
   ReasoningPolicy,
 } from '../../contracts/ireasoning_pipeline';
 import { IRuntimeSelectionStrategy } from '../../contracts/iruntime_selection_strategy';
-import { DefaultRuntimeSelectionStrategy } from './runtime_selection_strategy';
+import { WorkerAwareRuntimeSelectionStrategy } from './worker_aware_runtime_selection_strategy';
 import { RuntimePluginSystemManager } from '../plugins/runtime_plugin_system_manager';
-import { RuntimeSessionManager } from '../session/runtime_session_manager';
+import { WorkerStore } from '../worker/worker_store';
 import { IEventStore } from '../../contracts/ievent_store';
-import { SessionStreamOptions } from '../../contracts/iruntime_session';
+import { WorkerTerminalLog } from '../worker/worker_terminal_log';
 
+/**
+ * Executes real reasoning requests through whichever plugin is assigned to the request's worker.
+ * At most one request per real, registered worker runs at a time — enforced by Worker.
+ * beginExecution() itself (see ADR-0005), not just by callers being careful. Ad-hoc planning
+ * reasoning (workerId not present in WorkerStore, e.g. AutonomousPlanner's 'emp-planner') passes
+ * through ungated: it isn't "an employee executing a task," so the single-flight guarantee
+ * doesn't apply to it.
+ */
 export class ReasoningCoordinator extends EventEmitter {
   private selectionStrategy: IRuntimeSelectionStrategy;
   private activeRequests = new Map<string, ReasoningRequest>();
@@ -24,21 +32,47 @@ export class ReasoningCoordinator extends EventEmitter {
 
   constructor(
     private pluginSystemManager: RuntimePluginSystemManager,
-    private sessionManager: RuntimeSessionManager,
+    private workerStore: WorkerStore,
     private eventStore?: IEventStore,
-    selectionStrategy?: IRuntimeSelectionStrategy
+    selectionStrategy?: IRuntimeSelectionStrategy,
+    private terminalLog?: WorkerTerminalLog
   ) {
     super();
-    this.selectionStrategy =
-      selectionStrategy || new DefaultRuntimeSelectionStrategy(pluginSystemManager);
+    this.selectionStrategy = selectionStrategy || new WorkerAwareRuntimeSelectionStrategy(pluginSystemManager, workerStore);
   }
 
-  async requestReasoning(
-    request: ReasoningRequest,
-    streamOptions?: SessionStreamOptions
-  ): Promise<ReasoningResult> {
+  /** Real cancellation: kills the worker's actual in-flight process via the owning plugin. */
+  async cancelForWorker(workerId: string): Promise<boolean> {
+    const worker = this.workerStore.get(workerId);
+    const execution = worker?.activeExecution;
+    if (!worker || !execution) return false;
+
+    const plugin = this.pluginSystemManager.getPlugin(execution.pluginId);
+    await plugin?.cancel(workerId);
+
+    this.activeRequests.delete(execution.requestId);
+    worker.completeExecution('INTERRUPTED', {
+      durationMs: Date.now() - new Date(execution.startedAt).getTime(),
+    });
+    this.terminalLog?.writeLine(workerId, `\n[${new Date().toISOString()}] ^C interrupted by user`);
+    this.emitEvent('ReasoningCancelled', execution.requestId, { workerId });
+    return true;
+  }
+
+  getActiveExecutionForWorker(workerId: string) {
+    return this.workerStore.get(workerId)?.activeExecution;
+  }
+
+  async requestReasoning(request: ReasoningRequest): Promise<ReasoningResult> {
     if (this.activeRequests.size >= this.defaultPolicy.maxConcurrentRequests) {
       const err = `Reasoning concurrency limit reached (${this.defaultPolicy.maxConcurrentRequests})`;
+      this.emitEvent('ReasoningFailed', request.requestId, { reason: err });
+      return { success: false, error: err };
+    }
+
+    const worker = this.workerStore.get(request.workerId);
+    if (worker?.isBusy) {
+      const err = `Worker '${request.workerId}' is already executing task '${worker.activeExecution!.taskId}' — cannot start a concurrent request.`;
       this.emitEvent('ReasoningFailed', request.requestId, { reason: err });
       return { success: false, error: err };
     }
@@ -58,88 +92,76 @@ export class ReasoningCoordinator extends EventEmitter {
       return { success: false, error: err };
     }
 
-    const session = this.sessionManager.getOrCreateSessionForWorker(request.workerId);
-    await plugin.attachSession(session);
+    const startedAt = new Date().toISOString();
+    if (worker) {
+      worker.beginExecution({
+        executionId: `exec-${request.requestId}`,
+        requestId: request.requestId,
+        taskId: request.taskId || request.requestId,
+        goal: request.goal,
+        pluginId: plugin.metadata().id,
+        startedAt,
+      });
+    }
 
     this.emitEvent('ReasoningStarted', request.requestId, {
       pluginId: plugin.metadata().id,
-      sessionId: session.sessionId,
+      workerId: request.workerId,
     });
+    this.terminalLog?.writeLine(
+      request.workerId,
+      `[${startedAt}] $ ${plugin.metadata().name} -p "${request.goal.slice(0, 160).replace(/\n/g, ' ')}"`
+    );
 
     const startTime = Date.now();
     const timeoutMs = request.timeoutMs || this.defaultPolicy.maxTimeoutMs;
 
     try {
-      if (request.streaming && streamOptions) {
-        const streamRes = await plugin.stream(session.sessionId, request.goal, {
-          ...streamOptions,
-          timeoutMs,
-        });
+      const execRes = await plugin.execute({
+        title: request.goal,
+        prompt: request.goal,
+        context: request.context,
+        workerId: request.workerId,
+        timeoutMs,
+        conversationSessionId: request.context?.conversationSessionId,
+        resumeConversation: request.context?.resumeConversation,
+        onOutputChunk: (_stream: 'stdout' | 'stderr', chunk: string) =>
+          this.terminalLog?.append(request.workerId, chunk),
+      });
 
-        const durationMs = Date.now() - startTime;
-        this.activeRequests.delete(request.requestId);
+      const durationMs = Date.now() - startTime;
+      this.activeRequests.delete(request.requestId);
+      this.terminalLog?.writeLine(
+        request.workerId,
+        `\n[exit ${execRes.exitCode ?? (execRes.success ? 0 : 1)}] duration=${durationMs}ms`
+      );
 
-        if (streamRes.cancelled) {
-          this.emitEvent('ReasoningCancelled', request.requestId, { durationMs });
-          return {
-            success: false,
-            error: 'Reasoning stream was cancelled',
-          };
-        }
-
-        const response: ReasoningResponse = {
-          requestId: request.requestId,
-          responseText: streamRes.output,
-          structuredOutput: { output: streamRes.output },
-          executionMetadata: {
-            pluginId: plugin.metadata().id,
-            sessionId: session.sessionId,
-            durationMs,
-            tokenUsage: Math.ceil(streamRes.output.length / 4),
-          },
-          warnings: streamRes.errorOutput ? [streamRes.errorOutput] : [],
-          errors: [],
-        };
-
-        this.emitEvent('ReasoningCompleted', request.requestId, {
-          durationMs,
+      const tokenUsage = execRes.output ? Math.ceil(execRes.output.length / 4) : 100;
+      const response: ReasoningResponse = {
+        requestId: request.requestId,
+        responseText: execRes.output || 'Reasoning completed',
+        structuredOutput: execRes,
+        executionMetadata: {
           pluginId: plugin.metadata().id,
-        });
-        return { success: true, response };
-      } else {
-        const execRes = await plugin.execute({
-          title: request.goal,
-          prompt: request.goal,
-          context: request.context,
-          sessionId: session.sessionId,
-        });
-
-        const durationMs = Date.now() - startTime;
-        this.activeRequests.delete(request.requestId);
-
-        const response: ReasoningResponse = {
-          requestId: request.requestId,
-          responseText: execRes.output || 'Reasoning completed',
-          structuredOutput: execRes,
-          executionMetadata: {
-            pluginId: plugin.metadata().id,
-            sessionId: session.sessionId,
-            durationMs,
-            tokenUsage: execRes.output ? Math.ceil(execRes.output.length / 4) : 100,
-          },
-          warnings: [],
-          errors: execRes.success ? [] : [execRes.error || 'Execution error'],
-        };
-
-        this.emitEvent('ReasoningCompleted', request.requestId, {
+          workerId: request.workerId,
           durationMs,
-          pluginId: plugin.metadata().id,
-        });
-        return { success: true, response };
-      }
+          tokenUsage,
+        },
+        warnings: [],
+        errors: execRes.success ? [] : [execRes.error || 'Execution error'],
+      };
+
+      worker?.completeExecution(execRes.success ? 'COMPLETED' : 'FAILED', { durationMs, tokenUsage });
+
+      this.emitEvent('ReasoningCompleted', request.requestId, {
+        durationMs,
+        pluginId: plugin.metadata().id,
+      });
+      return { success: true, response };
     } catch (err: any) {
       const durationMs = Date.now() - startTime;
       this.activeRequests.delete(request.requestId);
+      worker?.completeExecution('FAILED', { durationMs });
 
       if (err.message && err.message.includes('timeout')) {
         this.emitEvent('ReasoningTimedOut', request.requestId, { timeoutMs, durationMs });

@@ -1,5 +1,5 @@
 import * as os from 'os';
-import { RegisteredWorker } from '../../application/runtime/worker_registry';
+import { Worker } from '../../domain/employees/worker';
 
 export interface DetailedTelemetrySnapshot {
   timestamp: string;
@@ -17,11 +17,8 @@ export interface DetailedTelemetrySnapshot {
     role: string;
     pid: number;
     state: string;
-    cpuPercent: number;
-    memoryRssMb: number;
     restartCount: number;
     crashCount: number;
-    heartbeatLatencyMs: number;
   }[];
 }
 
@@ -38,7 +35,7 @@ export class TelemetryService {
     this.totalMissions++;
   }
 
-  getSnapshot(activeWorkers: RegisteredWorker[] = [], queueDepth: number = 0): DetailedTelemetrySnapshot {
+  getSnapshot(activeWorkers: Worker[] = [], queueDepth: number = 0): DetailedTelemetrySnapshot {
     const memory = process.memoryUsage();
     return {
       timestamp: new Date().toISOString(),
@@ -51,16 +48,13 @@ export class TelemetryService {
       queueDepth,
       heartbeatsCount: this.heartbeats,
       workers: activeWorkers.map((w) => ({
-        id: w.metadata.id,
-        name: w.metadata.name,
-        role: w.metadata.role,
-        pid: w.metrics.pid,
-        state: w.state,
-        cpuPercent: w.metrics.cpuPercent,
-        memoryRssMb: w.metrics.memoryRssMb,
-        restartCount: w.metrics.restartCount,
-        crashCount: w.metrics.crashCount,
-        heartbeatLatencyMs: w.metrics.heartbeatLatencyMs,
+        id: w.id,
+        name: w.name,
+        role: w.role,
+        pid: w.process.pid,
+        state: w.processState,
+        restartCount: w.process.restartCount,
+        crashCount: w.process.crashCount,
       })),
     };
   }

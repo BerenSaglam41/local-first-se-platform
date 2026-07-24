@@ -3,6 +3,7 @@ import { VerificationEngine } from '../../src/v2/application/verification/verifi
 import { MergeEngine } from '../../src/v2/application/verification/merge_engine';
 import { MergeQueue } from '../../src/v2/application/verification/merge_queue';
 import { SeOsCli } from '../../src/v2/cli/se_os_cli';
+import { createFakeClaudeSpawner, createAvailableDetector , createSafeTestProviderOverrides } from './helpers/fake_claude_process';
 import * as fs from 'fs';
 
 describe('SE-OS v2.0 Milestone 9 — Verification & Merge Engine Suite', () => {
@@ -74,7 +75,7 @@ describe('SE-OS v2.0 Milestone 9 — Verification & Merge Engine Suite', () => {
   });
 
   it('should execute CLI verify and merge subcommands cleanly', async () => {
-    const cli = new SeOsCli();
+    const cli = new SeOsCli(createSafeTestProviderOverrides());
     await cli.boot('./non_existent_config.json');
     await cli.verifyTask('task-100');
     await cli.verifyReport('task-100');

@@ -32,6 +32,10 @@ export const TuiApp: React.FC<TuiAppProps> = ({ telemetryAggregator, kernel, onE
   const [currentScreen, setCurrentScreen] = useState<TuiScreenType>('STARTUP');
   const [activeTab, setActiveTab] = useState<SeOsTabType>('DASHBOARD');
   const [snapshot, setSnapshot] = useState<TelemetrySnapshot>(() => telemetryAggregator.getSnapshot());
+  // The project this conversation is about. Set once by the first runProject() call and reused
+  // by every subsequent chat turn via continueProject() — this is what makes the chat an ongoing
+  // conversation against one real workspace instead of a fresh project per message.
+  const [activeProjectId, setActiveProjectId] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -76,14 +80,27 @@ export const TuiApp: React.FC<TuiAppProps> = ({ telemetryAggregator, kernel, onE
     setCurrentScreen(screen);
   };
 
-  const handleChatGoal = (chatPrompt: string) => {
+  const handleChatGoal = async (chatPrompt: string): Promise<{ success: boolean; summary: string }> => {
     telemetryAggregator.logMessage('INFO', `Chat request received: "${chatPrompt}"`);
-    if (kernel) {
-      kernel.getProjectLifecycleOrchestrator().runProject(`Evolve Project: ${chatPrompt}`).then(() => {
-        telemetryAggregator.logMessage('SUCCESS', `Iterative task completed for "${chatPrompt}"`);
-      }).catch((err: any) => {
-        telemetryAggregator.logMessage('ERROR', `Chat execution error: ${err.message}`);
-      });
+    if (!kernel) {
+      return { success: false, summary: 'Kernel not available.' };
+    }
+
+    try {
+      const orchestrator = kernel.getProjectLifecycleOrchestrator();
+      const result = activeProjectId
+        ? await orchestrator.continueProject(activeProjectId, chatPrompt)
+        : await orchestrator.runProject(chatPrompt);
+
+      if (!activeProjectId) setActiveProjectId(result.state.projectId);
+      telemetryAggregator.logMessage(
+        result.success ? 'SUCCESS' : 'ERROR',
+        result.success ? `Continued project for "${chatPrompt}"` : `Chat execution failed: ${result.error || result.summary}`
+      );
+      return { success: result.success, summary: result.summary };
+    } catch (err: any) {
+      telemetryAggregator.logMessage('ERROR', `Chat execution error: ${err.message}`);
+      return { success: false, summary: `Error: ${err.message}` };
     }
   };
 
@@ -127,7 +144,8 @@ export const TuiApp: React.FC<TuiAppProps> = ({ telemetryAggregator, kernel, onE
             const goal = `Create ${projectName}`;
             telemetryAggregator.logMessage('INFO', `Triggering autonomous project execution at ${absolutePath}`);
             if (kernel) {
-              kernel.getProjectLifecycleOrchestrator().runProject(goal, { absolutePath }).then(() => {
+              kernel.getProjectLifecycleOrchestrator().runProject(goal, { absolutePath }).then((result) => {
+                setActiveProjectId(result.state.projectId);
                 telemetryAggregator.logMessage('SUCCESS', `Autonomous execution completed at ${absolutePath}`);
               }).catch((err: any) => {
                 telemetryAggregator.logMessage('ERROR', `Execution error: ${err.message}`);
@@ -142,7 +160,7 @@ export const TuiApp: React.FC<TuiAppProps> = ({ telemetryAggregator, kernel, onE
         <Box flexDirection="column" width="100%">
           <TabHeader activeTab={activeTab} onSelectTab={setActiveTab} />
           {activeTab === 'DASHBOARD' && <DashboardTab snapshot={snapshot} />}
-          {activeTab === 'WORKERS' && <WorkersTab snapshot={snapshot} />}
+          {activeTab === 'WORKERS' && <WorkersTab snapshot={snapshot} kernel={kernel} />}
           {activeTab === 'WORKSPACE' && <WorkspaceTab snapshot={snapshot} />}
           {activeTab === 'TERMINALS' && <TerminalsTab snapshot={snapshot} />}
           {activeTab === 'CHAT' && <ChatTab snapshot={snapshot} onSubmitChatGoal={handleChatGoal} />}

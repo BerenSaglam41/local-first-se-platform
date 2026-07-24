@@ -4,6 +4,7 @@ import { CostEstimator } from '../../src/v2/application/policy/cost_estimator';
 import { TokenBudgetManager } from '../../src/v2/application/policy/token_budget_manager';
 import { PromptCache } from '../../src/v2/application/policy/prompt_cache';
 import { SeOsCli } from '../../src/v2/cli/se_os_cli';
+import { createFakeClaudeSpawner, createAvailableDetector , createSafeTestProviderOverrides } from './helpers/fake_claude_process';
 import * as fs from 'fs';
 
 describe('SE-OS v2.0 Milestone 11 — Execution Policy Engine & Cost Optimization Suite', () => {
@@ -245,7 +246,7 @@ describe('SE-OS v2.0 Milestone 11 — Execution Policy Engine & Cost Optimizatio
   // ─── 8. CLI Integration ───────────────────────────────────────────
 
   it('should execute CLI policy subcommands cleanly', async () => {
-    const cli = new SeOsCli();
+    const cli = new SeOsCli(createSafeTestProviderOverrides());
     await cli.boot('./non_existent_config.json');
     await cli.policyProfile('Economy');
     await cli.policyEstimate('m-100', 3);

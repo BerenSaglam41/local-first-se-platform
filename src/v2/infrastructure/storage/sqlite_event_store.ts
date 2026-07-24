@@ -39,6 +39,16 @@ export class SqliteEventStore implements IEventStore {
   }
 
   private isClosed = false;
+  private subscribers: Array<(event: DomainEvent) => void> = [];
+
+  /** Real-time notification for every event actually persisted — used by TelemetryAggregator so
+   * "recent events" reflects genuine domain activity instead of a hardcoded fixture. */
+  subscribe(handler: (event: DomainEvent) => void): () => void {
+    this.subscribers.push(handler);
+    return () => {
+      this.subscribers = this.subscribers.filter((h) => h !== handler);
+    };
+  }
 
   async append(event: DomainEvent): Promise<void> {
     if (this.isClosed) return;
@@ -58,6 +68,13 @@ export class SqliteEventStore implements IEventStore {
           JSON.stringify(event.payload || {}),
         ]
       );
+      for (const handler of this.subscribers) {
+        try {
+          handler(event);
+        } catch (e) {
+          // A misbehaving subscriber must never break event persistence.
+        }
+      }
     } catch (e) {
       // Non-fatal during shutdown
     }

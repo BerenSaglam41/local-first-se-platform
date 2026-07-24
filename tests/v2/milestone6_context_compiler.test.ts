@@ -3,6 +3,7 @@ import { ContextCompiler } from '../../src/v2/application/context-compiler/conte
 import { AstSymbolAnalyzer } from '../../src/v2/application/context-compiler/ast_symbol_analyzer';
 import { WorkspaceEngine } from '../../src/v2/application/workspace/workspace_engine';
 import { SeOsCli } from '../../src/v2/cli/se_os_cli';
+import { createFakeClaudeSpawner, createAvailableDetector , createSafeTestProviderOverrides } from './helpers/fake_claude_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -93,7 +94,7 @@ describe('SE-OS v2.0 Milestone 6 — Context Compiler & Workspace Engine Suite',
   });
 
   it('should execute CLI context and workspace subcommands cleanly', async () => {
-    const cli = new SeOsCli();
+    const cli = new SeOsCli(createSafeTestProviderOverrides());
     await cli.boot('./non_existent_config.json');
     await cli.contextCompile('task-99', sampleSourceFile);
     await cli.contextInspect('task-99', sampleSourceFile);

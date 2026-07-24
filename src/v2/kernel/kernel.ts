@@ -23,12 +23,17 @@ import { MergeQueue } from '../application/verification/merge_queue';
 import { DepartmentOrchestrator } from '../application/organization/department_orchestrator';
 import { ExecutionPolicyEngine } from '../application/policy/execution_policy_engine';
 import { AutonomousPlanner } from '../application/planning/autonomous_planner';
-import { RuntimeSessionManager } from '../application/session/runtime_session_manager';
 import { RuntimePluginSystemManager } from '../application/plugins/runtime_plugin_system_manager';
 import { MockRuntimePlugin } from '../application/plugins/mock_runtime_plugin';
 import { ReasoningCoordinator } from '../application/reasoning/reasoning_coordinator';
+import { WorkerAwareRuntimeSelectionStrategy } from '../application/reasoning/worker_aware_runtime_selection_strategy';
+import { IRuntimePlugin } from '../contracts/iruntime_plugin_system';
+import { ProviderRegistry } from '../application/providers/provider_registry';
+import { WorkerStore } from '../application/worker/worker_store';
 import { WorkspaceExecutionService } from '../application/worker/workspace_execution_service';
 import { WorkerExecutionEngine } from '../application/worker/worker_execution_engine';
+import { WorkerTerminalLog } from '../application/worker/worker_terminal_log';
+import { TmuxIntegration } from '../infrastructure/dashboard/tmux_integration';
 import { MissionDecomposer } from '../application/missions/mission_decomposer';
 import { TaskAssignmentEngine } from '../application/missions/task_assignment_engine';
 import { DefaultWorkerDispatcher } from '../application/missions/worker_dispatcher';
@@ -57,7 +62,8 @@ export class Kernel implements IKernel {
     const scheduler = new SchedulerSkeleton();
     const pluginRegistry = new PluginRegistry();
     const pluginManager = new RuntimePluginManager();
-    const supervisor = new LocalProcessSupervisor(eventStore);
+    const workerStore = new WorkerStore();
+    const supervisor = new LocalProcessSupervisor(workerStore, eventStore);
     const telemetry = new TelemetryService();
     const contextCompiler = new ContextCompiler(sharedMemory, eventStore);
     const workspaceEngine = new WorkspaceEngine('./.se_workspaces', eventStore);
@@ -69,15 +75,18 @@ export class Kernel implements IKernel {
     );
     const mergeEngine = new MergeEngine(eventStore);
     const mergeQueue = new MergeQueue(eventStore);
-    const departmentOrchestrator = new DepartmentOrchestrator(eventStore);
+    const departmentOrchestrator = new DepartmentOrchestrator(workerStore, eventStore);
     const missionDecomposer = new MissionDecomposer(eventStore);
     const taskAssignmentEngine = new TaskAssignmentEngine(departmentOrchestrator, eventStore);
     const missionEngine = new MissionEngine(eventStore, pluginManager.getCapabilityRegistry(), departmentOrchestrator, missionDecomposer, taskAssignmentEngine);
     const policyEngine = new ExecutionPolicyEngine(eventStore);
-    const sessionManager = new RuntimeSessionManager(eventStore);
     const runtimePluginSystemManager = new RuntimePluginSystemManager(eventStore);
     await runtimePluginSystemManager.loadAndRegisterPlugin(new MockRuntimePlugin());
-    const reasoningCoordinator = new ReasoningCoordinator(runtimePluginSystemManager, sessionManager, eventStore);
+    const providerRegistry = new ProviderRegistry(runtimePluginSystemManager);
+    const selectionStrategy = new WorkerAwareRuntimeSelectionStrategy(runtimePluginSystemManager, workerStore);
+    const workerTerminalLog = new WorkerTerminalLog();
+    const tmuxIntegration = new TmuxIntegration('se-os-company', workerTerminalLog);
+    const reasoningCoordinator = new ReasoningCoordinator(runtimePluginSystemManager, workerStore, eventStore, selectionStrategy, workerTerminalLog);
     const autonomousPlanner = new AutonomousPlanner(eventStore, sharedMemory, policyEngine, departmentOrchestrator, undefined, reasoningCoordinator);
     const workspaceExecutionService = new WorkspaceExecutionService(eventStore);
     const workerExecutionEngine = new WorkerExecutionEngine(workspaceEngine, workspaceExecutionService, reasoningCoordinator, eventStore);
@@ -90,8 +99,10 @@ export class Kernel implements IKernel {
       eventStore,
       projectLifecycleOrchestrator,
       missionExecutionOrchestrator,
-      workerExecutionEngine,
-      verificationPipeline
+      verificationPipeline,
+      workerStore,
+      providerRegistry,
+      workerTerminalLog
     );
 
     supervisor.startSupervision();
@@ -102,6 +113,7 @@ export class Kernel implements IKernel {
     this.container.registerSingleton<IScheduler>('IScheduler', scheduler);
     this.container.registerSingleton<IPluginRegistry>('IPluginRegistry', pluginRegistry);
     this.container.registerSingleton<RuntimePluginManager>('RuntimePluginManager', pluginManager);
+    this.container.registerSingleton<WorkerStore>('WorkerStore', workerStore);
     this.container.registerSingleton<LocalProcessSupervisor>('LocalProcessSupervisor', supervisor);
     this.container.registerSingleton<TelemetryService>('TelemetryService', telemetry);
     this.container.registerSingleton<MissionEngine>('MissionEngine', missionEngine);
@@ -114,9 +126,10 @@ export class Kernel implements IKernel {
     this.container.registerSingleton<DepartmentOrchestrator>('DepartmentOrchestrator', departmentOrchestrator);
     this.container.registerSingleton<ExecutionPolicyEngine>('ExecutionPolicyEngine', policyEngine);
     this.container.registerSingleton<AutonomousPlanner>('AutonomousPlanner', autonomousPlanner);
-    this.container.registerSingleton<RuntimeSessionManager>('RuntimeSessionManager', sessionManager);
     this.container.registerSingleton<RuntimePluginSystemManager>('RuntimePluginSystemManager', runtimePluginSystemManager);
     this.container.registerSingleton<ReasoningCoordinator>('ReasoningCoordinator', reasoningCoordinator);
+    this.container.registerSingleton<WorkerTerminalLog>('WorkerTerminalLog', workerTerminalLog);
+    this.container.registerSingleton<TmuxIntegration>('TmuxIntegration', tmuxIntegration);
     this.container.registerSingleton<WorkspaceExecutionService>('WorkspaceExecutionService', workspaceExecutionService);
     this.container.registerSingleton<WorkerExecutionEngine>('WorkerExecutionEngine', workerExecutionEngine);
     this.container.registerSingleton<MissionDecomposer>('MissionDecomposer', missionDecomposer);
@@ -127,6 +140,7 @@ export class Kernel implements IKernel {
     this.container.registerSingleton<ProjectLifecycleOrchestrator>('ProjectLifecycleOrchestrator', projectLifecycleOrchestrator);
     this.container.registerSingleton<VerificationPipeline>('VerificationPipeline', verificationPipeline);
     this.container.registerSingleton<TelemetryAggregator>('TelemetryAggregator', telemetryAggregator);
+    this.container.registerSingleton<ProviderRegistry>('ProviderRegistry', providerRegistry);
 
     if (fs.existsSync(configPath)) {
       try {
@@ -157,8 +171,26 @@ export class Kernel implements IKernel {
 
   private loadDefaultWorkforce(supervisor: LocalProcessSupervisor): void {
     supervisor.spawnWorker({ id: 'emp-alice', name: 'Alice', role: 'Lead Architect', department: 'Architecture', executable: process.execPath, args: ['-e', 'setInterval(() => {}, 1000)'], tmuxPaneIndex: 1 });
-    supervisor.spawnWorker({ id: 'emp-bob', name: 'Bob', role: 'Backend Engineer', department: 'Backend Engineering', executable: process.execPath, args: ['-e', 'setInterval(() => {}, 1000)'], tmuxPaneIndex: 2 });
-    supervisor.spawnWorker({ id: 'emp-charlie', name: 'Charlie', role: 'QA Engineer', department: 'Quality Assurance', executable: process.execPath, args: ['-e', 'setInterval(() => {}, 1000)'], tmuxPaneIndex: 3 });
+    supervisor.spawnWorker({ id: 'emp-bob', name: 'Bob', role: 'Backend Engineer', department: 'Backend', executable: process.execPath, args: ['-e', 'setInterval(() => {}, 1000)'], tmuxPaneIndex: 2 });
+    supervisor.spawnWorker({ id: 'emp-charlie', name: 'Charlie', role: 'QA Engineer', department: 'QA', executable: process.execPath, args: ['-e', 'setInterval(() => {}, 1000)'], tmuxPaneIndex: 3 });
+    supervisor.spawnWorker({ id: 'emp-diana', name: 'Diana', role: 'Documentation Engineer', department: 'Documentation', executable: process.execPath, args: ['-e', 'setInterval(() => {}, 1000)'], tmuxPaneIndex: 4 });
+    supervisor.spawnWorker({ id: 'emp-eve', name: 'Eve', role: 'Research Engineer', department: 'Research', executable: process.execPath, args: ['-e', 'setInterval(() => {}, 1000)'], tmuxPaneIndex: 5 });
+  }
+
+  /**
+   * Registers any number of already-constructed runtime plugins (any vendor — the kernel has no
+   * knowledge of which). Deliberately generic and separate from worker assignment: which plugin a
+   * given worker actually uses is a WorkerStore decision (Worker.assignedProviderId), made by
+   * whoever calls this (see application/providers/default_provider_bootstrap.ts for the real
+   * product's default choices). Tests that never call this keep getting only the built-in
+   * MockRuntimePlugin registered in boot(), so they never trigger a live external CLI call unless
+   * they explicitly opt in.
+   */
+  async registerProviderPlugins(plugins: IRuntimePlugin[]): Promise<void> {
+    const runtimePluginSystemManager = this.container.resolve<RuntimePluginSystemManager>('RuntimePluginSystemManager');
+    for (const plugin of plugins) {
+      await runtimePluginSystemManager.loadAndRegisterPlugin(plugin);
+    }
   }
 
   async shutdown(signal?: string): Promise<void> {
@@ -166,12 +198,10 @@ export class Kernel implements IKernel {
 
     const supervisor = this.container.resolve<LocalProcessSupervisor>('LocalProcessSupervisor');
     supervisor.stopSupervision();
-    for (const w of supervisor.getRegistry().list()) {
-      supervisor.stopWorker(w.metadata.id);
+    const workerStore = this.container.resolve<WorkerStore>('WorkerStore');
+    for (const w of workerStore.list()) {
+      supervisor.stopWorker(w.id);
     }
-
-    const sessionManager = this.container.resolve<RuntimeSessionManager>('RuntimeSessionManager');
-    sessionManager.shutdown();
 
     const eventStore = this.container.resolve<SqliteEventStore>('IEventStore');
     await eventStore.close();
@@ -204,6 +234,10 @@ export class Kernel implements IKernel {
 
   getSupervisor(): LocalProcessSupervisor {
     return this.container.resolve<LocalProcessSupervisor>('LocalProcessSupervisor');
+  }
+
+  getWorkerStore(): WorkerStore {
+    return this.container.resolve<WorkerStore>('WorkerStore');
   }
 
   getPluginManager(): RuntimePluginManager {
@@ -250,16 +284,39 @@ export class Kernel implements IKernel {
     return this.container.resolve<AutonomousPlanner>('AutonomousPlanner');
   }
 
-  getRuntimeSessionManager(): RuntimeSessionManager {
-    return this.container.resolve<RuntimeSessionManager>('RuntimeSessionManager');
-  }
-
   getRuntimePluginSystemManager(): RuntimePluginSystemManager {
     return this.container.resolve<RuntimePluginSystemManager>('RuntimePluginSystemManager');
   }
 
   getReasoningCoordinator(): ReasoningCoordinator {
     return this.container.resolve<ReasoningCoordinator>('ReasoningCoordinator');
+  }
+
+  getWorkerTerminalLog(): WorkerTerminalLog {
+    return this.container.resolve<WorkerTerminalLog>('WorkerTerminalLog');
+  }
+
+  getTmuxIntegration(): TmuxIntegration {
+    return this.container.resolve<TmuxIntegration>('TmuxIntegration');
+  }
+
+  /**
+   * Explicit, opt-in real tmux dashboard launch — one window per currently-spawned worker, each
+   * tailing that worker's real terminal log. Deliberately NOT called automatically from boot():
+   * spawning a real OS-level tmux session as a side effect of every test's kernel.boot() call
+   * would pollute the host's tmux server and slow down the suite. Real product entry points
+   * (SeOsCli) call this only when the user actually asks to watch workers in tmux.
+   */
+  launchTmuxDashboard(): boolean {
+    const tmux = this.getTmuxIntegration();
+    const workers = this.getWorkerStore().list();
+    return tmux.createLayout(
+      workers.map((w, idx) => ({
+        paneIndex: idx + 1,
+        title: `${w.name}-${w.id}`,
+        workerId: w.id,
+      }))
+    );
   }
 
   getWorkspaceExecutionService(): WorkspaceExecutionService {
@@ -300,6 +357,10 @@ export class Kernel implements IKernel {
 
   getTelemetryAggregator(): TelemetryAggregator {
     return this.container.resolve<TelemetryAggregator>('TelemetryAggregator');
+  }
+
+  getProviderRegistry(): ProviderRegistry {
+    return this.container.resolve<ProviderRegistry>('ProviderRegistry');
   }
 
   getTelemetry(): TelemetryService {

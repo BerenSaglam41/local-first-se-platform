@@ -4,6 +4,8 @@ import { ScreenManager } from '../../src/v2/ui/tui/managers/screen_manager';
 import { LayoutManager } from '../../src/v2/ui/tui/managers/layout_manager';
 import { IPanel } from '../../src/v2/ui/tui/contracts/ipanel';
 import { SeOsCli } from '../../src/v2/cli/se_os_cli';
+import { CliRuntimePlugin } from '../../src/v2/application/plugins/cli_runtime_plugin';
+import { createFakeClaudeSpawner, createAvailableDetector , createSafeTestProviderOverrides } from './helpers/fake_claude_process';
 import * as fs from 'fs';
 
 describe('SE-OS v2.0 Milestone 23 — Core TUI Framework & Telemetry Layer Suite', () => {
@@ -26,6 +28,23 @@ describe('SE-OS v2.0 Milestone 23 — Core TUI Framework & Telemetry Layer Suite
 
   it('should initialize TelemetryAggregator and generate comprehensive TelemetrySnapshot', async () => {
     await kernel.boot('./non_existent_config.json');
+    await kernel.getRuntimePluginSystemManager().loadAndRegisterPlugin(
+      new CliRuntimePlugin(
+        { id: 'plugin-claude-code', name: 'Claude', command: 'claude', buildArgs: (p) => ['-p', p] },
+        kernel.getEventStore(),
+        createFakeClaudeSpawner()
+      )
+    );
+    kernel.getWorkerStore().get('emp-alice')!.assignedProviderId = 'plugin-claude-code';
+    // Drive one real task so the snapshot reflects genuine activity rather than an empty system.
+    await kernel.getWorkerExecutionEngine().executeTask({
+      executionId: 'exec-m23-1',
+      taskId: 'task-m23-1',
+      missionId: 'm-m23-1',
+      workerId: 'emp-alice',
+      goal: 'Write a small utility module',
+    });
+
     const aggregator = kernel.getTelemetryAggregator();
 
     const snapshot = aggregator.getSnapshot();
@@ -33,11 +52,12 @@ describe('SE-OS v2.0 Milestone 23 — Core TUI Framework & Telemetry Layer Suite
     expect(snapshot.runtimeProviders.length).toBeGreaterThan(0);
     expect(snapshot.workers.length).toBeGreaterThan(0);
     expect(snapshot.aiSessions.length).toBeGreaterThan(0);
+    expect(snapshot.aiSessions[0].status).toBe('COMPLETED');
     expect(snapshot.systemConsoleLogs.length).toBeGreaterThan(0);
 
-    aggregator.setActiveRuntimeProvider('ollama-local');
+    aggregator.setActiveRuntimeProvider('plugin-codex-cli');
     const updated = aggregator.getSnapshot();
-    expect(updated.activeRuntimeProviderId).toBe('ollama-local');
+    expect(updated.activeRuntimeProviderId).toBe('plugin-codex-cli');
   });
 
   // ─── 2. ScreenManager Transitions ─────────────────────────────────
@@ -96,7 +116,7 @@ describe('SE-OS v2.0 Milestone 23 — Core TUI Framework & Telemetry Layer Suite
   // ─── 5. CLI TUI Launcher ──────────────────────────────────────────
 
   it('should boot Kernel and resolve TelemetryAggregator for CLI TUI launcher', async () => {
-    const cli = new SeOsCli();
+    const cli = new SeOsCli(createSafeTestProviderOverrides());
     await cli.boot('./non_existent_config.json');
 
     const aggregator = cli['kernel'].getTelemetryAggregator();

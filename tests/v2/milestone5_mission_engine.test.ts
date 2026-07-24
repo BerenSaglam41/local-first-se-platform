@@ -4,6 +4,7 @@ import { TaskGraph } from '../../src/v2/application/missions/task_graph';
 import { Task } from '../../src/v2/domain/missions/mission_models';
 import { SqliteEventStore } from '../../src/v2/infrastructure/storage/sqlite_event_store';
 import { SeOsCli } from '../../src/v2/cli/se_os_cli';
+import { createFakeClaudeSpawner, createAvailableDetector , createSafeTestProviderOverrides } from './helpers/fake_claude_process';
 import * as fs from 'fs';
 
 describe('SE-OS v2.0 Milestone 5 — Mission Engine & Task Orchestration Suite', () => {
@@ -101,7 +102,7 @@ describe('SE-OS v2.0 Milestone 5 — Mission Engine & Task Orchestration Suite',
   });
 
   it('should execute CLI mission subcommands cleanly', async () => {
-    const cli = new SeOsCli();
+    const cli = new SeOsCli(createSafeTestProviderOverrides());
     await cli.boot('./non_existent_config.json');
     await cli.missionCreate('CLI Mission', 'Test CLI commands');
     const list = (cli as any).kernel.getMissionEngine().listMissions();

@@ -1,7 +1,9 @@
 import { Kernel } from '../../src/v2/kernel/kernel';
 import { LocalProcessSupervisor } from '../../src/v2/application/runtime/local_process_supervisor';
+import { WorkerStore } from '../../src/v2/application/worker/worker_store';
 import { SqliteEventStore } from '../../src/v2/infrastructure/storage/sqlite_event_store';
 import { SeOsCli } from '../../src/v2/cli/se_os_cli';
+import { createFakeClaudeSpawner, createAvailableDetector , createSafeTestProviderOverrides } from './helpers/fake_claude_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -29,7 +31,8 @@ describe('SE-OS v2.0 Milestone 2 — Local Process Runtime & PTY Suite', () => {
     const eventStore = new SqliteEventStore(testDbPath);
     await eventStore.connect();
 
-    const supervisor = new LocalProcessSupervisor(eventStore);
+    const workerStore = new WorkerStore();
+    const supervisor = new LocalProcessSupervisor(workerStore, eventStore);
     supervisor.startSupervision();
 
     const dummyScript = path.join(__dirname, '../../src/v2/application/runtime/dummy_worker.js');
@@ -43,8 +46,8 @@ describe('SE-OS v2.0 Milestone 2 — Local Process Runtime & PTY Suite', () => {
       args: [dummyScript],
     });
 
-    expect(worker.metrics.pid).toBeGreaterThan(0);
-    expect(worker.state).toBe('IDLE');
+    expect(worker.process.pid).toBeGreaterThan(0);
+    expect(worker.processState).toBe('IDLE');
 
     const pty = supervisor.getPtyEngine('emp-test-1');
     expect(pty).toBeDefined();
@@ -56,7 +59,7 @@ describe('SE-OS v2.0 Milestone 2 — Local Process Runtime & PTY Suite', () => {
   });
 
   it('should support stdin writing and stdout capturing via PtyEngine', (done) => {
-    const supervisor = new LocalProcessSupervisor();
+    const supervisor = new LocalProcessSupervisor(new WorkerStore());
     const dummyScript = path.join(__dirname, '../../src/v2/application/runtime/dummy_worker.js');
 
     supervisor.spawnWorker({
@@ -87,7 +90,7 @@ describe('SE-OS v2.0 Milestone 2 — Local Process Runtime & PTY Suite', () => {
   });
 
   it('should restart worker processes and increment restartCount', async () => {
-    const supervisor = new LocalProcessSupervisor();
+    const supervisor = new LocalProcessSupervisor(new WorkerStore());
     const dummyScript = path.join(__dirname, '../../src/v2/application/runtime/dummy_worker.js');
 
     const worker = supervisor.spawnWorker({
@@ -99,19 +102,20 @@ describe('SE-OS v2.0 Milestone 2 — Local Process Runtime & PTY Suite', () => {
       args: [dummyScript],
     });
 
-    const oldPid = worker.metrics.pid;
+    const oldPid = worker.process.pid;
 
     const restarted = supervisor.restartWorker('emp-test-3');
     expect(restarted).toBeDefined();
-    expect(restarted?.metrics.restartCount).toBe(1);
-    expect(restarted?.metrics.pid).toBeGreaterThan(0);
-    expect(restarted?.metrics.pid).not.toBe(oldPid);
+    expect(restarted?.process.restartCount).toBe(1);
+    expect(restarted?.process.pid).toBeGreaterThan(0);
+    expect(restarted?.process.pid).not.toBe(oldPid);
 
     supervisor.stopWorker('emp-test-3');
   });
 
   it('should kill worker processes with SIGKILL', async () => {
-    const supervisor = new LocalProcessSupervisor();
+    const workerStore = new WorkerStore();
+    const supervisor = new LocalProcessSupervisor(workerStore);
     const dummyScript = path.join(__dirname, '../../src/v2/application/runtime/dummy_worker.js');
 
     supervisor.spawnWorker({
@@ -125,24 +129,24 @@ describe('SE-OS v2.0 Milestone 2 — Local Process Runtime & PTY Suite', () => {
 
     const killed = supervisor.killWorker('emp-test-4');
     expect(killed).toBe(true);
-    expect(supervisor.getRegistry().get('emp-test-4')).toBeUndefined();
+    expect(workerStore.get('emp-test-4')).toBeUndefined();
   });
 
   it('should collect detailed telemetry including worker PIDs, CPU, and RAM', async () => {
     await kernel.boot('./non_existent_config.json');
     const snapshot = kernel.getTelemetry().getSnapshot(
-      kernel.getSupervisor().getRegistry().list(),
+      kernel.getWorkerStore().list(),
       0
     );
 
-    expect(snapshot.workers.length).toBe(3);
+    expect(snapshot.workers.length).toBe(5);
     expect(snapshot.workers[0].pid).toBeGreaterThan(0);
     expect(snapshot.memoryRssMb).toBeGreaterThan(0);
     expect(snapshot.heapUsedMb).toBeGreaterThan(0);
   });
 
   it('should execute CLI ps, worker start/stop/restart/kill, and telemetry commands cleanly', async () => {
-    const cli = new SeOsCli();
+    const cli = new SeOsCli(createSafeTestProviderOverrides());
     await cli.boot('./non_existent_config.json');
     await cli.ps();
     await cli.workerStart('emp-dave');

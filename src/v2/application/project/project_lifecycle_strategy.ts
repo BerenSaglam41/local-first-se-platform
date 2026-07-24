@@ -27,6 +27,7 @@ export class DefaultProjectLifecycleStrategy implements IProjectLifecycleStrateg
       executionPlans: {},
       executionResults: {},
       startTime,
+      conversationHistory: [],
     };
 
     try {

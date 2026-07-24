@@ -1,18 +1,41 @@
+import * as os from 'os';
+import { execSync } from 'child_process';
 import {
   ITelemetryAggregator,
   TelemetrySnapshot,
   TelemetryRuntimeProviderInfo,
   TelemetryWorkerInfo,
   TelemetryAiSessionInfo,
+  TelemetryTaskNode,
+  TelemetryFileEvent,
 } from '../../contracts/itelemetry_aggregator';
 import { IEventStore, DomainEvent } from '../../contracts/ievent_store';
 import { ProjectLifecycleOrchestrator } from '../project/project_lifecycle_orchestrator';
 import { MissionExecutionOrchestrator } from '../missions/mission_execution_orchestrator';
-import { WorkerExecutionEngine } from '../worker/worker_execution_engine';
 import { VerificationPipeline } from '../verification/verification_pipeline';
+import { WorkerStore } from '../worker/worker_store';
+import { ProviderRegistry } from '../providers/provider_registry';
+import { WorkerTerminalLog } from '../worker/worker_terminal_log';
+
+// TODO(ADR-0006): this still calls execSync synchronously in the polling hot path. Left
+// unchanged deliberately for this architectural step (see ADR-0005 scope) — fixed under the
+// dedicated blocking-I/O step, not folded in here.
+function getGitBranchUncached(workspacePath?: string): string {
+  if (!workspacePath) return 'no-workspace';
+  try {
+    const branch = execSync('git rev-parse --abbrev-ref HEAD', {
+      cwd: workspacePath,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+    return branch || 'no-repo';
+  } catch (err) {
+    return 'no-repo';
+  }
+}
 
 export class TelemetryAggregator implements ITelemetryAggregator {
-  private activeRuntimeProviderId = 'claude-code-cli';
+  private activeRuntimeProviderId = 'plugin-claude-code';
   private logs: Array<{ id: string; timestamp: string; level: string; message: string }> = [];
   private events: DomainEvent[] = [];
 
@@ -20,8 +43,10 @@ export class TelemetryAggregator implements ITelemetryAggregator {
     private eventStore?: IEventStore,
     private projectOrchestrator?: ProjectLifecycleOrchestrator,
     private missionOrchestrator?: MissionExecutionOrchestrator,
-    private workerEngine?: WorkerExecutionEngine,
-    private verificationPipeline?: VerificationPipeline
+    private verificationPipeline?: VerificationPipeline,
+    private workerStore?: WorkerStore,
+    private providerRegistry?: ProviderRegistry,
+    private terminalLog?: WorkerTerminalLog
   ) {
     this.logMessage('INFO', '[Kernel] SE-OS v2.0 TelemetryAggregator initialized (ONLINE)');
 
@@ -59,174 +84,137 @@ export class TelemetryAggregator implements ITelemetryAggregator {
   getSnapshot(): TelemetrySnapshot {
     const memoryMB = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
 
-    const runtimeProviders: TelemetryRuntimeProviderInfo[] = [
-      { id: 'claude-code-cli', name: 'Claude Code CLI v2.1', version: '2.1.218', installed: true, active: this.activeRuntimeProviderId === 'claude-code-cli' },
-      { id: 'ollama-local', name: 'Ollama Local Runtime', version: '0.1.32', installed: true, active: this.activeRuntimeProviderId === 'ollama-local' },
-      { id: 'codex-cli', name: 'Codex CLI', version: '1.0.0', installed: false, active: false },
-      { id: 'gemini-cli', name: 'Gemini CLI', version: '1.0.0', installed: false, active: false },
-    ];
+    const runtimeProviders: TelemetryRuntimeProviderInfo[] = this.providerRegistry
+      ? this.providerRegistry.listProviders().map((p) => ({
+          id: p.id,
+          name: p.name,
+          version: p.version || 'unknown',
+          installed: p.installed,
+          active: p.id === this.activeRuntimeProviderId,
+        }))
+      : [];
 
-    const workers: TelemetryWorkerInfo[] = [
-      {
-        id: 'emp-alice',
-        name: 'Alice',
-        role: 'Lead Architect',
-        departmentId: 'dept-architecture',
-        status: 'IDLE',
-        currentTaskId: 't-101',
-        currentTaskTitle: 'Design System Architecture',
-        runtimeProvider: 'Claude Code CLI',
-        assignedProvider: 'Claude Code CLI',
-        workingDirectory: './src',
-        terminalPane: 'tmux pane 1 (PID 48839)',
-        currentCommand: 'claude exec --file system_architecture.ts',
-        currentFile: 'src/server.ts',
-        gitBranch: 'feature/user-auth',
-        durationMs: 1420,
-      },
-      {
-        id: 'emp-bob',
-        name: 'Bob',
-        role: 'Backend Engineer',
-        departmentId: 'dept-backend',
-        status: 'EXECUTING',
-        currentTaskId: 't-104',
-        currentTaskTitle: 'Implement Auth Middleware',
-        runtimeProvider: 'Codex CLI',
-        assignedProvider: 'Codex CLI',
-        workingDirectory: './src/controllers',
-        terminalPane: 'tmux pane 2 (PID 48840)',
-        currentCommand: 'codex exec --file auth.middleware.ts',
-        currentFile: 'src/middleware/auth.middleware.ts',
-        gitBranch: 'feature/user-auth',
-        durationMs: 3100,
-      },
-      {
-        id: 'emp-charlie',
-        name: 'Charlie',
-        role: 'QA Engineer',
-        departmentId: 'dept-qa',
-        status: 'EXECUTING',
-        currentTaskId: 't-105',
-        currentTaskTitle: 'Write Verification Tests',
-        runtimeProvider: 'Gemini CLI',
-        assignedProvider: 'Gemini CLI',
-        workingDirectory: './tests',
-        terminalPane: 'tmux pane 3 (PID 48841)',
-        currentCommand: 'gemini exec --file user_api.test.ts',
-        currentFile: 'tests/user_api.test.ts',
-        gitBranch: 'feature/user-auth',
-        durationMs: 2050,
-      },
-    ];
+    const allWorkers = this.workerStore?.list() || [];
+    const workers: TelemetryWorkerInfo[] = allWorkers.map((w) => {
+      const execution = w.activeExecution;
+      const providerName = runtimeProviders.find((p) => p.id === w.assignedProviderId)?.name || w.assignedProviderId || 'unassigned';
+      const workingDirectory = execution?.workspacePath || '';
+      const gitBranch = getGitBranchUncached(execution?.workspacePath);
+      const lastHistoryEntry = w.history[0];
 
-    const aiSessions: TelemetryAiSessionInfo[] = [
-      {
-        sessionId: 'session-emp-bob-104',
-        workerId: 'emp-bob',
-        workerName: 'Bob (Backend Engineer)',
-        providerName: this.activeRuntimeProviderId === 'claude-code-cli' ? 'Claude Code CLI' : 'Ollama Local',
-        prompt: 'Implement Auth & Permissions Middleware for REST API User Management in TypeScript',
-        streamingOutput: [
-          '[PtyTransport] Connected session-emp-bob',
-          '[RuntimePlugin] Reading workspace at ./.se_workspaces/ws-t-104...',
-          '[RuntimePlugin] Generating AuthMiddleware class with JWT verification...',
-          '[RuntimePlugin] File written: src/middleware/auth.middleware.ts (+248 lines)',
-          '[VerificationPipeline] TypeScript compilation: PASSED (0 errors)',
-        ],
-        finalResponse: 'Successfully generated AuthMiddleware with JWT verification and RBAC roles.',
-        toolCalls: [{ toolName: 'write_file', durationMs: 45, status: 'SUCCESS' }],
-        durationMs: 3100,
-        tokenUsage: 1420,
-        workspacePath: './.se_workspaces/ws-t-104',
-        status: 'STREAMING',
-        startedAt: new Date().toISOString(),
-      },
-      {
-        sessionId: 'session-emp-charlie-105',
-        workerId: 'emp-charlie',
-        workerName: 'Charlie (QA Engineer)',
-        providerName: this.activeRuntimeProviderId === 'claude-code-cli' ? 'Claude Code CLI' : 'Ollama Local',
-        prompt: 'Create Jest unit test suites covering user routes and auth middleware',
-        streamingOutput: [
-          '[PtyTransport] Connected session-emp-charlie',
-          '[RuntimePlugin] Writing tests/user_auth.test.ts (+110 lines)',
-          '[VerificationPipeline] Running test suite... 6 unit tests PASSED',
-        ],
-        finalResponse: 'Generated 6 Jest unit tests covering token validation and authorization.',
-        toolCalls: [{ toolName: 'write_file', durationMs: 38, status: 'SUCCESS' }],
-        durationMs: 2050,
-        tokenUsage: 980,
-        workspacePath: './.se_workspaces/ws-t-105',
-        status: 'COMPLETED',
-        startedAt: new Date().toISOString(),
-      },
-    ];
+      return {
+        id: w.id,
+        name: w.name,
+        role: w.role,
+        departmentId: `dept-${w.department.toLowerCase()}`,
+        status: execution ? 'BUSY' : 'IDLE',
+        currentTaskId: execution?.taskId,
+        currentTaskTitle: execution?.goal,
+        runtimeProvider: providerName,
+        assignedProvider: providerName,
+        workingDirectory,
+        terminalPane: `PID ${w.process.pid}`,
+        currentCommand: execution ? `${providerName} -p "${execution.goal.slice(0, 80)}"` : 'idle',
+        currentFile: lastHistoryEntry?.filesTouched?.slice(-1)[0] || '',
+        gitBranch,
+        durationMs: execution ? Date.now() - new Date(execution.startedAt).getTime() : 0,
+      };
+    });
+
+    // A worker has a session worth showing if it's currently active OR has ever completed/failed
+    // a task — matches the field's own status union (STREAMING/COMPLETED/FAILED), so a finished
+    // session stays visible after the fact instead of vanishing the instant work completes.
+    const aiSessions: TelemetryAiSessionInfo[] = allWorkers
+      .filter((w) => w.activeExecution || w.history.length > 0)
+      .map((w) => {
+        const execution = w.activeExecution;
+        const lastEntry = w.history[0];
+        const status: TelemetryAiSessionInfo['status'] = execution
+          ? 'STREAMING'
+          : lastEntry?.outcome === 'FAILED'
+            ? 'FAILED'
+            : 'COMPLETED';
+
+        return {
+          sessionId: `session-${w.id}-${execution?.taskId || lastEntry?.taskId || 'session'}`,
+          workerId: w.id,
+          workerName: w.name,
+          providerName: runtimeProviders.find((p) => p.id === w.assignedProviderId)?.name || w.assignedProviderId || 'unassigned',
+          prompt: execution?.goal || lastEntry?.goal || '',
+          streamingOutput: this.terminalLog?.readTail(w.id, 8) || [],
+          durationMs: lastEntry?.durationMs ?? (execution ? Date.now() - new Date(execution.startedAt).getTime() : 0),
+          tokenUsage: w.tokenUsageTotal,
+          workspacePath: execution?.workspacePath || '',
+          status,
+          startedAt: execution?.startedAt || new Date().toISOString(),
+        };
+      });
+
+    const fileEvents: TelemetryFileEvent[] = allWorkers
+      .flatMap((w) =>
+        w.history.flatMap((h) =>
+          (h.filesTouched || []).map((path) => ({
+            id: `fe-${w.id}-${h.taskId}-${path}`,
+            type: 'CREATED' as const,
+            relativePath: path,
+            lines: 0,
+            timestamp: h.timestamp,
+            workerName: w.name,
+          }))
+        )
+      )
+      .slice(-20);
 
     const activeProjectState = (this.projectOrchestrator as any)?.projectHistory
-      ? Array.from((this.projectOrchestrator as any).projectHistory.values())[0] as any
+      ? (Array.from((this.projectOrchestrator as any).projectHistory.values()).slice(-1)[0] as any)
       : undefined;
 
-    const projectStatus = activeProjectState?.state?.status || 'COMPLETED';
+    const projectStatus = activeProjectState?.state?.status;
+    const firstPlan = activeProjectState?.state?.executionPlans
+      ? (Object.values(activeProjectState.state.executionPlans)[0] as any)
+      : undefined;
+    const tasks: TelemetryTaskNode[] = firstPlan?.tasks
+      ? firstPlan.tasks.map((t: any) => ({
+          id: t.id,
+          title: t.title,
+          description: t.description,
+          requiredCapability: t.requiredCapability,
+          priority: t.priority,
+          status: t.status,
+          dependencies: t.dependencies,
+        }))
+      : [];
+
+    const firstExecutionResult = activeProjectState?.state?.executionResults
+      ? (Object.values(activeProjectState.state.executionResults)[0] as any)
+      : undefined;
+
+    const lastVerification = this.verificationPipeline?.getLastResult();
 
     return {
       timestamp: new Date().toISOString(),
-      projectId: activeProjectState?.state?.projectId || 'proj-1784894242694',
-      businessGoal: activeProjectState?.state?.goal || 'Create a REST API for User Management',
-      projectStatus: projectStatus === 'COMPLETED' ? 'COMPLETED' : 'EXECUTING',
-      currentStage: projectStatus === 'COMPLETED' ? 'Stage 5 / 5 — Project Completed' : 'Stage 4 / 5 — Integration Testing & Documentation',
-      progressPercent: projectStatus === 'COMPLETED' ? 100 : 80,
-      estimatedCompletionMinutes: projectStatus === 'COMPLETED' ? 0 : 2,
+      projectId: activeProjectState?.state?.projectId,
+      businessGoal: activeProjectState?.state?.goal,
+      projectStatus: projectStatus === 'COMPLETED' ? 'COMPLETED' : projectStatus === 'FAILED' ? 'FAILED' : projectStatus ? 'EXECUTING' : 'IDLE',
+      currentStage: projectStatus === 'COMPLETED' ? 'Project Completed' : projectStatus ? 'Executing Missions' : 'No active project',
+      progressPercent: projectStatus === 'COMPLETED' ? 100 : projectStatus ? 50 : 0,
+      estimatedCompletionMinutes: projectStatus === 'COMPLETED' ? 0 : projectStatus ? 1 : 0,
       runtimeProviders,
       activeRuntimeProviderId: this.activeRuntimeProviderId,
-      tasks: [
-        { id: 't-101', title: 'Design System Architecture', description: 'Define microservices architecture', requiredCapability: 'Architecture', priority: 'P0', status: 'COMPLETED', dependencies: [] },
-        { id: 't-102', title: 'Define DB Schema & Models', description: 'Create SQLite table schemas', requiredCapability: 'Backend', priority: 'P1', status: 'COMPLETED', dependencies: ['t-101'] },
-        { id: 't-103', title: 'Implement Express REST Server Endpoints', description: 'Implement CRUD controllers', requiredCapability: 'Backend', priority: 'P1', status: 'COMPLETED', dependencies: ['t-101', 't-102'] },
-        { id: 't-104', title: 'Implement Auth & Permissions Middleware', description: 'Add JWT verification', requiredCapability: 'Backend', priority: 'P1', status: 'RUNNING', dependencies: ['t-103'] },
-        { id: 't-105', title: 'Write Verification Unit & Integration Tests', description: 'Create test suites', requiredCapability: 'QA', priority: 'P2', status: 'RUNNING', dependencies: ['t-104'] },
-        { id: 't-106', title: 'Generate OpenAPI Specs & Documentation', description: 'Produce OpenAPI v3 specification', requiredCapability: 'Documentation', priority: 'P2', status: 'READY', dependencies: ['t-104'] },
-      ],
+      tasks,
       workers,
       aiSessions,
-      fileEvents: [
-        { id: 'fe-1', type: 'CREATED', relativePath: 'src/server.ts', lines: 142, timestamp: new Date(Date.now() - 12000).toLocaleTimeString(), workerName: 'Alice (Lead Architect)' },
-        { id: 'fe-2', type: 'CREATED', relativePath: 'src/controllers/user.controller.ts', lines: 110, timestamp: new Date(Date.now() - 8000).toLocaleTimeString(), workerName: 'Bob (Backend Engineer)' },
-        { id: 'fe-3', type: 'CREATED', relativePath: 'src/middleware/auth.middleware.ts', lines: 98, timestamp: new Date(Date.now() - 5000).toLocaleTimeString(), workerName: 'Bob (Backend Engineer)' },
-        { id: 'fe-4', type: 'CREATED', relativePath: 'tests/user_api.test.ts', lines: 110, timestamp: new Date(Date.now() - 3000).toLocaleTimeString(), workerName: 'Charlie (QA Engineer)' },
-        { id: 'fe-5', type: 'MODIFIED', relativePath: 'package.json', lines: 45, timestamp: new Date(Date.now() - 1000).toLocaleTimeString(), workerName: 'Bob (Backend Engineer)' },
-      ],
-      verification: {
-        taskId: 't-104',
-        workspacePath: './.se_workspaces/ws-t-104',
-        success: true,
-        status: 'PASSED',
-        qualityScore: 100,
-        stepResults: [
-          { name: 'WorkspaceExistenceCheck', category: 'Workspace', passed: true, message: 'Workspace directory exists.', errors: [], warnings: [], durationMs: 1 },
-          { name: 'ArtifactIntegrityCheck', category: 'Artifacts', passed: true, message: 'Found 4 valid artifacts.', errors: [], warnings: [], durationMs: 1 },
-          { name: 'BuildValidationCheck', category: 'Build', passed: true, message: 'Build check passed.', errors: [], warnings: [], durationMs: 2 },
-          { name: 'TypeScriptCompilationCheck', category: 'TypeCheck', passed: true, message: 'TypeScript compilation check passed.', errors: [], warnings: [], durationMs: 3 },
-          { name: 'UnitTestExecutionCheck', category: 'Testing', passed: true, message: 'Unit tests passed.', errors: [], warnings: [], durationMs: 4 },
-          { name: 'LintValidationCheck', category: 'Linting', passed: true, message: 'Lint rules passed.', errors: [], warnings: [], durationMs: 2 },
-        ],
-        errors: [],
-        warnings: [],
-        durationMs: 13,
-      },
-      recentEvents: this.events.length > 0 ? this.events.slice(0, 15) : [
-        { eventId: 'evt-vs1-1', aggregateId: 'proj-vs1', eventType: 'ProjectExecutionStarted', timestamp: new Date().toISOString(), actorId: 'ProjectLifecycleOrchestrator', version: 1, payload: {} },
-        { eventId: 'evt-vs1-2', aggregateId: 'proj-vs1', eventType: 'VerificationPassed', timestamp: new Date().toISOString(), actorId: 'VerificationPipeline', version: 1, payload: {} },
-        { eventId: 'evt-vs1-3', aggregateId: 'proj-vs1', eventType: 'ProjectExecutionCompleted', timestamp: new Date().toISOString(), actorId: 'ProjectLifecycleOrchestrator', version: 1, payload: {} },
-      ],
+      fileEvents,
+      verification: lastVerification,
+      recentEvents: this.events.slice(0, 15),
       systemConsoleLogs: this.logs.slice(0, 20),
       metrics: {
         kernelStatus: 'ONLINE',
         totalWorkersCount: workers.length,
-        runningTasksCount: 2,
-        queuedTasksCount: 1,
+        runningTasksCount: firstExecutionResult?.state?.runningTaskIds?.length || 0,
+        queuedTasksCount: firstExecutionResult?.state?.pendingTaskIds?.length || 0,
         memoryUsageMB: memoryMB,
-        cpuLoadPercent: 12.4,
+        cpuLoadPercent: parseFloat((os.loadavg()[0] || 0).toFixed(2)),
       },
     };
   }

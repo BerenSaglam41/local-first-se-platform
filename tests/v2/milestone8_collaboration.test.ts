@@ -4,6 +4,7 @@ import { TaskOwnershipManager } from '../../src/v2/application/collaboration/tas
 import { ReviewWorkflowManager } from '../../src/v2/application/collaboration/review_workflow';
 import { ConflictDetector } from '../../src/v2/application/collaboration/conflict_detector';
 import { SeOsCli } from '../../src/v2/cli/se_os_cli';
+import { createFakeClaudeSpawner, createAvailableDetector , createSafeTestProviderOverrides } from './helpers/fake_claude_process';
 import * as fs from 'fs';
 
 describe('SE-OS v2.0 Milestone 8 — Multi-Agent Collaboration Engine Suite', () => {
@@ -100,7 +101,7 @@ describe('SE-OS v2.0 Milestone 8 — Multi-Agent Collaboration Engine Suite', ()
   });
 
   it('should execute CLI collaboration subcommands cleanly', async () => {
-    const cli = new SeOsCli();
+    const cli = new SeOsCli(createSafeTestProviderOverrides());
     await cli.boot('./non_existent_config.json');
     await cli.workersDelegate('task-001', 'emp-bob', 'emp-alice');
     await cli.reviewRequest('task-001', 'emp-alice', 'emp-bob');

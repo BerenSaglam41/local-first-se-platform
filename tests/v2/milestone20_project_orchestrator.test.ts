@@ -3,8 +3,8 @@ import { ProjectLifecycleOrchestrator } from '../../src/v2/application/project/p
 import { DefaultProjectLifecycleStrategy } from '../../src/v2/application/project/project_lifecycle_strategy';
 import { IProjectLifecycleStrategy } from '../../src/v2/contracts/iproject_lifecycle_strategy';
 import { ProjectExecutionResult } from '../../src/v2/contracts/iproject_lifecycle_orchestrator';
-import { ClaudeCodeRuntimePlugin } from '../../src/v2/application/plugins/claude/claude_code_runtime_plugin';
 import { SeOsCli } from '../../src/v2/cli/se_os_cli';
+import { createFakeClaudeCodeRuntimePlugin, createFakeClaudeSpawner, createAvailableDetector , createSafeTestProviderOverrides } from './helpers/fake_claude_process';
 import * as fs from 'fs';
 
 describe('SE-OS v2.0 Milestone 20 — Autonomous Project Lifecycle Orchestrator Suite', () => {
@@ -25,7 +25,9 @@ describe('SE-OS v2.0 Milestone 20 — Autonomous Project Lifecycle Orchestrator 
 
   async function bootKernelWithClaude(): Promise<Kernel> {
     await kernel.boot('./non_existent_config.json');
-    await kernel.getRuntimePluginSystemManager().loadAndRegisterPlugin(new ClaudeCodeRuntimePlugin(kernel.getEventStore()));
+    await kernel.getRuntimePluginSystemManager().loadAndRegisterPlugin(
+      createFakeClaudeCodeRuntimePlugin({ eventStore: kernel.getEventStore() })
+    );
     return kernel;
   }
 
@@ -68,6 +70,7 @@ describe('SE-OS v2.0 Milestone 20 — Autonomous Project Lifecycle Orchestrator 
             executionResults: {},
             startTime: new Date().toISOString(),
             endTime: new Date().toISOString(),
+            conversationHistory: [],
           },
           summary: `Custom project execution for ${goal}`,
           reports: {},
@@ -126,7 +129,7 @@ describe('SE-OS v2.0 Milestone 20 — Autonomous Project Lifecycle Orchestrator 
   // ─── 5. CLI Integration ──────────────────────────────────────────
 
   it('should execute CLI project run, status, and report subcommands cleanly', async () => {
-    const cli = new SeOsCli();
+    const cli = new SeOsCli(createSafeTestProviderOverrides());
     await cli.boot('./non_existent_config.json');
 
     await cli.projectRun('CLI Autonomous Goal Test');
