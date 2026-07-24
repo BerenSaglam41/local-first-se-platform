@@ -9,6 +9,9 @@
 ## Milestone Summary
 
 ```
+[Milestone 0: Skeleton & Kernel Contracts] ──> COMPLETED
+                    │
+                    ▼
 [Milestone 1: Kernel Domain & Event Store]
                     │
                     ▼
@@ -26,6 +29,21 @@
                     ▼
 [Milestone 6: Multi-Pane Tmux TUI & End-to-End Release]
 ```
+
+---
+
+### Milestone 0: Project Skeleton & Kernel Contracts (COMPLETED)
+- **Objective**: Build complete v2.0 folder structure, public contracts, in-memory skeletons, and DI container.
+- **Deliverables**:
+  - `src/v2/contracts/` (`IKernel`, `ICompanyBus`, `ISharedMemory`, `IScheduler`, `IWorkerRuntime`, `IContextCompiler`, `IPluginRegistry`, `IEventStore`, `IAIAdapter`)
+  - `src/v2/infrastructure/di/di_container.ts`
+  - `src/v2/application/plugins/plugin_registry.ts`
+  - `src/v2/domain/events/in_memory_event_store.ts`
+  - `src/v2/application/company-bus/in_memory_company_bus.ts`
+  - `tests/v2/milestone0.test.ts`
+- **Dependencies**: Architecture Freeze
+- **Complexity**: Low
+- **Acceptance Criteria**: 100% compilation, 21/21 test suites passing cleanly, zero AI provider dependency.
 
 ---
 
