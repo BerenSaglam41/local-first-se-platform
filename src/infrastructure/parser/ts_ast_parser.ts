@@ -12,8 +12,9 @@ export class TypeScriptASTParser implements IASTParser {
   constructor(private sliceEngine: ICodeSliceEngine) {
     const ParserCls = (Parser as any).default || Parser;
     const TsLang = (TypeScript as any).default || TypeScript;
+    const tsLanguage = TsLang.typescript || TsLang;
     this.parser = new ParserCls();
-    this.parser.setLanguage(TsLang.typescript);
+    this.parser.setLanguage(tsLanguage);
   }
 
   supportsLanguage(language: string): boolean {
@@ -22,10 +23,13 @@ export class TypeScriptASTParser implements IASTParser {
 
   parse(content: string, language: string): CodeSymbol[] {
     const TsLang = (TypeScript as any).default || TypeScript;
+    const tsLanguage = TsLang.typescript || TsLang;
+    const tsxLanguage = TsLang.tsx || TsLang;
+
     if (language === 'tsx') {
-      this.parser.setLanguage(TsLang.tsx);
+      this.parser.setLanguage(tsxLanguage);
     } else {
-      this.parser.setLanguage(TsLang.typescript);
+      this.parser.setLanguage(tsLanguage);
     }
 
     const tree = this.parser.parse(content || '');

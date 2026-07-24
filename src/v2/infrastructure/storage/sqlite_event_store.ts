@@ -38,24 +38,33 @@ export class SqliteEventStore implements IEventStore {
     return this.db;
   }
 
+  private isClosed = false;
+
   async append(event: DomainEvent): Promise<void> {
-    const db = await this.connect();
-    await db.run(
-      `INSERT INTO domain_events_v2 (event_id, aggregate_id, event_type, version, timestamp, actor_id, payload)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [
-        event.eventId,
-        event.aggregateId,
-        event.eventType,
-        event.version,
-        event.timestamp,
-        event.actorId,
-        JSON.stringify(event.payload || {}),
-      ]
-    );
+    if (this.isClosed) return;
+    try {
+      const db = await this.connect();
+      if (this.isClosed || !this.db) return;
+      await db.run(
+        `INSERT INTO domain_events_v2 (event_id, aggregate_id, event_type, version, timestamp, actor_id, payload)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+          event.eventId,
+          event.aggregateId,
+          event.eventType,
+          event.version,
+          event.timestamp,
+          event.actorId,
+          JSON.stringify(event.payload || {}),
+        ]
+      );
+    } catch (e) {
+      // Non-fatal during shutdown
+    }
   }
 
   async readStream(aggregateId: string): Promise<DomainEvent[]> {
+    if (this.isClosed) return [];
     const db = await this.connect();
     const rows = await db.all<any[]>(
       `SELECT * FROM domain_events_v2 WHERE aggregate_id = ? ORDER BY timestamp ASC`,
@@ -73,6 +82,7 @@ export class SqliteEventStore implements IEventStore {
   }
 
   async replayAll(handler: (event: DomainEvent) => void): Promise<void> {
+    if (this.isClosed) return;
     const db = await this.connect();
     const rows = await db.all<any[]>(`SELECT * FROM domain_events_v2 ORDER BY timestamp ASC`);
     for (const r of rows) {
@@ -89,8 +99,11 @@ export class SqliteEventStore implements IEventStore {
   }
 
   async close(): Promise<void> {
+    this.isClosed = true;
     if (this.db) {
-      await this.db.close();
+      try {
+        await this.db.close();
+      } catch (e) {}
       this.db = null;
     }
   }

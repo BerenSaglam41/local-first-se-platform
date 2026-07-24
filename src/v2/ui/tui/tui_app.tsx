@@ -9,6 +9,7 @@ import { MainMenu } from './components/MainMenu.js';
 import { NewProjectPrompt } from './components/NewProjectPrompt.js';
 import { ProjectExecutionScreen } from './components/ProjectExecutionScreen.js';
 import { ProjectCompletionScreen } from './components/ProjectCompletionScreen.js';
+import { ProjectWizard } from './components/ProjectWizard.js';
 import { Kernel } from '../../kernel/kernel.js';
 
 interface TuiAppProps {
@@ -77,12 +78,13 @@ export const TuiApp: React.FC<TuiAppProps> = ({ telemetryAggregator, kernel, onE
       )}
 
       {currentScreen === 'NEW_PROJECT_PROMPT' && (
-        <NewProjectPrompt
-          onSubmitGoal={(goal: string) => {
-            telemetryAggregator.logMessage('INFO', `Triggering autonomous project goal: '${goal}'`);
+        <ProjectWizard
+          onStartProject={(projectName: string, absolutePath: string) => {
+            const goal = `Create ${projectName}`;
+            telemetryAggregator.logMessage('INFO', `Triggering autonomous project execution at ${absolutePath}`);
             if (kernel) {
-              kernel.getProjectLifecycleOrchestrator().runProject(goal).then(() => {
-                telemetryAggregator.logMessage('SUCCESS', `Autonomous execution completed for '${goal}'`);
+              kernel.getProjectLifecycleOrchestrator().runProject(goal, { absolutePath }).then(() => {
+                telemetryAggregator.logMessage('SUCCESS', `Autonomous execution completed at ${absolutePath}`);
               }).catch((err: any) => {
                 telemetryAggregator.logMessage('ERROR', `Execution error: ${err.message}`);
               });

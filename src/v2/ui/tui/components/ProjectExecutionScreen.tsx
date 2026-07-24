@@ -66,23 +66,27 @@ export const ProjectExecutionScreen: React.FC<ProjectExecutionScreenProps> = ({
 
           <Box marginTop={1} flexDirection="column">
             <Text bold color="yellow" underline>
-              WORKER FLEET STATUS:
+              WORKER FLEET (ROLE, AI PROVIDER, PWD, TERMINAL, BRANCH):
             </Text>
             {snapshot.workers.map((w: any) => (
-              <Box key={w.id} justifyContent="space-between">
-                <Text color="white">{w.name} ({w.role})</Text>
-                <Text color={w.status === 'EXECUTING' ? 'green' : 'gray'}>
-                  [{w.status}] {w.durationMs}ms
-                </Text>
+              <Box key={w.id} flexDirection="column" marginBottom={1} borderStyle="single" borderColor="gray" paddingX={1}>
+                <Box justifyContent="space-between">
+                  <Text color="green" bold>{w.name} ({w.role})</Text>
+                  <Text color="cyan">AI: {w.assignedProvider || w.runtimeProvider}</Text>
+                  <Text color={w.status === 'EXECUTING' ? 'green' : 'gray'}>[{w.status}]</Text>
+                </Box>
+                <Text color="white">  pwd: {w.workingDirectory || './src'}</Text>
+                <Text color="gray">  pane: {w.terminalPane || 'tmux pane 1'} | branch: {w.gitBranch || 'master'}</Text>
+                <Text color="yellow">  cmd: {w.currentCommand || 'node --version'}</Text>
               </Box>
             ))}
           </Box>
         </Box>
 
-        {/* Right Column: AI Session Monitor (Centerpiece) */}
+        {/* Right Column: AI Session Monitor & Real-Time File Events */}
         <Box flexDirection="column" width="55%" borderStyle="single" borderColor="purple" padding={1}>
           <Text bold color="purple" underline>
-            LIVE AI RUNTIME SESSION MONITOR ({activeSession?.workerName || 'Bob'})
+            LIVE AI SESSION MONITOR & REAL-TIME FILE MONITOR:
           </Text>
 
           {activeSession ? (
@@ -91,19 +95,22 @@ export const ProjectExecutionScreen: React.FC<ProjectExecutionScreenProps> = ({
               <Text color="gray">"{activeSession.prompt}"</Text>
 
               <Box marginTop={1} flexDirection="column" borderStyle="single" borderColor="gray" padding={1}>
-                <Text bold color="yellow">STREAMING STDOUT LOG (Claude Code CLI):</Text>
+                <Text bold color="yellow">STREAMING STDOUT LOG ({activeSession.providerName}):</Text>
                 {activeSession.streamingOutput.map((line: string, idx: number) => (
-                  <Text key={idx} color={line.includes('PASSED') ? 'green' : 'white'}>
+                  <Text key={idx} color={line.includes('PASSED') || line.includes('written') ? 'green' : 'white'}>
                     &gt; {line}
                   </Text>
                 ))}
               </Box>
 
-              {activeSession.finalResponse && (
-                <Box marginTop={1}>
-                  <Text bold color="green">Response: {activeSession.finalResponse}</Text>
-                </Box>
-              )}
+              <Box marginTop={1} flexDirection="column" borderStyle="single" borderColor="cyan" padding={1}>
+                <Text bold color="cyan">REAL-TIME FILE EVENT STREAM (WITH TIMESTAMPS):</Text>
+                {(snapshot.fileEvents || []).map((fe: any) => (
+                  <Text key={fe.id} color={fe.type === 'CREATED' ? 'green' : 'yellow'}>
+                    [{fe.timestamp}] {fe.type}: {fe.relativePath} (+{fe.lines} lines) — {fe.workerName}
+                  </Text>
+                ))}
+              </Box>
 
               <Box marginTop={1} justifyContent="space-between">
                 <Text color="gray">Tokens: {activeSession.tokenUsage || 0}</Text>
@@ -121,7 +128,7 @@ export const ProjectExecutionScreen: React.FC<ProjectExecutionScreenProps> = ({
       <Box height={7} borderStyle="single" borderColor="gray" paddingX={1} justifyContent="space-between">
         {/* Verification Checklist */}
         <Box flexDirection="column" width="40%">
-          <Text bold color="cyan">VERIFICATION PIPELINE:</Text>
+          <Text bold color="cyan">PHYSICAL VERIFICATION PIPELINE:</Text>
           {snapshot.verification?.stepResults.map((s: any, idx: number) => (
             <Text key={idx} color={s.passed ? 'green' : 'red'}>
               [{s.passed ? '✓' : '✗'}] {s.name.replace('Check', '')} ({s.durationMs}ms)

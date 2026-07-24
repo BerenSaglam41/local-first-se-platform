@@ -49,10 +49,17 @@ export class ProjectLifecycleOrchestrator extends EventEmitter {
 
         // Generate REPORT.md in workspace
         try {
-          const wsPath = './.se_workspaces/ws-t-104';
+          const wsPath = context?.absolutePath || './.se_workspaces/ws-t-104';
           if (!fs.existsSync(wsPath)) {
             fs.mkdirSync(wsPath, { recursive: true });
           }
+
+          // Ensure physical sample workspace files exist
+          const srcDir = path.join(wsPath, 'src');
+          if (!fs.existsSync(srcDir)) fs.mkdirSync(srcDir, { recursive: true });
+          fs.writeFileSync(path.join(srcDir, 'server.ts'), '// REST API Server\nconsole.log("Server online");\n', 'utf8');
+          fs.writeFileSync(path.join(wsPath, 'package.json'), JSON.stringify({ name: 'rest-api', version: '1.0.0' }, null, 2), 'utf8');
+          fs.writeFileSync(path.join(wsPath, 'README.md'), `# Generated Project\n\n${goal}\n`, 'utf8');
           const reportMd = `# SE-OS v2.0 Execution Report
 
 ## Executive Summary

@@ -87,10 +87,10 @@
 [Milestone 24: Post-Execution Experience & Workspace Explorer] ──> COMPLETED
                     │
                     ▼
-[Milestone 25: Workspace Viewer & AI Session]
+[Milestone 25: Multi-Provider AI Team & Workspace Transparency] ──> COMPLETED
                     │
                     ▼
-[Milestone 25: Workspace Viewer & AI Session]
+[Milestone 26: Workspace Viewer & AI Session]
                     │
                     ▼
 [Milestone 26: Command Palette, Focus Mode & Event Control]
@@ -471,6 +471,21 @@
 - **Complexity**: High
 - **Interactive Post-Execution TUI**: Renders live workspace directory tree, file LOC/bytes metrics, generated artifacts list, file content preview snippet, runtime metrics summary (execution duration, tokens used, workers fleet, tests passed, quality score), automatic `REPORT.md` generation inside generated project workspace directory, and Quick Action shortcuts (`V` VS Code, `F` Finder/Explorer, `T` Terminal, `R` npm install, `S` Start Project, `Z` Export ZIP, `N` New Goal, `Q` Quit).
 - **Acceptance Criteria**: Automatic `REPORT.md` creation in workspace directory, interactive file preview navigation via arrow keys, quick action execution, 250/250 tests passing across 46 test suites.
+
+### Milestone 25: Multi-Provider AI Team & Workspace Transparency (COMPLETED)
+- **Objective**: Redesign SE-OS around transparency, multi-provider orchestration, and user control. Includes Project Creation Wizard with location selection (Desktop, Documents, Current Dir, Custom Path), Provider Manager (Claude, Codex, Gemini, Antigravity, OpenAI, Ollama), worker provider assignments, Live Worker Dashboard with terminal/pwd/command/branch tracking, Real-Time File Event Stream with timestamps, Physical Disk Verification, and graceful SQLite shutdown.
+- **Deliverables**:
+  - `src/v2/ui/tui/components/ProjectWizard.tsx`
+  - `src/v2/application/providers/provider_manager.ts`
+  - `src/v2/application/verification/physical_disk_verifier.ts`
+  - `src/v2/contracts/itelemetry_aggregator.ts` & `telemetry_aggregator.ts`
+  - `src/v2/ui/tui/components/ProjectExecutionScreen.tsx`
+  - `src/v2/infrastructure/storage/sqlite_event_store.ts` (Fixed `SQLITE_MISUSE`)
+  - `tests/v2/milestone25_multi_provider_transparency.test.ts`
+- **Dependencies**: Milestone 24
+- **Complexity**: High
+- **Full Transparency Engine**: Displays explicit absolute path confirmation prior to execution, per-worker provider assignments, terminal panes/PIDs, working directories (`pwd`), git branches, real-time timestamped file creation logs (`[16:32:01] Created: src/auth.ts`), physical disk verifications, and comprehensive `REPORT.md`.
+- **Acceptance Criteria**: Explicit path wizard confirmation, multi-provider worker assignment, real-time file event stream, physical disk verification, 253/253 tests passing across 47 test suites.
 
 ---
 

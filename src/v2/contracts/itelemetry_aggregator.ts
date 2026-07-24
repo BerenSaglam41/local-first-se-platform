@@ -28,7 +28,22 @@ export interface TelemetryWorkerInfo {
   currentTaskId?: string;
   currentTaskTitle?: string;
   runtimeProvider: string;
+  assignedProvider: string;
+  workingDirectory: string;
+  terminalPane: string;
+  currentCommand: string;
+  currentFile: string;
+  gitBranch: string;
   durationMs: number;
+}
+
+export interface TelemetryFileEvent {
+  id: string;
+  type: 'CREATED' | 'MODIFIED' | 'UPDATED';
+  relativePath: string;
+  lines: number;
+  timestamp: string;
+  workerName: string;
 }
 
 export interface TelemetryAiSessionInfo {
@@ -62,6 +77,7 @@ export interface TelemetrySnapshot {
   tasks: TelemetryTaskNode[];
   workers: TelemetryWorkerInfo[];
   aiSessions: TelemetryAiSessionInfo[];
+  fileEvents: TelemetryFileEvent[];
   verification?: VerificationResult;
   recentEvents: DomainEvent[];
   systemConsoleLogs: Array<{ id: string; timestamp: string; level: string; message: string }>;
