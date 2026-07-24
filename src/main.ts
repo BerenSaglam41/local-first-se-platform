@@ -15,6 +15,7 @@ import { IDashboard } from './core/domain/interfaces/idashboard';
 import { TmuxDashboard } from './infrastructure/logging/tmux_dashboard';
 import { IWorkspaceManager } from './core/domain/interfaces/iworkspace_manager';
 import { WorkspaceManager } from './infrastructure/workspace/workspace_manager';
+import { CliFormatter } from './infrastructure/logging/cli_formatter';
 
 // Milestone 2 Interfaces & Implementations
 import { ICache } from './core/domain/interfaces/icache';
@@ -251,28 +252,26 @@ Examples:
       dashboard.writeMain(msg);
     };
 
-    mainLog('----------------------------------------');
-    mainLog(`Task received: "${taskPrompt}"`);
-    mainLog(`Workspace Name: ${wsMeta.name}`);
-    mainLog(`Project Type:   ${wsMeta.projectType}`);
-    mainLog(`Project Root:   ${wsMeta.rootPath}`);
-    if (wsMeta.buildCommand) mainLog(`Build Command:  ${wsMeta.buildCommand}`);
-    if (wsMeta.testCommand)  mainLog(`Test Command:   ${wsMeta.testCommand}`);
-    mainLog('Executing task through SE-OS pipeline...');
-    mainLog('----------------------------------------');
+    mainLog(CliFormatter.divider('─', 74));
+    mainLog(`${CliFormatter.iconWorkspace}  ${CliFormatter.bold(CliFormatter.brightCyan('Task Received:'))}   "${CliFormatter.brightYellow(taskPrompt)}"`);
+    mainLog(`   ${CliFormatter.bold('Workspace Name:')} ${CliFormatter.cyan(wsMeta.name)}`);
+    mainLog(`   ${CliFormatter.bold('Project Type:')}   ${CliFormatter.magenta(wsMeta.projectType)}`);
+    mainLog(`   ${CliFormatter.bold('Project Root:')}   ${CliFormatter.gray(wsMeta.rootPath)}`);
+    if (wsMeta.buildCommand) mainLog(`   ${CliFormatter.bold('Build Command:')}  ${CliFormatter.green(wsMeta.buildCommand)}`);
+    if (wsMeta.testCommand)  mainLog(`   ${CliFormatter.bold('Test Command:')}   ${CliFormatter.green(wsMeta.testCommand)}`);
+    mainLog(`   ${CliFormatter.bold('Pipeline State:')}  ${CliFormatter.brightGreen('RUNNING (SE-OS Autonomous Kernel)')}`);
+    mainLog(CliFormatter.divider('─', 74));
 
-    dashboard.writeKnowledge(`\n====================================================`);
-    dashboard.writeKnowledge(` Workspace:      ${wsMeta.name}`);
+    dashboard.writeKnowledge(`\n` + CliFormatter.headerBox('TARGET WORKSPACE METADATA', 68));
+    dashboard.writeKnowledge(` Workspace Name: ${wsMeta.name}`);
     dashboard.writeKnowledge(` Project Type:   ${wsMeta.projectType}`);
     dashboard.writeKnowledge(` Project Root:   ${wsMeta.rootPath}`);
-    dashboard.writeKnowledge(` Detected Commands:`);
-    dashboard.writeKnowledge(`   Build: ${wsMeta.buildCommand || 'none'}`);
-    dashboard.writeKnowledge(`   Test:  ${wsMeta.testCommand || 'none'}`);
-    dashboard.writeKnowledge(`====================================================\n`);
+    dashboard.writeKnowledge(` Detected Build Command: ${wsMeta.buildCommand || 'none'}`);
+    dashboard.writeKnowledge(` Detected Test Command:  ${wsMeta.testCommand || 'none'}\n`);
 
     const scanStartTime = Date.now();
-    mainLog('\n▶ Workspace Scan');
-    dashboard.writeKnowledge(`[INFO] Starting Workspace Scan in directory: ${rootDir}`);
+    mainLog(`\n${CliFormatter.iconActive} ${CliFormatter.bold(CliFormatter.cyan('Workspace Scan'))}`);
+    dashboard.writeKnowledge(`[INFO] Starting Workspace Scan in target path: ${rootDir}`);
     const workspaceFiles = scanWorkspaceFiles(rootDir);
 
     // Extract target files mentioned in task prompt (e.g. src/calculator.ts)
@@ -290,9 +289,9 @@ Examples:
     const entryFile = preferredEntry || path.join(rootDir, 'src', 'main.ts');
     
     dashboard.writeKnowledge(`[SUCCESS] Workspace scan completed. Found ${workspaceFiles.length} file(s). Entry file: ${entryFile}`);
-    mainLog(`    Found ${workspaceFiles.length} source file(s)`);
-    mainLog(`    Entry File: ${path.relative(rootDir, entryFile)}`);
-    mainLog(`    ${Date.now() - scanStartTime} ms`);
+    mainLog(`    Found ${CliFormatter.brightYellow(String(workspaceFiles.length))} source file(s)`);
+    mainLog(`    Entry File: ${CliFormatter.gray(path.relative(rootDir, entryFile))}`);
+    mainLog(`    ${CliFormatter.dim(Date.now() - scanStartTime + ' ms')}`);
 
     const { container } = await bootstrap();
 
@@ -327,78 +326,80 @@ Examples:
 
       if (event.status === 'started') {
         if (event.stage === 'AI Provider Execution') {
-          mainLog(`\n▶ AI Provider Execution`);
-          mainLog(`    Provider: ${event.metrics?.providerName || 'Provider'}`);
-          mainLog(`    Waiting for AI response...`);
-          dashboard.writeProvider(`\n--- PROMPT SENT TO CLAUDE PROVIDER ---\nPrompt size: ${event.metrics?.promptLength || 0} chars\nWaiting for response...\n`);
+          mainLog(`\n${CliFormatter.iconActive} ${CliFormatter.bold(CliFormatter.cyan('AI Provider Execution'))}`);
+          mainLog(`    Provider: ${CliFormatter.bold(event.metrics?.providerName || 'ClaudeProvider')}`);
+          mainLog(`    ${CliFormatter.iconWait} ${CliFormatter.yellow('Waiting for AI provider response...')}`);
+          dashboard.writeProvider(`\n--- PROMPT SENT TO PROVIDER ---\nPrompt size: ${event.metrics?.promptLength || 0} chars\nWaiting for response...\n`);
         } else if (event.stage === 'Autonomous Retry Engine') {
-          mainLog(`\n▶ Autonomous Retry Engine`);
-          mainLog(`    Attempt: ${event.metrics?.attempt}/${event.metrics?.maxRetries}`);
-          mainLog(`    Triggering self-repair loop...`);
+          mainLog(`\n${CliFormatter.iconWarn} ${CliFormatter.bold(CliFormatter.yellow('Autonomous Retry Engine'))}`);
+          mainLog(`    Attempt: ${CliFormatter.bold(event.metrics?.attempt + '/' + event.metrics?.maxRetries)}`);
+          mainLog(`    ${CliFormatter.yellow('Triggering self-repair feedback loop...')}`);
           dashboard.writeMain(`[RETRY] Triggering self-repair attempt ${event.metrics?.attempt}/${event.metrics?.maxRetries}`);
         } else {
-          mainLog(`\n▶ ${event.stage}`);
+          mainLog(`\n${CliFormatter.iconActive} ${CliFormatter.bold(CliFormatter.cyan(event.stage))}`);
         }
       } else if (event.status === 'completed') {
         if (event.stage === 'Project Knowledge Engine') {
-          mainLog(`    Indexed Files: ${event.metrics?.workspaceFilesCount}`);
-          mainLog(`    Tech Stack: ${event.metrics?.techStack?.join(', ') || wsMeta.projectType}`);
-          mainLog(`    Schema Version: v${event.metrics?.schemaVersion || 1}`);
-          mainLog(`    ${elapsed}`);
+          mainLog(`    Indexed Files: ${CliFormatter.brightYellow(String(event.metrics?.workspaceFilesCount))}`);
+          mainLog(`    Tech Stack:    ${CliFormatter.magenta(event.metrics?.techStack?.join(', ') || wsMeta.projectType)}`);
+          mainLog(`    Schema:        v${event.metrics?.schemaVersion || 1}`);
+          mainLog(`    ${CliFormatter.dim(elapsed)}`);
           dashboard.writeKnowledge(`[KNOWLEDGE] Indexed ${event.metrics?.workspaceFilesCount} files. Tech stack: ${event.metrics?.techStack?.join(', ') || wsMeta.projectType}. Schema: v${event.metrics?.schemaVersion}`);
           stageReports.push({ stage: event.stage, status: 'SUCCESS', summary: `Indexed ${event.metrics?.workspaceFilesCount} files (${wsMeta.projectType})` });
         } else if (event.stage === 'Context Builder') {
           mainLog(`    Selected Files: ${event.metrics?.selectedFilesCount || 1}`);
-          mainLog(`    Context Size: ${event.metrics?.contextSizeKB} KB (${event.metrics?.contextSizeChars} chars)`);
-          mainLog(`    ${elapsed}`);
+          mainLog(`    Context Size:   ${event.metrics?.contextSizeKB} KB (${event.metrics?.contextSizeChars} chars)`);
+          mainLog(`    ${CliFormatter.dim(elapsed)}`);
           dashboard.writeKnowledge(`[CONTEXT] Compiled ${event.metrics?.contextSizeKB} KB context slice (${event.metrics?.contextSizeChars} chars)`);
           stageReports.push({ stage: event.stage, status: 'SUCCESS', summary: `Compiled ${event.metrics?.contextSizeKB} KB context slice` });
         } else if (event.stage === 'AI Provider Execution') {
-          mainLog(`    Response received (${event.metrics?.responseLength || 0} chars)`);
-          mainLog(`    ${elapsed}`);
+          mainLog(`    Response received (${CliFormatter.brightGreen(String(event.metrics?.responseLength || 0) + ' chars')})`);
+          mainLog(`    ${CliFormatter.dim(elapsed)}`);
           dashboard.writeProvider(`\n[RESPONSE RECEIVED] Completed in ${elapsed}. Size: ${event.metrics?.responseLength} chars\n`);
           stageReports.push({ stage: event.stage, status: 'SUCCESS', summary: `Received AI response (${event.metrics?.responseLength} chars)` });
         } else if (event.stage === 'Response Validation & Parser') {
-          mainLog(`    Extracted Code Blocks: ${event.metrics?.codeBlocksCount}`);
-          mainLog(`    Validation Status: PASSED (Confidence: ${event.metrics?.confidence?.toFixed(2)})`);
-          mainLog(`    ${elapsed}`);
+          mainLog(`    Extracted Code Blocks: ${CliFormatter.brightYellow(String(event.metrics?.codeBlocksCount))}`);
+          mainLog(`    Validation Status:    ${CliFormatter.brightGreen('PASSED')} (Confidence: ${event.metrics?.confidence?.toFixed(2)})`);
+          mainLog(`    ${CliFormatter.dim(elapsed)}`);
           stageReports.push({ stage: event.stage, status: 'SUCCESS', summary: `Validated ${event.metrics?.codeBlocksCount} code block(s)` });
         } else if (event.stage === 'Patch Generator & Workspace Updater') {
-          mainLog(`    Patch Status: APPLIED`);
+          mainLog(`    Patch Status: ${CliFormatter.brightGreen('APPLIED')}`);
           if (event.metrics?.modifiedFiles && event.metrics.modifiedFiles.length > 0) {
             mainLog(`    Files modified:`);
-            event.metrics.modifiedFiles.forEach((f: string) => mainLog(`      ${path.relative(rootDir, f)}`));
+            event.metrics.modifiedFiles.forEach((f: string) => mainLog(`      ${CliFormatter.cyan(path.relative(rootDir, f))}`));
           } else {
             mainLog(`    Files modified: None`);
           }
-          mainLog(`    ${elapsed}`);
+          mainLog(`    ${CliFormatter.dim(elapsed)}`);
           stageReports.push({ stage: event.stage, status: 'SUCCESS', summary: `Applied patches to ${event.metrics?.modifiedFiles?.length || 0} file(s)` });
         } else if (event.stage === 'Verification Runner') {
-          mainLog(`    Build: ${event.metrics?.buildPassed ? 'PASS' : 'FAIL'}`);
-          mainLog(`    Tests: ${event.metrics?.testsPassed ? 'PASS' : 'FAIL'}`);
-          mainLog(`    ${elapsed}`);
+          const bStatus = event.metrics?.buildPassed ? CliFormatter.brightGreen('PASS') : CliFormatter.brightRed('FAIL');
+          const tStatus = event.metrics?.testsPassed ? CliFormatter.brightGreen('PASS') : CliFormatter.brightRed('FAIL');
+          mainLog(`    Build: ${bStatus}`);
+          mainLog(`    Tests: ${tStatus}`);
+          mainLog(`    ${CliFormatter.dim(elapsed)}`);
           dashboard.writeVerification(`\n[VERIFICATION RESULT] Build: ${event.metrics?.buildPassed ? 'PASS' : 'FAIL'}, Tests: ${event.metrics?.testsPassed ? 'PASS' : 'FAIL'} (${elapsed})\n`);
           stageReports.push({ stage: event.stage, status: 'SUCCESS', summary: `Verification passed (Build: PASS, Tests: PASS)` });
         }
       } else if (event.status === 'failed') {
-        mainLog(`    Status: FAILED (${elapsed})`);
-        mainLog(`\n❌ STAGE FAILURE IN [${event.stage}]`);
+        mainLog(`    Status: ${CliFormatter.brightRed('FAILED')} (${CliFormatter.dim(elapsed)})`);
+        mainLog(`\n${CliFormatter.iconFailure} ${CliFormatter.bold(CliFormatter.brightRed(`STAGE FAILURE IN [${event.stage}]`))}`);
         mainLog(`    Component:       ${event.stage}`);
-        mainLog(`    Error Message:   ${event.error}`);
+        mainLog(`    Error Message:   ${CliFormatter.red(event.error || 'Unknown stage error')}`);
         if (event.exceptionStack) {
           mainLog(`    Stack Trace:`);
-          mainLog(`    --------------------------------------------------`);
-          mainLog(`    ${event.exceptionStack.split('\n').slice(0, 8).join('\n    ')}`);
-          mainLog(`    --------------------------------------------------`);
+          mainLog(`    ${CliFormatter.divider('─', 50)}`);
+          mainLog(`    ${CliFormatter.gray(event.exceptionStack.split('\n').slice(0, 8).join('\n    '))}`);
+          mainLog(`    ${CliFormatter.divider('─', 50)}`);
         }
         if (event.metrics?.verificationLogs) {
           mainLog(`    Verification Logs:`);
-          mainLog(`    --------------------------------------------------`);
-          mainLog(`    ${event.metrics.verificationLogs.split('\n').slice(0, 10).join('\n    ')}`);
-          mainLog(`    --------------------------------------------------`);
+          mainLog(`    ${CliFormatter.divider('─', 50)}`);
+          mainLog(`    ${CliFormatter.yellow(event.metrics.verificationLogs.split('\n').slice(0, 10).join('\n    '))}`);
+          mainLog(`    ${CliFormatter.divider('─', 50)}`);
         }
         if (event.recoveryAction) {
-          mainLog(`    Recovery Action: ${event.recoveryAction}`);
+          mainLog(`    Recovery Action: ${CliFormatter.yellow(event.recoveryAction)}`);
         }
         stageReports.push({ stage: event.stage, status: 'FAILED', summary: `Failed: ${event.error}` });
       }
@@ -407,7 +408,7 @@ Examples:
     let gitCommitHash: string | undefined = undefined;
     if (result.status === 'SUCCESS' && result.modifiedFiles && result.modifiedFiles.length > 0) {
       const gitStartTime = Date.now();
-      mainLog(`\n▶ Git Integration`);
+      mainLog(`\n${CliFormatter.iconActive} ${CliFormatter.bold(CliFormatter.cyan('Git Integration'))}`);
       const runtime = container.resolve<IProcessRuntime>('ProcessRuntime');
       const gitManager = new GitManager(runtime, wsMeta.rootPath);
       
@@ -420,12 +421,12 @@ Examples:
       const commitRes = await gitManager.commit(result.modifiedFiles, `feat(se-os): ${taskPrompt}`);
       if (commitRes.success) {
         gitCommitHash = commitRes.commitHash;
-        mainLog(`    Commit Hash: ${gitCommitHash}`);
-        mainLog(`    ${Date.now() - gitStartTime} ms`);
+        mainLog(`    Commit Hash: ${CliFormatter.brightGreen(gitCommitHash || '')}`);
+        mainLog(`    ${CliFormatter.dim(Date.now() - gitStartTime + ' ms')}`);
         dashboard.writeGit(`[COMMIT CREATED] Hash: ${gitCommitHash}\nMessage: feat(se-os): ${taskPrompt}\n`);
         stageReports.push({ stage: 'Git Integration', status: 'SUCCESS', summary: `Created commit ${gitCommitHash}` });
       } else {
-        mainLog(`    Commit Failed: ${commitRes.error}`);
+        mainLog(`    Commit Failed: ${CliFormatter.red(commitRes.error || '')}`);
         dashboard.writeGit(`[COMMIT FAILED] ${commitRes.error}\n`);
         stageReports.push({ stage: 'Git Integration', status: 'FAILED', summary: `Commit failed: ${commitRes.error}` });
       }
@@ -436,47 +437,33 @@ Examples:
       dashboard.writeGit(`--- GIT STATUS ---\nClean: ${gitStatus.isClean}, Files: ${gitStatus.modifiedFiles.join(', ')}\n`);
     }
 
-    mainLog('\n====================================================');
-    mainLog('              DETAILED EXECUTION REPORT             ');
-    mainLog('====================================================');
-    mainLog(`Task ID:            ${result.taskId}`);
-    mainLog(`Task Summary:       "${taskPrompt}"`);
-    mainLog(`Execution Status:   ${result.status}`);
-    mainLog(`Total Duration:     ${(result.durationMs / 1000).toFixed(2)} s (${result.durationMs} ms)`);
-    mainLog(`\nWhat Happened:`);
-    mainLog(`  ✔ Workspace Scan: Found ${workspaceFiles.length} source file(s)`);
-    stageReports.forEach((rep) => {
-      if (rep.status === 'SUCCESS') {
-        mainLog(`  ✔ ${rep.stage}: ${rep.summary}`);
-      } else {
-        mainLog(`  ✖ ${rep.stage}: ${rep.summary}`);
-      }
-    });
-
-    mainLog(`\nWhat Did Not Happen:`);
+    const whatDidNotHappen: string[] = [];
     if (result.status === 'SUCCESS') {
       if (result.retryCount === 0) {
-        mainLog(`  - Autonomous Retry Engine: Not triggered (execution succeeded on first attempt)`);
+        whatDidNotHappen.push('Autonomous Retry Engine: Not triggered (execution succeeded on first attempt)');
       }
     } else {
       if (!gitCommitHash) {
-        mainLog(`  - Git Commit: Skipped because task execution/verification did not succeed`);
+        whatDidNotHappen.push('Git Commit: Skipped because task execution/verification did not succeed');
       }
     }
 
-    mainLog(`\nWhy:`);
-    if (result.status === 'SUCCESS') {
-      mainLog(`  The pipeline successfully parsed the codebase context, received a valid code block from the provider, applied file patches to the workspace, and verified that all build and test assertions passed cleanly.`);
-    } else {
-      mainLog(`  Failure Root Cause: ${result.error || 'Execution did not produce verified workspace updates.'}`);
-      if (result.validationErrors && result.validationErrors.length > 0) {
-        mainLog(`  Validation Errors:\n    - ${result.validationErrors.join('\n    - ')}`);
-      }
-      if (result.verificationLogs) {
-        mainLog(`  Verification Output Snippet:\n    - ${result.verificationLogs.split('\n').slice(0, 6).join('\n    - ')}`);
-      }
-    }
-    mainLog('====================================================\n');
+    const summaryCard = CliFormatter.renderSummaryCard({
+      taskId: result.taskId,
+      taskPrompt,
+      status: result.status,
+      durationMs: result.durationMs,
+      whatHappened: [
+        { stage: 'Workspace Scan', status: 'SUCCESS', summary: `Found ${workspaceFiles.length} source file(s)` },
+        ...stageReports,
+      ],
+      whatDidNotHappen,
+      rootCause: result.error,
+      validationErrors: result.validationErrors,
+      verificationLogs: result.verificationLogs,
+    });
+
+    mainLog(summaryCard);
 
     console.log(dashboard.attachBanner('se-os'));
 
