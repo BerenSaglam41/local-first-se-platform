@@ -73,6 +73,9 @@
                     │
                     ▼
 [Milestone 21: Verification Pipeline] ──> COMPLETED
+                    │
+                    ▼
+[Milestone 22: Mission Control Dashboard] ──> COMPLETED
 ```
 
 ---
@@ -393,6 +396,20 @@
 - **Complexity**: High
 - **Pluggable Steps & Layer Isolation**: `VerificationPipeline` acts strictly as orchestrator delegating validation to `IVerificationStep[]`. `VerificationPipeline` communicates NEVER directly with Runtime Plugins and NEVER modifies workspace contents. Integrated into `MissionExecutionOrchestrator` task retry loop.
 - **Acceptance Criteria**: Automatic verification passage during worker task execution, task retries triggered on verification failure, 6 built-in verification steps, 4 domain events emitted (`VerificationStarted`, `VerificationPassed`, `VerificationFailed`, `VerificationCompleted`), CLI subcommands (`verifyWorkspace`, `verifyTaskResults`, `verifyProjectResults`).
+
+### Milestone 22: Mission Control Dashboard (COMPLETED)
+- **Objective**: Create a web-based Mission Control Dashboard (React 18 + Vite + TypeScript + TailwindCSS + Lucide Icons) allowing a user to monitor the entire autonomous software engineering lifecycle from a single screen.
+- **Deliverables**:
+  - `dashboard/package.json`, `dashboard/vite.config.ts`, `dashboard/index.html`, `dashboard/src/index.css`
+  - `dashboard/src/types/dashboard.ts` (DashboardState, DashboardTaskNode, DashboardWorker, DashboardAiSession, DashboardDomainEvent, DashboardArtifact, DashboardVerificationStatus)
+  - `dashboard/src/services/se_os_api.ts` (SeOsApiService & mock telemetry engine)
+  - `dashboard/src/components/HeaderHUD.tsx`, `GoalStatusHeader.tsx`, `MissionDagGraph.tsx`, `WorkerFleetPanel.tsx`, `AiSessionTerminal.tsx`, `LiveEventStream.tsx`, `WorkspaceArtifactsPanel.tsx`, `VerificationPanel.tsx`
+  - `dashboard/src/App.tsx`, `dashboard/src/main.tsx`
+  - `tests/v2/milestone22_dashboard.test.ts`
+- **Dependencies**: Milestone 21
+- **Complexity**: High
+- **Single-Screen HUD Layout**: Visualizes Goal, Mission DAG Node Graph, Worker Fleet, Live AI Runtime Sessions (with streaming stdout, prompts, token usage, duration), Real-time Event Stream, Workspace Artifacts, and Verification Pipeline quality gates on a single high-density HUD layout. Provider neutral.
+- **Acceptance Criteria**: Single-screen responsive dashboard implementation, 7 live telemetry panels, provider-neutral AI runtime session display, CLI subcommand (`se-os dashboard`).
 
 ---
 
