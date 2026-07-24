@@ -37,6 +37,9 @@
                     │
                     ▼
 [Milestone 9: Verification & Merge Engine] ──> COMPLETED
+                    │
+                    ▼
+[Milestone 10: Department Orchestrator & Organizational Hierarchy] ──> COMPLETED
 ```
 
 ---
@@ -187,6 +190,19 @@
 - **Acceptance Criteria**: Configurable quality gate verification, dry-run merge conflict analysis, priority merge queue management, verification reports with quality scores (0-100), SQLite event emissions.
 
 ---
+
+### Milestone 10: Department Orchestrator & Organizational Hierarchy (COMPLETED)
+- **Objective**: Implement DepartmentOrchestrator, standard departments (Backend, Frontend, QA, DevOps, Architecture, Documentation, Research), Department Leads, capability-based mission routing, worker load balancing, performance metrics, and CLI departments subcommands.
+- **Deliverables**:
+  - `src/v2/domain/organization/organization_models.ts`
+  - `src/v2/application/organization/department_orchestrator.ts`
+  - `tests/v2/milestone10_department_orchestrator.test.ts`
+- **Dependencies**: Milestone 9
+- **Complexity**: High
+- **Acceptance Criteria**: CEO → Departments → Leads → Workers hierarchy, capability-based task routing, least-active-task load balancing, department performance metrics, SQLite event emissions.
+
+---
+
 
 
 

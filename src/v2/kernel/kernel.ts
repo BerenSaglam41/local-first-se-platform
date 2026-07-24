@@ -20,6 +20,7 @@ import { CollaborationEngine } from '../application/collaboration/collaboration_
 import { VerificationEngine } from '../application/verification/verification_engine';
 import { MergeEngine } from '../application/verification/merge_engine';
 import { MergeQueue } from '../application/verification/merge_queue';
+import { DepartmentOrchestrator } from '../application/organization/department_orchestrator';
 import * as fs from 'fs';
 
 export class Kernel implements IKernel {
@@ -53,6 +54,7 @@ export class Kernel implements IKernel {
     );
     const mergeEngine = new MergeEngine(eventStore);
     const mergeQueue = new MergeQueue(eventStore);
+    const departmentOrchestrator = new DepartmentOrchestrator(eventStore);
 
     supervisor.startSupervision();
 
@@ -71,6 +73,7 @@ export class Kernel implements IKernel {
     this.container.registerSingleton<VerificationEngine>('VerificationEngine', verificationEngine);
     this.container.registerSingleton<MergeEngine>('MergeEngine', mergeEngine);
     this.container.registerSingleton<MergeQueue>('MergeQueue', mergeQueue);
+    this.container.registerSingleton<DepartmentOrchestrator>('DepartmentOrchestrator', departmentOrchestrator);
 
     if (fs.existsSync(configPath)) {
       try {
@@ -177,6 +180,10 @@ export class Kernel implements IKernel {
 
   getMergeQueue(): MergeQueue {
     return this.container.resolve<MergeQueue>('MergeQueue');
+  }
+
+  getDepartmentOrchestrator(): DepartmentOrchestrator {
+    return this.container.resolve<DepartmentOrchestrator>('DepartmentOrchestrator');
   }
 
   getTelemetry(): TelemetryService {

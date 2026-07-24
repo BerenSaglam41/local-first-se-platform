@@ -53,6 +53,33 @@ export class SeOsCli {
     await this.ps();
   }
 
+  async departmentsList(): Promise<void> {
+    const list = this.kernel.getDepartmentOrchestrator().listDepartments();
+    console.log(`COMPANY DEPARTMENTS (${list.length}):`);
+    for (const d of list) {
+      console.log(`  - [${d.id}] ${d.name} (Type: ${d.type} | Lead: ${d.leadId} | Members: ${d.members.length})`);
+    }
+  }
+
+  async departmentsStatus(deptId?: string): Promise<void> {
+    if (deptId) {
+      const d = this.kernel.getDepartmentOrchestrator().getDepartment(deptId);
+      console.log(d ? JSON.stringify(d, null, 2) : `✖ Department ${deptId} not found`);
+    } else {
+      await this.departmentsList();
+    }
+  }
+
+  async departmentAssign(taskId: string, deptId: string): Promise<void> {
+    const ok = this.kernel.getDepartmentOrchestrator().assignTaskToDepartment(taskId, deptId);
+    console.log(ok ? `✔ Assigned task ${taskId} to department ${deptId}` : `✖ Failed to assign task to ${deptId}`);
+  }
+
+  async departmentMetrics(deptId: string = 'dept-backend'): Promise<void> {
+    const metrics = this.kernel.getDepartmentOrchestrator().getDepartmentMetrics(deptId);
+    console.log(JSON.stringify(metrics, null, 2));
+  }
+
   async verifyTask(taskId: string, worktreeId: string = 'wt-01', workerId: string = 'emp-bob'): Promise<void> {
     const report = await this.kernel.getVerificationEngine().verifyTask(taskId, worktreeId, workerId);
     console.log(report.passed ? `✔ Verification PASSED for task ${taskId} (Quality Score: ${report.qualityScore}/100)` : `✖ Verification FAILED for task ${taskId}`);
