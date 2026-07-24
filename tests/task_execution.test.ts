@@ -69,7 +69,7 @@ describe('TaskExecutionService Application Service', () => {
     expect(result.taskId).toBe(task.id);
     expect(mockContextBuilder.buildContext).toHaveBeenCalledWith(task.description, task.entryFile, task.workspaceFiles);
     expect(mockProvider.execute).toHaveBeenCalledWith(
-      `Task Instruction: ${task.description}\n\nCodebase Context:\nsliced code content`
+      expect.stringContaining('EXECUTION SPECIFICATION CONTRACT')
     );
   });
 

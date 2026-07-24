@@ -49,14 +49,18 @@ export class ResponseParser {
       });
     }
 
+    const protectedFiles = [
+      'package.json', 'package-lock.json', 'tsconfig.json',
+      'Cargo.toml', 'go.mod', 'pom.xml', 'build.gradle',
+      'Dockerfile', 'docker-compose.yml', '.gitignore',
+    ];
+
     for (const block of blocks) {
       if (!block.fileName) {
-        if (workspaceFiles.length === 1) {
-          block.fileName = workspaceFiles[0];
-        } else if (defaultFile) {
+        if (defaultFile && !protectedFiles.includes(path.basename(defaultFile))) {
           block.fileName = defaultFile;
         } else {
-          warnings.push('Could not associate code block with a specific workspace file.');
+          warnings.push('Could not associate code block with an explicit file header.');
         }
       }
     }
@@ -69,27 +73,18 @@ export class ResponseParser {
   }
 
   private detectFile(contextText: string, code: string, workspaceFiles: string[]): string | undefined {
-    const commentRegexes = [
-      /[#//*\s]+FILE:\s*([a-zA-Z0-9_\-\.\/\\:]+)/i,
-      /[#//*\s]+([a-zA-Z0-9_\-\.]+\.[a-zA-Z0-9]+)/
-    ];
+    const fileHeaderRegex = /[#//*\s]+FILE:\s*([a-zA-Z0-9_\-\.\/\\:]+)/i;
+    const match = code.match(fileHeaderRegex);
 
-    for (const r of commentRegexes) {
-      const match = code.match(r);
-      if (match && match[1]) {
-        const matchedName = path.basename(match[1].trim());
-        const found = workspaceFiles.find(f => path.basename(f) === matchedName);
-        if (found) return found;
-      }
+    if (match && match[1]) {
+      const rawPath = match[1].trim();
+      const matchedName = path.basename(rawPath);
+      const found = workspaceFiles.find(f => f.endsWith(rawPath) || path.basename(f) === matchedName);
+      if (found) return found;
+      return rawPath;
     }
 
-    for (const file of workspaceFiles) {
-      const base = path.basename(file);
-      if (contextText.includes(base)) {
-        return file;
-      }
-    }
-
+    // Do NOT infer filenames from conversational contextText or fuzzy strings
     return undefined;
   }
 }

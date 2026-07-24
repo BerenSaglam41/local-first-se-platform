@@ -78,7 +78,7 @@ export class WorkspaceManager implements IWorkspaceManager {
     if (fs.existsSync(pkgPath)) {
       let name = dirName;
       let buildCommand: string | undefined = undefined;
-      let testCommand = 'npm test';
+      let testCommand: string | undefined = undefined;
 
       try {
         const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
@@ -88,7 +88,7 @@ export class WorkspaceManager implements IWorkspaceManager {
         } else if (fs.existsSync(path.join(rootPath, 'tsconfig.json'))) {
           buildCommand = 'npx tsc --noEmit';
         }
-        if (pkg.scripts?.test) {
+        if (pkg.scripts?.test && pkg.scripts.test !== 'echo "Error: no test specified" && exit 1') {
           testCommand = 'npm test';
         }
       } catch {}

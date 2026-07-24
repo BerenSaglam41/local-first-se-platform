@@ -7,18 +7,36 @@ export class RetryEngine {
     verificationLogs: string,
     attempt: number
   ): string {
-    return `You are in autonomous self-repair mode. Your previous generated solution failed workspace verification.
+    const allowedFiles = task.plan?.subTasks.map(st => st.targetFile) || [task.entryFile];
+    const forbiddenFiles = [
+      'package.json', 'package-lock.json', 'tsconfig.json',
+      'Cargo.toml', 'go.mod', 'pom.xml', 'build.gradle',
+      'Dockerfile', 'docker-compose.yml', '.gitignore'
+    ];
 
-Original Task: ${task.description}
+    const errorSnippet = verificationLogs ? verificationLogs.split('\n').slice(0, 10).join('\n') : '(Verification steps returned error status)';
 
-Attempt Number: ${attempt}
+    return `====================================================
+EXECUTION SPECIFICATION RETRY (ATTEMPT ${attempt})
+====================================================
 
-Previous Response:
-${previousResponse}
+1. ORIGINAL OBJECTIVE:
+"${task.description}"
 
-Verification Failure Logs (Build/Test errors):
-${verificationLogs}
+2. VERIFICATION FAILURE SUMMARY:
+${errorSnippet}
 
-Please review the compiler errors and test failures, identify the issue, and output the correct refactored code matching the workspace target files. Make sure to return valid code blocks.`;
+3. ALLOWED TARGET FILES:
+- ${allowedFiles.join('\n- ')}
+
+4. FORBIDDEN PROTECTED FILES:
+- ${forbiddenFiles.join('\n- ')}
+
+5. MANDATORY OUTPUT FORMAT CONTRACT:
+Output ONLY pure source code blocks matching the allowed target files.
+Every code block MUST start with the file header comment:
+// FILE: relative/path/to/file.ext
+
+DO NOT output conversational text, markdown explanations, shell commands, or JSON tool calls.`;
   }
 }

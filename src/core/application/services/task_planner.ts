@@ -11,11 +11,11 @@ export class TaskPlanner implements ITaskPlanner {
     const mentionedFiles = this.extractMentionedFiles(taskPrompt);
     
     if (mentionedFiles.length === 0) {
-      // Fallback to entry or primary source file
-      const defaultTarget = workspaceFiles.find(f => f.endsWith('.ts') || f.endsWith('.js') || f.endsWith('.py') || f.endsWith('.rs')) || 'src/main.ts';
+      // Infer target filename from task prompt intent (e.g. "Create Calculator class" -> "src/calculator.ts")
+      const inferredFile = this.inferTargetFileFromIntent(taskPrompt, workspaceFiles);
       subTasks.push({
         id: `${taskId}-step-1`,
-        targetFile: defaultTarget,
+        targetFile: inferredFile,
         objective: taskPrompt,
         dependencies: [],
         validationCriteria: 'Build and verification suite must pass cleanly.',
@@ -66,5 +66,20 @@ export class TaskPlanner implements ITaskPlanner {
     const matches = prompt.match(fileRegex) || [];
     const unique = Array.from(new Set(matches));
     return unique;
+  }
+
+  private inferTargetFileFromIntent(prompt: string, workspaceFiles: string[]): string {
+    const classMatch = prompt.match(/(?:Create|Implement|Add|Refactor)\s+(?:a\s+)?([A-Za-z0-9_]+)\s+(?:class|service|module|component|helper|controller)/i);
+    if (classMatch && classMatch[1]) {
+      const name = classMatch[1].toLowerCase();
+      const existing = workspaceFiles.find(f => path.basename(f, path.extname(f)).toLowerCase() === name);
+      if (existing) return existing;
+
+      const ext = workspaceFiles.some(f => f.endsWith('.ts')) ? '.ts' : workspaceFiles.some(f => f.endsWith('.py')) ? '.py' : workspaceFiles.some(f => f.endsWith('.rs')) ? '.rs' : '.ts';
+      return `src/${name}${ext}`;
+    }
+
+    const sourceFile = workspaceFiles.find(f => !f.includes('package-lock') && !f.includes('package.json') && (f.endsWith('.ts') || f.endsWith('.js') || f.endsWith('.py')));
+    return sourceFile || 'src/main.ts';
   }
 }

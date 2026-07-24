@@ -233,8 +233,41 @@ export class TaskExecutionService {
       };
     }
 
-    // 3. Prepend task instructions to codebase context for the initial prompt
-    let currentPrompt = `Task Instruction: ${task.description}\n\nCodebase Context:\n${contextContent}`;
+    // 3. Construct ExecutionSpecification & Prompt Contract
+    const allowedTargetFiles = task.plan?.subTasks.map(st => st.targetFile) || [task.entryFile];
+    const forbiddenFiles = [
+      'package.json', 'package-lock.json', 'tsconfig.json',
+      'Cargo.toml', 'go.mod', 'pom.xml', 'build.gradle',
+      'Dockerfile', 'docker-compose.yml', '.gitignore'
+    ];
+
+    let currentPrompt = `====================================================
+EXECUTION SPECIFICATION CONTRACT
+====================================================
+
+1. OBJECTIVE:
+"${task.description}"
+
+2. ALLOWED TARGET FILES:
+- ${allowedTargetFiles.join('\n- ')}
+
+3. FORBIDDEN PROTECTED FILES (NEVER MODIFY):
+- ${forbiddenFiles.join('\n- ')}
+
+4. EXPECTED OUTPUT FORMAT CONTRACT:
+You are a non-interactive source code generator.
+Output ONLY pure source code blocks matching the allowed target files.
+Every code block MUST start with the explicit file header comment:
+// FILE: relative/path/to/file.ext
+
+FORBIDDEN OUTPUT TYPES:
+- NO conversational text or explanations outside code blocks
+- NO markdown explanations or comments outside code blocks
+- NO shell commands (e.g. cat, ls, git, npm)
+- NO terminal instructions or JSON tool call objects
+
+5. CODEBASE CONTEXT:
+${contextContent}`;
     const maxRetryCount = this.config.get().maxRetryCount;
     let retryCount = 0;
     const retryHistory: string[] = [];

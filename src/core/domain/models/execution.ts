@@ -18,6 +18,16 @@ export interface TaskPlan {
   subTasks: SubTask[];
 }
 
+export interface ExecutionSpecification {
+  id: string;
+  taskId: string;
+  objective: string;
+  allowedTargetFiles: string[];
+  forbiddenFiles: string[];
+  expectedFormat: string;
+  verificationExpectations: string[];
+}
+
 export interface EngineeringTask {
   id: string;
   description: string;

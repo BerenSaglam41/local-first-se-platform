@@ -285,7 +285,8 @@ Examples:
       }
     }
 
-    const preferredEntry = workspaceFiles.find(f => f.endsWith('src/main.ts') || f.endsWith('src/index.ts') || f.endsWith('main.py') || f.endsWith('main.rs') || f.endsWith('main.go')) || workspaceFiles.find(f => fs.existsSync(f) && fs.statSync(f).size > 0);
+    const nonManifest = workspaceFiles.filter(f => !f.endsWith('package.json') && !f.endsWith('package-lock.json') && !f.endsWith('tsconfig.json'));
+    const preferredEntry = nonManifest.find(f => f.endsWith('src/main.ts') || f.endsWith('src/index.ts') || f.endsWith('main.py') || f.endsWith('main.rs') || f.endsWith('main.go')) || nonManifest[0];
     const entryFile = preferredEntry || path.join(rootDir, 'src', 'main.ts');
     
     dashboard.writeKnowledge(`[SUCCESS] Workspace scan completed. Found ${workspaceFiles.length} file(s). Entry file: ${entryFile}`);

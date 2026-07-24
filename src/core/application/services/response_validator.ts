@@ -61,20 +61,48 @@ export class ResponseValidator {
         continue;
       }
 
+      // Check protected manifest files
+      const baseName = path.basename(block.fileName);
+      const protectedFiles = [
+        'package.json', 'package-lock.json', 'tsconfig.json',
+        'Cargo.toml', 'go.mod', 'pom.xml', 'build.gradle',
+        'Dockerfile', 'docker-compose.yml', '.gitignore',
+      ];
+      if (protectedFiles.includes(baseName)) {
+        errors.push(`Attempted modification of protected manifest file [${baseName}]. Target file is forbidden.`);
+        confidence -= 0.8;
+      }
+
+      // Check for JSON shell command objects or terminal instruction blocks
+      if (block.content.includes('"command":') || block.content.includes('"description":') || /^\s*cat\s+/m.test(block.content) || /^\s*git\s+/m.test(block.content)) {
+        errors.push(`Extracted content for [${baseName}] appears to be a shell command or tool invocation instead of source code.`);
+        confidence -= 0.8;
+      }
+
+      // JSON syntax validation
+      const ext = path.extname(block.fileName).toLowerCase();
+      if (ext === '.json') {
+        try {
+          JSON.parse(block.content);
+        } catch (e: any) {
+          errors.push(`Extracted content for [${baseName}] is invalid JSON syntax: ${e.message}`);
+          confidence -= 0.6;
+        }
+      }
+
       // Conversational checks on code content
       if (this.isConversationalText(block.content)) {
-        errors.push(`Extracted code block for [${path.basename(block.fileName)}] appears to be conversational text instead of source code.`);
+        errors.push(`Extracted code block for [${baseName}] appears to be conversational text instead of source code.`);
         confidence -= 0.6;
       }
 
       // Check incomplete blocks (brackets/braces count mismatch)
       if (this.isIncompleteCode(block.content)) {
-        errors.push(`Code block for [${path.basename(block.fileName)}] appears to be incomplete or truncated (unbalanced braces/brackets).`);
+        errors.push(`Code block for [${baseName}] appears to be incomplete or truncated (unbalanced braces/brackets).`);
         confidence -= 0.3;
       }
 
       // File extension vs language checks
-      const ext = path.extname(block.fileName).toLowerCase();
       if (block.language) {
         const lang = block.language.toLowerCase();
         if (!this.matchesExtension(ext, lang)) {

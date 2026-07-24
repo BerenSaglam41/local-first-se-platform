@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.4.0] - 2026-07-24
+
+### Fixed & Hardened (Production Hardening Sprint)
+- **Capability-Aware Verification System**: Redesigned `WorkspaceManager` and `VerificationRunner` to detect missing build/test scripts and gracefully mark step status as `SKIPPED` instead of failing projects without tests.
+- **Strict Prompt Contract & Execution Specification**: Introduced machine-readable `ExecutionSpecification` (`src/core/domain/models/execution.ts`) mandating pure code output with strict `// FILE: relative/path` headers, explicitly forbidding conversational text, markdown explanations, shell commands, or JSON tool calls.
+- **Explicit Header Response Parser**: Removed fuzzy string matching in `ResponseParser.detectFile()`, requiring explicit `// FILE: path` headers and rejecting unassociated or ambiguous code blocks.
+- **Protected Manifest Safety & JSON Validation**: Enforced protection for manifest files (`package.json`, `package-lock.json`, `tsconfig.json`, `Cargo.toml`, `go.mod`, `pom.xml`, `build.gradle`, `Dockerfile`, `docker-compose.yml`, `.gitignore`) and added JSON syntax validation before writing patches.
+- **Semantic Target File Prediction**: Enhanced `TaskPlanner` target file prediction based on task intent (e.g. "Create Calculator class" -> `src/calculator.ts`) instead of defaulting to entry files or lockfiles.
+- **Structured Retry Engine**: Updated `RetryEngine` prompts with structured sections: Objective, Failed Step, Verification Failure Summary, Allowed Target Files, Forbidden Protected Files.
+
 ## [v1.3.0] - 2026-07-24
 
 ### Added

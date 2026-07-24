@@ -10,7 +10,7 @@ import { FileAst } from '../src/core/domain/models/ast';
 import { ValidationException } from '../src/core/domain/errors/exceptions';
 
 describe('VFS & AST Context Slicer', () => {
-  const tempDir = path.join(__dirname, 'temp_slicer_test');
+  let tempDir: string;
   let cache: InMemoryCache;
   let vfs: VirtualFileSystem;
   let sliceEngine: CodeSliceEngine;
@@ -19,6 +19,7 @@ describe('VFS & AST Context Slicer', () => {
   let builder: ContextBuilder;
 
   beforeEach(() => {
+    tempDir = path.join(__dirname, `temp_slicer_test_${Date.now()}_${Math.random().toString(36).substring(7)}`);
     if (!fs.existsSync(tempDir)) {
       fs.mkdirSync(tempDir, { recursive: true });
     }
