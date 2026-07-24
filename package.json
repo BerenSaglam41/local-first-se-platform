@@ -4,12 +4,13 @@
   "description": "",
   "main": "dist/main.js",
   "bin": {
-    "se-os": "./dist/main.js"
+    "se-os": "./dist/v2/cli/bin.js"
   },
   "scripts": {
     "build": "tsc",
-    "start": "ts-node src/main.ts",
-    "se-os": "ts-node src/main.ts",
+    "start": "ts-node src/v2/cli/bin.ts",
+    "tui": "ts-node src/v2/cli/bin.ts",
+    "se-os": "ts-node src/v2/cli/bin.ts",
     "test": "jest --runInBand",
     "test:coverage": "jest --coverage --runInBand"
   },
