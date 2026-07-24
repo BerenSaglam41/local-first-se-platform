@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v2.0.0-m29.1-fix2] - 2026-07-25
+
+### Fixed (Milestone 29.1, Fix #2: Real Process-Group Cancellation on Interrupt)
+The UAT interrupted a busy worker running a real Codex task and found — via `ps`, minutes later —
+that the real underlying process was still running, invisibly, after the TUI already reported it
+interrupted. Root cause: the installed `codex` CLI's entry point is a Node.js launcher that forks
+the real native binary as its own child; SE-OS only ever held a handle to the launcher, so
+`cancel()`'s `child.kill()` killed the launcher while the real work kept going, reparented. See
+`docs/adr/ADR-0010-real-process-group-cancellation.md`.
+
+- Every real CLI-backed plugin (`CliRuntimePlugin`, `ClaudeCodeRuntimePlugin`) now spawns detached
+  (`detached: true`) and kills the entire OS process group on cancel, timeout, and shutdown
+  (`killProcessGroup()`, `process.kill(-pid, signal)`) instead of the single tracked process —
+  closing every real cancellation path, not just the one the UAT happened to exercise.
+- New tests: `tests/v2/reliability/process_group_kill.test.ts`, including one that reproduces the
+  exact wrapper/grandchild shape and proves the old behavior really did leave a grandchild
+  process running.
+- Verified against the real built TUI: interrupted a genuinely busy worker (Alice, mid real
+  Claude CLI call) and confirmed via `ps` that the real spawned process was actually gone
+  immediately after interrupting.
+
+---
+
 ## [v2.0.0-m29.1-fix1] - 2026-07-25
 
 ### Fixed (Milestone 29.1 — Product Polish & UAT Critical Fixes, Fix #1: Honest Execution Reporting)

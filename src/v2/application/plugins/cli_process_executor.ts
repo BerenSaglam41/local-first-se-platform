@@ -1,7 +1,44 @@
-import { ChildProcess } from 'child_process';
+import { ChildProcess, spawn as realSpawn } from 'child_process';
 
 /** Injectable so callers (and tests) can replace the real OS process spawn with a fake one. */
 export type CliProcessSpawner = (executable: string, args: string[]) => ChildProcess;
+
+/**
+ * The real default spawner every plugin uses. `detached: true` makes the child the leader of its
+ * own new OS process group instead of sharing SE-OS's — required for killProcessGroup() below to
+ * be able to kill it. See ADR-0010: a real CLI's own entry point is frequently a wrapper that
+ * forks the actual work as a grandchild (verified: the installed `codex` CLI is a Node launcher
+ * script that spawns the real native binary as its child) — killing only the direct child left
+ * that grandchild running, invisible to SE-OS, for as long as the real UAT observed it (minutes).
+ */
+export const defaultCliProcessSpawner: CliProcessSpawner = (executable, args) =>
+  realSpawn(executable, args, { detached: true });
+
+/**
+ * Kills a real spawned process AND every descendant it forked, not just the single process
+ * SE-OS's ChildProcess handle refers to. Requires the child to have been spawned with
+ * `detached: true` (see defaultCliProcessSpawner) so it is its own process group leader — sending
+ * a signal to the negative of its PID signals the whole group. Falls back to a direct kill of just
+ * the one process if the child has no PID (a fake/mocked child in tests) or the group is already
+ * gone.
+ */
+export function killProcessGroup(child: ChildProcess, signal: NodeJS.Signals = 'SIGKILL'): void {
+  if (!child.pid) {
+    child.kill(signal);
+    return;
+  }
+  try {
+    process.kill(-child.pid, signal);
+  } catch (err: any) {
+    if (err?.code !== 'ESRCH') {
+      try {
+        child.kill(signal);
+      } catch {
+        // The process is already gone one way or another — nothing left to do.
+      }
+    }
+  }
+}
 
 export interface CliProcessResult {
   success: boolean;
@@ -46,7 +83,7 @@ export function runCliProcess(
     const timer = setTimeout(() => {
       if (settled) return;
       settled = true;
-      child.kill('SIGKILL');
+      killProcessGroup(child, 'SIGKILL');
       resolve({
         success: false,
         output,

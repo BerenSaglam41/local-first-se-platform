@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events';
-import { spawn, ChildProcess } from 'child_process';
+import { ChildProcess } from 'child_process';
 import {
   IRuntimePlugin,
   RuntimePluginManifest,
@@ -10,7 +10,7 @@ import {
 } from '../../../contracts/iruntime_plugin_system';
 import { IEventStore } from '../../../contracts/ievent_store';
 import { ClaudeCliDetector, ClaudeCliDetectionResult } from './claude_cli_detector';
-import { CliProcessSpawner, runCliProcess } from '../cli_process_executor';
+import { CliProcessSpawner, runCliProcess, defaultCliProcessSpawner, killProcessGroup } from '../cli_process_executor';
 
 /** Injectable so callers (and tests) can replace the real OS process spawn with a fake one. */
 export type ClaudeProcessSpawner = CliProcessSpawner;
@@ -44,7 +44,7 @@ export class ClaudeCodeRuntimePlugin extends EventEmitter implements IRuntimePlu
 
   constructor(
     private eventStore?: IEventStore,
-    spawner: ClaudeProcessSpawner = spawn,
+    spawner: ClaudeProcessSpawner = defaultCliProcessSpawner,
     detector: ClaudeCliDetector = new ClaudeCliDetector()
   ) {
     super();
@@ -155,7 +155,7 @@ export class ClaudeCodeRuntimePlugin extends EventEmitter implements IRuntimePlu
   async cancel(workerId: string): Promise<boolean> {
     const child = this.activeChildProcesses.get(workerId);
     if (!child) return false;
-    child.kill('SIGKILL');
+    killProcessGroup(child, 'SIGKILL');
     this.activeChildProcesses.delete(workerId);
     this.emitEvent('RuntimeExecutionCancelled', this.manifest.id, { workerId });
     return true;
@@ -179,7 +179,7 @@ export class ClaudeCodeRuntimePlugin extends EventEmitter implements IRuntimePlu
 
   async shutdown(): Promise<void> {
     for (const child of this.activeChildProcesses.values()) {
-      child.kill('SIGKILL');
+      killProcessGroup(child, 'SIGKILL');
     }
     this.activeChildProcesses.clear();
     this.isInitialized = false;

@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events';
-import { spawn, ChildProcess } from 'child_process';
+import { ChildProcess } from 'child_process';
 import {
   IRuntimePlugin,
   RuntimePluginManifest,
@@ -10,7 +10,7 @@ import {
 } from '../../contracts/iruntime_plugin_system';
 import { IEventStore } from '../../contracts/ievent_store';
 import { CliDetector, CliDetectionResult } from './cli_detector';
-import { CliProcessSpawner, runCliProcess } from './cli_process_executor';
+import { CliProcessSpawner, runCliProcess, defaultCliProcessSpawner, killProcessGroup } from './cli_process_executor';
 
 const DEFAULT_EXECUTION_TIMEOUT_MS = 180000;
 
@@ -61,7 +61,7 @@ export class CliRuntimePlugin extends EventEmitter implements IRuntimePlugin {
   constructor(
     private config: CliRuntimePluginConfig,
     private eventStore?: IEventStore,
-    spawner: CliProcessSpawner = spawn,
+    spawner: CliProcessSpawner = defaultCliProcessSpawner,
     detector?: CliDetector
   ) {
     super();
@@ -154,7 +154,7 @@ export class CliRuntimePlugin extends EventEmitter implements IRuntimePlugin {
   async cancel(workerId: string): Promise<boolean> {
     const child = this.activeChildProcesses.get(workerId);
     if (!child) return false;
-    child.kill('SIGKILL');
+    killProcessGroup(child, 'SIGKILL');
     this.activeChildProcesses.delete(workerId);
     this.emitEvent('RuntimeExecutionCancelled', this.manifest.id, { workerId });
     return true;
@@ -176,7 +176,7 @@ export class CliRuntimePlugin extends EventEmitter implements IRuntimePlugin {
 
   async shutdown(): Promise<void> {
     for (const child of this.activeChildProcesses.values()) {
-      child.kill('SIGKILL');
+      killProcessGroup(child, 'SIGKILL');
     }
     this.activeChildProcesses.clear();
     this.isInitialized = false;
