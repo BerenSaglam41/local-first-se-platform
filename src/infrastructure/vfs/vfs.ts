@@ -23,16 +23,26 @@ export class VirtualFileSystem implements IVirtualFileSystem {
     const cached = this.cache.get<VfsFile>(`file:${normPath}`);
 
     try {
-      if (!fs.existsSync(normPath)) {
-        return {
-          path: normPath,
-          content: '',
-          language: this.detectLanguage(normPath),
-          lastModifiedMs: 0,
-        };
+      // A separate fs.existsSync() check before stat/read is a check-then-act race: under
+      // concurrent filesystem load, the file's existence can change between the check and the
+      // subsequent read, silently returning empty content instead of the real, now-existing
+      // file. statSync() itself is the existence check — its ENOENT failure mode is handled
+      // directly instead of being probed for separately beforehand.
+      let stats: fs.Stats;
+      try {
+        stats = fs.statSync(normPath);
+      } catch (statErr: any) {
+        if (statErr.code === 'ENOENT') {
+          return {
+            path: normPath,
+            content: '',
+            language: this.detectLanguage(normPath),
+            lastModifiedMs: 0,
+          };
+        }
+        throw statErr;
       }
 
-      const stats = fs.statSync(normPath);
       const lastModifiedMs = stats.mtimeMs;
 
       if (cached && cached.lastModifiedMs === lastModifiedMs) {
