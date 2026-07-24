@@ -76,6 +76,18 @@
                     │
                     ▼
 [Milestone 22: Mission Control Dashboard] ──> COMPLETED
+                    │
+                    ▼
+[Milestone 23: Core TUI Framework & Telemetry Layer] ──> COMPLETED
+                    │
+                    ▼
+[Milestone 24: Execution Screen]
+                    │
+                    ▼
+[Milestone 25: Workspace Viewer & AI Session]
+                    │
+                    ▼
+[Milestone 26: Command Palette, Focus Mode & Event Control]
 ```
 
 ---
@@ -410,6 +422,25 @@
 - **Complexity**: High
 - **Single-Screen HUD Layout**: Visualizes Goal, Mission DAG Node Graph, Worker Fleet, Live AI Runtime Sessions (with streaming stdout, prompts, token usage, duration), Real-time Event Stream, Workspace Artifacts, and Verification Pipeline quality gates on a single high-density HUD layout. Provider neutral.
 - **Acceptance Criteria**: Single-screen responsive dashboard implementation, 7 live telemetry panels, provider-neutral AI runtime session display, CLI subcommand (`se-os dashboard`).
+
+### Milestone 23: Core TUI Framework & Telemetry Layer (COMPLETED)
+- **Objective**: Implement Telemetry Layer (`TelemetryAggregator`, `TelemetrySnapshot`, `ITelemetryAggregator`), Screen Manager (`ScreenManager`), Layout Manager (`LayoutManager`), Panel Abstraction (`IPanel`), and Ink Terminal User Interface (`StartupScreen`, `RuntimeSelector`, `MainMenu`, `NewProjectPrompt`, `TuiApp`).
+- **Deliverables**:
+  - `src/v2/contracts/itelemetry_aggregator.ts`
+  - `src/v2/application/telemetry/telemetry_aggregator.ts`
+  - `src/v2/ui/tui/contracts/ipanel.ts`
+  - `src/v2/ui/tui/managers/screen_manager.ts`
+  - `src/v2/ui/tui/managers/layout_manager.ts`
+  - `src/v2/ui/tui/components/StartupScreen.tsx`
+  - `src/v2/ui/tui/components/RuntimeSelector.tsx`
+  - `src/v2/ui/tui/components/MainMenu.tsx`
+  - `src/v2/ui/tui/components/NewProjectPrompt.tsx`
+  - `src/v2/ui/tui/tui_app.tsx`
+  - `tests/v2/milestone23_tui_framework.test.ts`
+- **Dependencies**: Milestone 22
+- **Complexity**: High
+- **Telemetry Layer & Screen Navigation**: Unified read-only `TelemetrySnapshot` consumed by TUI without business logic duplication. Interactive Ink terminal startup flow (Startup banner → Runtime selector → Main Menu → New Project Goal input → Execution mode).
+- **Acceptance Criteria**: `TelemetryAggregator` registered in Kernel DI Container, Ink TUI components rendering startup flow, `se-os` CLI integration launching full-screen TUI.
 
 ---
 

@@ -1,6 +1,7 @@
 import { Kernel } from '../kernel/kernel';
 import { ExecutionProfileName } from '../contracts/iexecution_policy';
 import { ClaudeCodeRuntimePlugin } from '../application/plugins/claude/claude_code_runtime_plugin';
+import React from 'react';
 
 export class SeOsCli {
   private kernel = new Kernel();
@@ -16,6 +17,16 @@ export class SeOsCli {
     for (const w of workers) {
       console.log(`  - [PID ${w.metrics.pid}] ${w.metadata.name} (${w.metadata.role}) - Status: ${w.state} - Pane: ${w.metadata.tmuxPaneIndex}`);
     }
+  }
+
+  async tuiLaunch(): Promise<void> {
+    if (!this.kernel.isReady()) {
+      await this.boot('./company.json');
+    }
+    const telemetryAggregator = this.kernel.getTelemetryAggregator();
+    const { render } = await import('ink');
+    const { TuiApp } = await import('../ui/tui/tui_app');
+    render(React.createElement(TuiApp, { telemetryAggregator, onExit: () => this.shutdown() }));
   }
 
   async status(): Promise<void> {

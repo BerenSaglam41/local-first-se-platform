@@ -19,6 +19,11 @@
   "type": "commonjs",
   "dependencies": {
     "dotenv": "^17.4.2",
+    "ink": "^4.4.1",
+    "ink-select-input": "^5.0.0",
+    "ink-spinner": "^5.0.0",
+    "ink-text-input": "^5.0.1",
+    "react": "^18.3.1",
     "sqlite": "^5.1.1",
     "sqlite3": "^6.0.1",
     "tree-sitter": "^0.21.1",
@@ -29,6 +34,7 @@
   "devDependencies": {
     "@types/jest": "^30.0.0",
     "@types/node": "^26.1.1",
+    "@types/react": "^18.3.31",
     "@types/sqlite3": "^3.1.11",
     "@types/uuid": "^10.0.0",
     "jest": "^30.4.2",

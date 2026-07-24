@@ -36,6 +36,7 @@ import { MissionExecutionOrchestrator } from '../application/missions/mission_ex
 import { DefaultProjectLifecycleStrategy } from '../application/project/project_lifecycle_strategy';
 import { ProjectLifecycleOrchestrator } from '../application/project/project_lifecycle_orchestrator';
 import { VerificationPipeline } from '../application/verification/verification_pipeline';
+import { TelemetryAggregator } from '../application/telemetry/telemetry_aggregator';
 import * as fs from 'fs';
 
 export class Kernel implements IKernel {
@@ -85,6 +86,13 @@ export class Kernel implements IKernel {
     const missionExecutionOrchestrator = new MissionExecutionOrchestrator(workerDispatcher, eventStore, verificationPipeline);
     const projectLifecycleStrategy = new DefaultProjectLifecycleStrategy(autonomousPlanner, missionEngine, missionExecutionOrchestrator);
     const projectLifecycleOrchestrator = new ProjectLifecycleOrchestrator(projectLifecycleStrategy, eventStore);
+    const telemetryAggregator = new TelemetryAggregator(
+      eventStore,
+      projectLifecycleOrchestrator,
+      missionExecutionOrchestrator,
+      workerExecutionEngine,
+      verificationPipeline
+    );
 
     supervisor.startSupervision();
 
@@ -118,6 +126,7 @@ export class Kernel implements IKernel {
     this.container.registerSingleton<DefaultProjectLifecycleStrategy>('ProjectLifecycleStrategy', projectLifecycleStrategy);
     this.container.registerSingleton<ProjectLifecycleOrchestrator>('ProjectLifecycleOrchestrator', projectLifecycleOrchestrator);
     this.container.registerSingleton<VerificationPipeline>('VerificationPipeline', verificationPipeline);
+    this.container.registerSingleton<TelemetryAggregator>('TelemetryAggregator', telemetryAggregator);
 
     if (fs.existsSync(configPath)) {
       try {
@@ -287,6 +296,10 @@ export class Kernel implements IKernel {
 
   getVerificationPipeline(): VerificationPipeline {
     return this.container.resolve<VerificationPipeline>('VerificationPipeline');
+  }
+
+  getTelemetryAggregator(): TelemetryAggregator {
+    return this.container.resolve<TelemetryAggregator>('TelemetryAggregator');
   }
 
   getTelemetry(): TelemetryService {
