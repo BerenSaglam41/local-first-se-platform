@@ -12,7 +12,7 @@
 [Milestone 0: Skeleton & Kernel Contracts] ──> COMPLETED
                     │
                     ▼
-[Milestone 1: Kernel Domain & Event Store]
+[Milestone 1: Kernel Domain & Event Store] ──> COMPLETED
                     │
                     ▼
 [Milestone 2: Company Bus & Shared Memory Blackboard]
@@ -47,15 +47,19 @@
 
 ---
 
-### Milestone 1: Kernel Domain Models & Event Store
-- **Objective**: Establish core domain models (`Company`, `Employee`, `Role`, `Mission`), contracts, and SQLite Event Store.
+### Milestone 1: Kernel Domain & Event Store (COMPLETED)
+- **Objective**: Implement real Kernel bootstrap, Process Supervisor, SQLite Event Store, SQLite Shared Memory, Telemetry Engine, and CLI.
 - **Deliverables**:
-  - `src/core/domain/models/company.ts`
-  - `src/core/domain/interfaces/ikernel.ts`
-  - `src/infrastructure/storage/sqlite_event_store.ts`
-- **Dependencies**: None
+  - `src/v2/kernel/kernel.ts`
+  - `src/v2/infrastructure/storage/sqlite_event_store.ts`
+  - `src/v2/infrastructure/storage/sqlite_shared_memory.ts`
+  - `src/v2/application/runtime/process_supervisor.ts`
+  - `src/v2/infrastructure/telemetry/telemetry_service.ts`
+  - `src/v2/cli/se_os_cli.ts`
+  - `tests/v2/milestone1_kernel.test.ts`
+- **Dependencies**: Milestone 0
 - **Complexity**: Medium
-- **Acceptance Criteria**: 100% passing unit tests for event append/replay and domain model creation.
+- **Acceptance Criteria**: Kernel boots, ProcessSupervisor spawns/stops/restarts workers, SQLite persists events & ADRs, CLI executes `boot`/`status`/`workers`/`shutdown` cleanly with zero AI provider code.
 
 ---
 
