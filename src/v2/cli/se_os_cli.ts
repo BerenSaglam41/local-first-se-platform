@@ -443,10 +443,46 @@ export class SeOsCli {
     console.log(session ? JSON.stringify(session.metadata, null, 2) : `✖ Session ${sessionId} not found`);
   }
 
+  // ─── Runtime Plugin System CLI ──────────────────────────────────
+
+  async runtimePluginList(): Promise<void> {
+    const list = this.kernel.getRuntimePluginSystemManager().listPlugins();
+    console.log(`LOADED RUNTIME PLUGINS (${list.length}):`);
+    for (const p of list) {
+      console.log(`  - [${p.id}] ${p.name} v${p.version} (Transports: ${p.supportedTransports.join(', ')} | Capabilities: ${p.capabilities.join(', ')})`);
+    }
+  }
+
+  async runtimePluginEnable(pluginId: string): Promise<void> {
+    const ok = this.kernel.getRuntimePluginSystemManager().enablePlugin(pluginId);
+    console.log(ok ? `✔ Enabled runtime plugin '${pluginId}'` : `✖ Failed to enable plugin '${pluginId}'`);
+  }
+
+  async runtimePluginDisable(pluginId: string): Promise<void> {
+    const ok = this.kernel.getRuntimePluginSystemManager().disablePlugin(pluginId);
+    console.log(ok ? `✔ Disabled runtime plugin '${pluginId}'` : `✖ Failed to disable plugin '${pluginId}'`);
+  }
+
+  async runtimePluginInspect(pluginId: string = 'mock-runtime-plugin'): Promise<void> {
+    const record = this.kernel.getRuntimePluginSystemManager().getRegistry().getRecord(pluginId);
+    console.log(record ? JSON.stringify({ manifest: record.manifest, enabled: record.enabled, health: record.health, validation: record.validationResult }, null, 2) : `✖ Runtime plugin ${pluginId} not found`);
+  }
+
+  async runtimePluginValidate(pluginId: string = 'mock-runtime-plugin'): Promise<void> {
+    const plugin = this.kernel.getRuntimePluginSystemManager().getPlugin(pluginId);
+    if (!plugin) {
+      console.log(`✖ Plugin ${pluginId} not found`);
+      return;
+    }
+    const val = await this.kernel.getRuntimePluginSystemManager().getLoader().loadPlugin(plugin);
+    console.log(JSON.stringify(val, null, 2));
+  }
+
   async shutdown(): Promise<void> {
     console.log(`[SE-OS Kernel] Initiating workforce shutdown...`);
     await this.kernel.shutdown();
     console.log(`✔ Company workforce shutdown complete.`);
   }
 }
+
 

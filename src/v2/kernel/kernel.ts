@@ -24,6 +24,8 @@ import { DepartmentOrchestrator } from '../application/organization/department_o
 import { ExecutionPolicyEngine } from '../application/policy/execution_policy_engine';
 import { AutonomousPlanner } from '../application/planning/autonomous_planner';
 import { RuntimeSessionManager } from '../application/session/runtime_session_manager';
+import { RuntimePluginSystemManager } from '../application/plugins/runtime_plugin_system_manager';
+import { MockRuntimePlugin } from '../application/plugins/mock_runtime_plugin';
 import * as fs from 'fs';
 
 export class Kernel implements IKernel {
@@ -61,6 +63,8 @@ export class Kernel implements IKernel {
     const policyEngine = new ExecutionPolicyEngine(eventStore);
     const autonomousPlanner = new AutonomousPlanner(eventStore, sharedMemory, policyEngine, departmentOrchestrator);
     const sessionManager = new RuntimeSessionManager(eventStore);
+    const runtimePluginSystemManager = new RuntimePluginSystemManager(eventStore);
+    await runtimePluginSystemManager.loadAndRegisterPlugin(new MockRuntimePlugin());
 
     supervisor.startSupervision();
 
@@ -83,6 +87,7 @@ export class Kernel implements IKernel {
     this.container.registerSingleton<ExecutionPolicyEngine>('ExecutionPolicyEngine', policyEngine);
     this.container.registerSingleton<AutonomousPlanner>('AutonomousPlanner', autonomousPlanner);
     this.container.registerSingleton<RuntimeSessionManager>('RuntimeSessionManager', sessionManager);
+    this.container.registerSingleton<RuntimePluginSystemManager>('RuntimePluginSystemManager', runtimePluginSystemManager);
 
     if (fs.existsSync(configPath)) {
       try {
@@ -208,6 +213,10 @@ export class Kernel implements IKernel {
 
   getRuntimeSessionManager(): RuntimeSessionManager {
     return this.container.resolve<RuntimeSessionManager>('RuntimeSessionManager');
+  }
+
+  getRuntimePluginSystemManager(): RuntimePluginSystemManager {
+    return this.container.resolve<RuntimePluginSystemManager>('RuntimePluginSystemManager');
   }
 
   getTelemetry(): TelemetryService {
