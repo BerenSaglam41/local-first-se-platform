@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v2.0.0-m28-audit-3] - 2026-07-24
+
+### Added / Fixed (Terminal Log Lifecycle — Milestone 28 Audit, Step 3)
+See `docs/adr/ADR-0007-terminal-log-lifecycle.md`.
+
+- **`WorkerTerminalLog` now rotates**: once a worker's real log file reaches 5MB it is renamed to
+  a single `.1` backup and a fresh file is started, instead of growing forever across a
+  months-long session. Rotation renames rather than truncates so a live `tail -f` follower (real
+  tmux panes) is never desynced mid-read.
+- **Genuine worker removal now deletes its log files**: `LocalProcessSupervisor.stopWorker()`
+  deletes a worker's terminal log (`WorkerTerminalLog.remove()`) and emits a new `WorkerRemoved`
+  domain event once the worker is actually gone from `WorkerStore` — closing a real orphaned-file
+  leak on workforce turnover. A restart (`restartWorker()`) explicitly opts out via `stopWorker(id,
+  { preserveLog: true })` since it reuses the same worker id and must keep its real history.
+
+---
+
 ## [v2.0.0-m28-audit-2] - 2026-07-24
 
 ### Fixed (Non-Blocking I/O — Milestone 28 Audit, Step 2)

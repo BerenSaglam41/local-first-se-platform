@@ -63,7 +63,8 @@ export class Kernel implements IKernel {
     const pluginRegistry = new PluginRegistry();
     const pluginManager = new RuntimePluginManager();
     const workerStore = new WorkerStore();
-    const supervisor = new LocalProcessSupervisor(workerStore, eventStore);
+    const workerTerminalLog = new WorkerTerminalLog();
+    const supervisor = new LocalProcessSupervisor(workerStore, eventStore, workerTerminalLog);
     const telemetry = new TelemetryService();
     const contextCompiler = new ContextCompiler(sharedMemory, eventStore);
     const workspaceEngine = new WorkspaceEngine('./.se_workspaces', eventStore);
@@ -84,7 +85,6 @@ export class Kernel implements IKernel {
     await runtimePluginSystemManager.loadAndRegisterPlugin(new MockRuntimePlugin());
     const providerRegistry = new ProviderRegistry(runtimePluginSystemManager);
     const selectionStrategy = new WorkerAwareRuntimeSelectionStrategy(runtimePluginSystemManager, workerStore);
-    const workerTerminalLog = new WorkerTerminalLog();
     const tmuxIntegration = new TmuxIntegration('se-os-company', workerTerminalLog);
     const reasoningCoordinator = new ReasoningCoordinator(runtimePluginSystemManager, workerStore, eventStore, selectionStrategy, workerTerminalLog);
     const autonomousPlanner = new AutonomousPlanner(eventStore, sharedMemory, policyEngine, departmentOrchestrator, undefined, reasoningCoordinator);

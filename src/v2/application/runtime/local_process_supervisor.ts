@@ -4,6 +4,7 @@ import { WorkerStore } from '../worker/worker_store';
 import { Worker } from '../../domain/employees/worker';
 import { PtyEngine } from '../../infrastructure/pty/pty_engine';
 import { IEventStore } from '../../contracts/ievent_store';
+import { WorkerTerminalLog } from '../worker/worker_terminal_log';
 
 export interface WorkerMetadata {
   id: string;
@@ -26,7 +27,11 @@ export class LocalProcessSupervisor extends EventEmitter {
   private ptyEngines = new Map<string, PtyEngine>();
   private heartbeatTimer?: NodeJS.Timeout;
 
-  constructor(private workerStore: WorkerStore, private eventStore?: IEventStore) {
+  constructor(
+    private workerStore: WorkerStore,
+    private eventStore?: IEventStore,
+    private terminalLog?: WorkerTerminalLog
+  ) {
     super();
   }
 
@@ -80,8 +85,12 @@ export class LocalProcessSupervisor extends EventEmitter {
   }
 
   /** Stops the real process and removes the worker entirely — WorkerStore.remove() is the one
-   * cleanup call a removed worker requires; there is no second store left to forget. */
-  stopWorker(id: string): boolean {
+   * cleanup call a removed worker requires; there is no second store left to forget.
+   *
+   * `preserveLog` is set only by `restartWorker()`'s internal stop-then-respawn: a restart reuses
+   * the same worker id and its real terminal history should survive a mere hiccup, so it must not
+   * trigger the same permanent-removal cleanup a genuine stop/kill does (see ADR-0007). */
+  stopWorker(id: string, opts: { preserveLog?: boolean } = {}): boolean {
     const child = this.childProcesses.get(id);
     const pty = this.ptyEngines.get(id);
     if (pty) pty.close();
@@ -91,7 +100,12 @@ export class LocalProcessSupervisor extends EventEmitter {
     this.childProcesses.delete(id);
     this.ptyEngines.delete(id);
     this.emitEvent('WorkerStopped', id, {});
-    return this.workerStore.remove(id);
+    const removed = this.workerStore.remove(id);
+    if (removed && !opts.preserveLog) {
+      this.terminalLog?.remove(id);
+      this.emitEvent('WorkerRemoved', id, {});
+    }
+    return removed;
   }
 
   killWorker(id: string): boolean {
@@ -118,7 +132,7 @@ export class LocalProcessSupervisor extends EventEmitter {
     const preservedHistory = worker.history;
     const preservedTokenUsage = worker.tokenUsageTotal;
 
-    this.stopWorker(id);
+    this.stopWorker(id, { preserveLog: true });
     const newWorker = this.spawnWorker(metadata);
     newWorker.process.restartCount = oldRestartCount;
     newWorker.process.crashCount = oldCrashCount;

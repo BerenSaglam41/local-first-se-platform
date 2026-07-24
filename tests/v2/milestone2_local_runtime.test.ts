@@ -1,11 +1,13 @@
 import { Kernel } from '../../src/v2/kernel/kernel';
 import { LocalProcessSupervisor } from '../../src/v2/application/runtime/local_process_supervisor';
 import { WorkerStore } from '../../src/v2/application/worker/worker_store';
+import { WorkerTerminalLog } from '../../src/v2/application/worker/worker_terminal_log';
 import { SqliteEventStore } from '../../src/v2/infrastructure/storage/sqlite_event_store';
 import { SeOsCli } from '../../src/v2/cli/se_os_cli';
 import { createFakeClaudeSpawner, createAvailableDetector , createSafeTestProviderOverrides } from './helpers/fake_claude_process';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 
 describe('SE-OS v2.0 Milestone 2 — Local Process Runtime & PTY Suite', () => {
   const testDbPath = './se_company_m2_test.db';
@@ -143,6 +145,56 @@ describe('SE-OS v2.0 Milestone 2 — Local Process Runtime & PTY Suite', () => {
     expect(snapshot.workers[0].pid).toBeGreaterThan(0);
     expect(snapshot.memoryRssMb).toBeGreaterThan(0);
     expect(snapshot.heapUsedMb).toBeGreaterThan(0);
+  });
+
+  // ─── Terminal log lifecycle (see ADR-0007) ──────────────────────────
+
+  it("should preserve a worker's real terminal log across a restart but delete it on genuine removal", async () => {
+    const logDir = path.join(os.tmpdir(), `se-os-log-lifecycle-${Date.now()}`);
+    const terminalLog = new WorkerTerminalLog(logDir);
+    const workerStore = new WorkerStore();
+    const supervisor = new LocalProcessSupervisor(workerStore, undefined, terminalLog);
+    const dummyScript = path.join(__dirname, '../../src/v2/application/runtime/dummy_worker.js');
+
+    supervisor.spawnWorker({
+      id: 'emp-log-lifecycle',
+      name: 'LogLifecycleWorker',
+      role: 'Tester',
+      department: 'QA',
+      executable: process.execPath,
+      args: [dummyScript],
+    });
+    terminalLog.writeLine('emp-log-lifecycle', 'real output before restart');
+    const logPath = terminalLog.getLogPath('emp-log-lifecycle');
+    expect(fs.existsSync(logPath)).toBe(true);
+
+    supervisor.restartWorker('emp-log-lifecycle');
+    expect(fs.existsSync(logPath)).toBe(true);
+    expect(fs.readFileSync(logPath, 'utf8')).toContain('real output before restart');
+
+    supervisor.stopWorker('emp-log-lifecycle');
+    expect(fs.existsSync(logPath)).toBe(false);
+
+    fs.rmSync(logDir, { recursive: true, force: true });
+  });
+
+  it("should rotate a worker's terminal log to a single .1 backup once it exceeds the size threshold", () => {
+    const logDir = path.join(os.tmpdir(), `se-os-log-rotation-${Date.now()}`);
+    const terminalLog = new WorkerTerminalLog(logDir);
+    const oneMb = 'x'.repeat(1024 * 1024);
+
+    // Threshold is 5MB; 6 appends of 1MB each guarantees at least one rotation.
+    for (let i = 0; i < 6; i++) {
+      terminalLog.append('emp-rotate-test', oneMb);
+    }
+
+    const activePath = terminalLog.getLogPath('emp-rotate-test');
+    const rotatedPath = `${activePath}.1`;
+    expect(fs.existsSync(rotatedPath)).toBe(true);
+    // The active file only holds what was appended since the rotation, never the full unbounded history.
+    expect(fs.statSync(activePath).size).toBeLessThan(6 * 1024 * 1024);
+
+    fs.rmSync(logDir, { recursive: true, force: true });
   });
 
   it('should execute CLI ps, worker start/stop/restart/kill, and telemetry commands cleanly', async () => {
