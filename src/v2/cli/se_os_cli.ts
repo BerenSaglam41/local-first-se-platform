@@ -720,6 +720,52 @@ export class SeOsCli {
     console.log(JSON.stringify(result.reports, null, 2));
   }
 
+  // ─── Verification Pipeline CLI ───────────────────────────────────────
+
+  async verifyWorkspace(workspacePath: string = './.se_workspaces'): Promise<void> {
+    console.log(`[Running Verification Pipeline on workspace '${workspacePath}']...`);
+    const res = await this.kernel.getVerificationPipeline().verify({
+      taskId: 'cli-verify-task',
+      workspacePath,
+    });
+    console.log(`✔ Verification Finished (Status: ${res.status} | Score: ${res.qualityScore}/100)`);
+    console.log(`  - Passed Steps: ${res.stepResults.filter((s) => s.passed).length}/${res.stepResults.length}`);
+    console.log(JSON.stringify(res, null, 2));
+  }
+
+  async verifyTaskResults(taskId: string): Promise<void> {
+    const report = this.kernel.getWorkerExecutionEngine().getReport(taskId);
+    const workspacePath = report?.artifacts?.find((a: any) => a.path)?.path || `./.se_workspaces/ws-${taskId}`;
+    console.log(`[Running Verification Pipeline on task '${taskId}' at '${workspacePath}']...`);
+    const res = await this.kernel.getVerificationPipeline().verify({
+      taskId,
+      workspacePath,
+      artifacts: report?.artifacts,
+    });
+    console.log(`✔ Task Verification (Status: ${res.status} | Score: ${res.qualityScore}/100)`);
+    console.log(JSON.stringify(res, null, 2));
+  }
+
+  async verifyProjectResults(projectId: string): Promise<void> {
+    const result = this.kernel.getProjectLifecycleOrchestrator().getResult(projectId);
+    if (!result) {
+      console.log(`✖ No project result found for ID '${projectId}'`);
+      return;
+    }
+    console.log(`[Verifying all tasks for project '${projectId}']...`);
+    for (const taskId of Object.keys(result.reports)) {
+      const rep = result.reports[taskId];
+      const wsPath = rep?.artifacts?.find((a: any) => a.path)?.path || `./.se_workspaces/ws-${taskId}`;
+      const res = await this.kernel.getVerificationPipeline().verify({
+        taskId,
+        projectId,
+        workspacePath: wsPath,
+        artifacts: rep?.artifacts,
+      });
+      console.log(`  - Task ${taskId}: ${res.status} (Quality Score: ${res.qualityScore}/100)`);
+    }
+  }
+
   async shutdown(): Promise<void> {
     console.log(`[SE-OS Kernel] Initiating workforce shutdown...`);
     await this.kernel.shutdown();

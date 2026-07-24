@@ -9,10 +9,12 @@ import { IWorkerDispatcher } from '../../contracts/iworker_dispatcher';
 import { ReadyTaskQueue } from './ready_task_queue';
 import { TaskScheduler } from './task_scheduler';
 import { IEventStore } from '../../contracts/ievent_store';
+import { VerificationPipeline } from '../verification/verification_pipeline';
 
 export class MissionExecutionOrchestrator extends EventEmitter {
   private states = new Map<string, MissionExecutionState>();
   private activeExecutions = new Set<string>();
+  private verificationPipeline: VerificationPipeline;
   private defaultPolicy: MissionExecutionPolicy = {
     maxParallelWorkers: 3,
     maxTaskRetries: 2,
@@ -22,9 +24,11 @@ export class MissionExecutionOrchestrator extends EventEmitter {
 
   constructor(
     private dispatcher: IWorkerDispatcher,
-    private eventStore?: IEventStore
+    private eventStore?: IEventStore,
+    verificationPipeline?: VerificationPipeline
   ) {
     super();
+    this.verificationPipeline = verificationPipeline || new VerificationPipeline(eventStore);
   }
 
   async executeMissionPlan(
@@ -104,7 +108,25 @@ export class MissionExecutionOrchestrator extends EventEmitter {
             lastReport = res.report;
 
             if (res.success && res.report?.status === 'COMPLETED') {
-              taskSuccess = true;
+              // Run Verification Pipeline on generated workspace artifacts
+              const workspacePath = res.report.artifacts?.find((a: any) => a.path)?.path || './.se_workspaces';
+              const vResult = await this.verificationPipeline.verify({
+                taskId: task.id,
+                missionId,
+                workspacePath,
+                artifacts: res.report.artifacts,
+              });
+
+              if (vResult.success) {
+                taskSuccess = true;
+              } else {
+                if (lastReport) {
+                  lastReport.summary += ` [Verification Failed: ${vResult.errors.join(', ')}]`;
+                }
+                if (attempt <= policy.maxTaskRetries && policy.autoRetryOnFailure) {
+                  await new Promise((res) => setTimeout(res, 100 * attempt));
+                }
+              }
             } else if (attempt <= policy.maxTaskRetries && policy.autoRetryOnFailure) {
               await new Promise((res) => setTimeout(res, 100 * attempt));
             }

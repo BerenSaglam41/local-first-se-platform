@@ -35,6 +35,7 @@ import { DefaultWorkerDispatcher } from '../application/missions/worker_dispatch
 import { MissionExecutionOrchestrator } from '../application/missions/mission_execution_orchestrator';
 import { DefaultProjectLifecycleStrategy } from '../application/project/project_lifecycle_strategy';
 import { ProjectLifecycleOrchestrator } from '../application/project/project_lifecycle_orchestrator';
+import { VerificationPipeline } from '../application/verification/verification_pipeline';
 import * as fs from 'fs';
 
 export class Kernel implements IKernel {
@@ -79,8 +80,9 @@ export class Kernel implements IKernel {
     const autonomousPlanner = new AutonomousPlanner(eventStore, sharedMemory, policyEngine, departmentOrchestrator, undefined, reasoningCoordinator);
     const workspaceExecutionService = new WorkspaceExecutionService(eventStore);
     const workerExecutionEngine = new WorkerExecutionEngine(workspaceEngine, workspaceExecutionService, reasoningCoordinator, eventStore);
+    const verificationPipeline = new VerificationPipeline(eventStore);
     const workerDispatcher = new DefaultWorkerDispatcher(workerExecutionEngine);
-    const missionExecutionOrchestrator = new MissionExecutionOrchestrator(workerDispatcher, eventStore);
+    const missionExecutionOrchestrator = new MissionExecutionOrchestrator(workerDispatcher, eventStore, verificationPipeline);
     const projectLifecycleStrategy = new DefaultProjectLifecycleStrategy(autonomousPlanner, missionEngine, missionExecutionOrchestrator);
     const projectLifecycleOrchestrator = new ProjectLifecycleOrchestrator(projectLifecycleStrategy, eventStore);
 
@@ -115,6 +117,7 @@ export class Kernel implements IKernel {
     this.container.registerSingleton<MissionExecutionOrchestrator>('MissionExecutionOrchestrator', missionExecutionOrchestrator);
     this.container.registerSingleton<DefaultProjectLifecycleStrategy>('ProjectLifecycleStrategy', projectLifecycleStrategy);
     this.container.registerSingleton<ProjectLifecycleOrchestrator>('ProjectLifecycleOrchestrator', projectLifecycleOrchestrator);
+    this.container.registerSingleton<VerificationPipeline>('VerificationPipeline', verificationPipeline);
 
     if (fs.existsSync(configPath)) {
       try {
@@ -280,6 +283,10 @@ export class Kernel implements IKernel {
 
   getProjectLifecycleOrchestrator(): ProjectLifecycleOrchestrator {
     return this.container.resolve<ProjectLifecycleOrchestrator>('ProjectLifecycleOrchestrator');
+  }
+
+  getVerificationPipeline(): VerificationPipeline {
+    return this.container.resolve<VerificationPipeline>('VerificationPipeline');
   }
 
   getTelemetry(): TelemetryService {

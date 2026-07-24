@@ -70,6 +70,9 @@
                     │
                     ▼
 [Milestone 20: Autonomous Project Lifecycle Orchestrator] ──> COMPLETED
+                    │
+                    ▼
+[Milestone 21: Verification Pipeline] ──> COMPLETED
 ```
 
 ---
@@ -372,6 +375,24 @@
 - **Complexity**: High
 - **Pluggable Strategy & Layer Isolation**: `ProjectLifecycleOrchestrator` delegates workflow execution strictly to `IProjectLifecycleStrategy`. `ProjectLifecycleOrchestrator` communicates ONLY with existing engines, NEVER directly with Workers, Runtime Plugins, Workspace, or `ReasoningCoordinator`. Reuses 100% of existing engines with zero code duplication.
 - **Acceptance Criteria**: Single business goal prompt (`"Create a REST API for User Management"`) executed autonomously end-to-end (Autonomous Planning → Mission Decomposition → Task Assignment → Mission Execution → Final Report Compilation), 6 domain events emitted (`ProjectExecutionStarted`, `ProjectPlanningCompleted`, `MissionExecutionStarted`, `MissionExecutionCompleted`, `ProjectExecutionCompleted`, `ProjectExecutionFailed`), CLI subcommands (`projectRun`, `projectStatus`, `projectReport`).
+
+### Milestone 21: Verification Pipeline (COMPLETED)
+- **Objective**: Implement Verification Pipeline (`VerificationPipeline`, `IVerificationStep`, `VerificationPlan`, `WorkspaceCheckStep`, `ArtifactCheckStep`, `BuildCheckStep`, `TypeCheckStep`, `TestCheckStep`, `LintCheckStep`, `iverification_pipeline` contracts) to validate code produced by workers.
+- **Deliverables**:
+  - `src/v2/contracts/iverification_step.ts`
+  - `src/v2/contracts/iverification_pipeline.ts`
+  - `src/v2/application/verification/steps/workspace_check_step.ts`
+  - `src/v2/application/verification/steps/artifact_check_step.ts`
+  - `src/v2/application/verification/steps/build_check_step.ts`
+  - `src/v2/application/verification/steps/type_check_step.ts`
+  - `src/v2/application/verification/steps/test_check_step.ts`
+  - `src/v2/application/verification/steps/lint_check_step.ts`
+  - `src/v2/application/verification/verification_pipeline.ts`
+  - `tests/v2/milestone21_verification_pipeline.test.ts`
+- **Dependencies**: Milestone 20
+- **Complexity**: High
+- **Pluggable Steps & Layer Isolation**: `VerificationPipeline` acts strictly as orchestrator delegating validation to `IVerificationStep[]`. `VerificationPipeline` communicates NEVER directly with Runtime Plugins and NEVER modifies workspace contents. Integrated into `MissionExecutionOrchestrator` task retry loop.
+- **Acceptance Criteria**: Automatic verification passage during worker task execution, task retries triggered on verification failure, 6 built-in verification steps, 4 domain events emitted (`VerificationStarted`, `VerificationPassed`, `VerificationFailed`, `VerificationCompleted`), CLI subcommands (`verifyWorkspace`, `verifyTaskResults`, `verifyProjectResults`).
 
 ---
 
