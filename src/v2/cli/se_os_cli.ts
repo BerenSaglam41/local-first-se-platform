@@ -536,12 +536,51 @@ export class SeOsCli {
     await plugin.detachSession(session.sessionId);
   }
 
+  // ─── Runtime Reasoning Pipeline CLI ─────────────────────────────
+
+  async reasoningExecute(goal: string = 'Design secure token authentication'): Promise<void> {
+    const requestId = `req-${Date.now()}`;
+    console.log(`[Executing Reasoning Request '${requestId}' for goal: '${goal}']...`);
+    const result = await this.kernel.getReasoningCoordinator().requestReasoning({
+      requestId,
+      missionId: 'cli-mission',
+      workerId: 'emp-bob',
+      goal,
+    });
+    console.log(JSON.stringify(result, null, 2));
+  }
+
+  async reasoningStream(goal: string = 'Implement JWT verification middleware'): Promise<void> {
+    const requestId = `req-stream-${Date.now()}`;
+    console.log(`[Streaming Reasoning Request '${requestId}' for goal: '${goal}']...`);
+    const result = await this.kernel.getReasoningCoordinator().requestReasoning(
+      {
+        requestId,
+        missionId: 'cli-mission',
+        workerId: 'emp-alice',
+        goal,
+        streaming: true,
+      },
+      {
+        onStdoutChunk: (chunk) => process.stdout.write(chunk),
+      }
+    );
+    console.log(`\n✔ Reasoning Stream complete (Success: ${result.success})`);
+  }
+
+  async reasoningInspect(requestId: string): Promise<void> {
+    console.log(`REASONING PIPELINE STATUS:`);
+    console.log(`  - Active Requests Count: ${this.kernel.getReasoningCoordinator().getActiveRequestsCount()}`);
+    console.log(`  - Selection Strategy: DefaultRuntimeSelectionStrategy`);
+  }
+
   async shutdown(): Promise<void> {
     console.log(`[SE-OS Kernel] Initiating workforce shutdown...`);
     await this.kernel.shutdown();
     console.log(`✔ Company workforce shutdown complete.`);
   }
 }
+
 
 
 

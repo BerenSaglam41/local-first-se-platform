@@ -19,6 +19,7 @@ import { PlanGenerator } from './plan_generator';
 import { ExecutionPolicyEngine } from '../policy/execution_policy_engine';
 import { DepartmentOrchestrator } from '../organization/department_orchestrator';
 import { PromptCache } from '../policy/prompt_cache';
+import { ReasoningCoordinator } from '../reasoning/reasoning_coordinator';
 
 export class AutonomousPlanner extends EventEmitter {
   private goalAnalyzer: GoalAnalyzer;
@@ -38,6 +39,7 @@ export class AutonomousPlanner extends EventEmitter {
     private policyEngine?: ExecutionPolicyEngine,
     private departmentOrchestrator?: DepartmentOrchestrator,
     config?: PlanningConfig,
+    private reasoningCoordinator?: ReasoningCoordinator,
   ) {
     super();
     this.config = config ?? DEFAULT_PLANNING_CONFIG;
@@ -100,12 +102,30 @@ export class AutonomousPlanner extends EventEmitter {
     // If confidence is below threshold, record the decision but do NOT
     // invoke AI. HOW reasoning executes is outside scope of this milestone.
     if (complexityReport.confidence < this.config.aiConfidenceThreshold && this.config.enableAIFallback) {
+      let decisionNote = 'AI reasoning deferred — runtime session management not yet available';
+      let tokenCost = 0;
+
+      if (this.reasoningCoordinator) {
+        const reasoningRes = await this.reasoningCoordinator.requestReasoning({
+          requestId: `req-${planId}`,
+          missionId: planId,
+          workerId: 'emp-planner',
+          goal: goal.title,
+          context: { constraints: [goal.description] },
+        });
+
+        if (reasoningRes.success && reasoningRes.response) {
+          decisionNote = `AI reasoning executed via ReasoningCoordinator (${reasoningRes.response.executionMetadata.pluginId})`;
+          tokenCost = reasoningRes.response.executionMetadata.tokenUsage || 150;
+        }
+      }
+
       const invocation: PlanningAIInvocation = {
         stage: 'ComplexityEstimation',
         reason: `Confidence ${complexityReport.confidence}% is below threshold ${this.config.aiConfidenceThreshold}%`,
         confidence: complexityReport.confidence,
-        tokenCost: 0, // AI not invoked in this milestone
-        decision: 'AI reasoning deferred — runtime session management not yet available',
+        tokenCost,
+        decision: decisionNote,
       };
       aiInvocations.push(invocation);
       this.emitEvent('PlanningAIInvocation', planId, invocation);

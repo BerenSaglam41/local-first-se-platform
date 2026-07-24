@@ -26,6 +26,7 @@ import { AutonomousPlanner } from '../application/planning/autonomous_planner';
 import { RuntimeSessionManager } from '../application/session/runtime_session_manager';
 import { RuntimePluginSystemManager } from '../application/plugins/runtime_plugin_system_manager';
 import { MockRuntimePlugin } from '../application/plugins/mock_runtime_plugin';
+import { ReasoningCoordinator } from '../application/reasoning/reasoning_coordinator';
 import * as fs from 'fs';
 
 export class Kernel implements IKernel {
@@ -61,10 +62,11 @@ export class Kernel implements IKernel {
     const mergeQueue = new MergeQueue(eventStore);
     const departmentOrchestrator = new DepartmentOrchestrator(eventStore);
     const policyEngine = new ExecutionPolicyEngine(eventStore);
-    const autonomousPlanner = new AutonomousPlanner(eventStore, sharedMemory, policyEngine, departmentOrchestrator);
     const sessionManager = new RuntimeSessionManager(eventStore);
     const runtimePluginSystemManager = new RuntimePluginSystemManager(eventStore);
     await runtimePluginSystemManager.loadAndRegisterPlugin(new MockRuntimePlugin());
+    const reasoningCoordinator = new ReasoningCoordinator(runtimePluginSystemManager, sessionManager, eventStore);
+    const autonomousPlanner = new AutonomousPlanner(eventStore, sharedMemory, policyEngine, departmentOrchestrator, undefined, reasoningCoordinator);
 
     supervisor.startSupervision();
 
@@ -88,6 +90,7 @@ export class Kernel implements IKernel {
     this.container.registerSingleton<AutonomousPlanner>('AutonomousPlanner', autonomousPlanner);
     this.container.registerSingleton<RuntimeSessionManager>('RuntimeSessionManager', sessionManager);
     this.container.registerSingleton<RuntimePluginSystemManager>('RuntimePluginSystemManager', runtimePluginSystemManager);
+    this.container.registerSingleton<ReasoningCoordinator>('ReasoningCoordinator', reasoningCoordinator);
 
     if (fs.existsSync(configPath)) {
       try {
@@ -217,6 +220,10 @@ export class Kernel implements IKernel {
 
   getRuntimePluginSystemManager(): RuntimePluginSystemManager {
     return this.container.resolve<RuntimePluginSystemManager>('RuntimePluginSystemManager');
+  }
+
+  getReasoningCoordinator(): ReasoningCoordinator {
+    return this.container.resolve<ReasoningCoordinator>('ReasoningCoordinator');
   }
 
   getTelemetry(): TelemetryService {

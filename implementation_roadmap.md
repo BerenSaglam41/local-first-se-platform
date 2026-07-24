@@ -55,6 +55,9 @@
                     │
                     ▼
 [Milestone 15: Claude Code Runtime Plugin (First Real AI Integration)] ──> COMPLETED
+                    │
+                    ▼
+[Milestone 16: Runtime Reasoning Pipeline] ──> COMPLETED
 ```
 
 ---
@@ -290,6 +293,19 @@
 - **Complexity**: High
 - **Provider Isolation**: All Claude-specific logic resides strictly inside `src/v2/application/plugins/claude/`. Kernel, Runtime Session Manager, Planning Engine, and Mission Engine remain 100% provider-agnostic with zero provider imports in `src/v2/kernel/`.
 - **Acceptance Criteria**: Dynamic executable discovery via PATH or `CLAUDE_PATH` env, session attachment, prompt execution, streaming stdout chunks, stream cancellation, generic domain events (`RuntimePluginAttached`, `RuntimePluginDetached`, `RuntimeExecutionStarted`, `RuntimeExecutionCompleted`, `RuntimeExecutionCancelled`), CLI subcommands (`claudeStatus`, `claudeHealth`, `claudeExecute`, `claudeStream`).
+
+### Milestone 16: Runtime Reasoning Pipeline (COMPLETED)
+- **Objective**: Implement provider-agnostic Runtime Reasoning Pipeline (`ReasoningCoordinator`, `IRuntimeSelectionStrategy`, `DefaultRuntimeSelectionStrategy`) connecting Planning Engine and Mission Engine to Runtime Plugins without provider coupling.
+- **Deliverables**:
+  - `src/v2/contracts/iruntime_selection_strategy.ts`
+  - `src/v2/contracts/ireasoning_pipeline.ts`
+  - `src/v2/application/reasoning/runtime_selection_strategy.ts`
+  - `src/v2/application/reasoning/reasoning_coordinator.ts`
+  - `tests/v2/milestone16_reasoning_pipeline.test.ts`
+- **Dependencies**: Milestone 15
+- **Complexity**: High
+- **Architecture**: Pluggable plugin selection via `IRuntimeSelectionStrategy` abstraction. Planning Engine and Mission Engine talk ONLY to `ReasoningCoordinator`. Zero provider-specific code outside Runtime Plugins.
+- **Acceptance Criteria**: `ReasoningRequest` → `ReasoningResponse` lifecycle, low-confidence planning fallback reaching `ClaudeCodeRuntimePlugin` through `ReasoningCoordinator`, streaming stdout chunks, stream cancellation, concurrency & timeout policy enforcement, 6 domain events emitted, CLI subcommands (`reasoningExecute`, `reasoningStream`, `reasoningInspect`).
 
 ---
 
