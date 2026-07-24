@@ -21,6 +21,7 @@ import { VerificationEngine } from '../application/verification/verification_eng
 import { MergeEngine } from '../application/verification/merge_engine';
 import { MergeQueue } from '../application/verification/merge_queue';
 import { DepartmentOrchestrator } from '../application/organization/department_orchestrator';
+import { ExecutionPolicyEngine } from '../application/policy/execution_policy_engine';
 import * as fs from 'fs';
 
 export class Kernel implements IKernel {
@@ -55,6 +56,7 @@ export class Kernel implements IKernel {
     const mergeEngine = new MergeEngine(eventStore);
     const mergeQueue = new MergeQueue(eventStore);
     const departmentOrchestrator = new DepartmentOrchestrator(eventStore);
+    const policyEngine = new ExecutionPolicyEngine(eventStore);
 
     supervisor.startSupervision();
 
@@ -74,6 +76,7 @@ export class Kernel implements IKernel {
     this.container.registerSingleton<MergeEngine>('MergeEngine', mergeEngine);
     this.container.registerSingleton<MergeQueue>('MergeQueue', mergeQueue);
     this.container.registerSingleton<DepartmentOrchestrator>('DepartmentOrchestrator', departmentOrchestrator);
+    this.container.registerSingleton<ExecutionPolicyEngine>('ExecutionPolicyEngine', policyEngine);
 
     if (fs.existsSync(configPath)) {
       try {
@@ -184,6 +187,10 @@ export class Kernel implements IKernel {
 
   getDepartmentOrchestrator(): DepartmentOrchestrator {
     return this.container.resolve<DepartmentOrchestrator>('DepartmentOrchestrator');
+  }
+
+  getExecutionPolicyEngine(): ExecutionPolicyEngine {
+    return this.container.resolve<ExecutionPolicyEngine>('ExecutionPolicyEngine');
   }
 
   getTelemetry(): TelemetryService {

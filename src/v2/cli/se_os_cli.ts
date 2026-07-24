@@ -1,4 +1,5 @@
 import { Kernel } from '../kernel/kernel';
+import { ExecutionProfileName } from '../contracts/iexecution_policy';
 
 export class SeOsCli {
   private kernel = new Kernel();
@@ -51,6 +52,32 @@ export class SeOsCli {
 
   async workers(): Promise<void> {
     await this.ps();
+  }
+
+  async policyProfile(profileName?: ExecutionProfileName): Promise<void> {
+    const engine = this.kernel.getExecutionPolicyEngine();
+    if (profileName) {
+      const p = engine.setProfile(profileName);
+      console.log(`✔ Switched Execution Profile to '${p.name}'`);
+    } else {
+      const p = engine.getCurrentProfile();
+      console.log(JSON.stringify(p, null, 2));
+    }
+  }
+
+  async policyEstimate(missionId: string, taskCount: number = 4): Promise<void> {
+    const est = this.kernel.getExecutionPolicyEngine().estimateMissionCost(missionId, taskCount);
+    console.log(JSON.stringify(est, null, 2));
+  }
+
+  async policyBudget(missionId: string = 'm01'): Promise<void> {
+    const status = this.kernel.getExecutionPolicyEngine().getTokenBudgetManager().getBudgetStatus(missionId);
+    console.log(JSON.stringify(status, null, 2));
+  }
+
+  async policyReport(missionId: string, actualTokens: number = 6500): Promise<void> {
+    const report = this.kernel.getExecutionPolicyEngine().finalizeMissionReport(missionId, actualTokens);
+    console.log(JSON.stringify(report, null, 2));
   }
 
   async departmentsList(): Promise<void> {

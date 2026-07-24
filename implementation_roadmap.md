@@ -40,6 +40,9 @@
                     │
                     ▼
 [Milestone 10: Department Orchestrator & Organizational Hierarchy] ──> COMPLETED
+                    │
+                    ▼
+[Milestone 11: Cost Optimization & Execution Policy Engine] ──> COMPLETED
 ```
 
 ---
@@ -202,6 +205,39 @@
 - **Acceptance Criteria**: CEO → Departments → Leads → Workers hierarchy, capability-based task routing, least-active-task load balancing, department performance metrics, SQLite event emissions.
 
 ---
+
+### Milestone 11: Cost Optimization & Execution Policy Engine (COMPLETED)
+- **Objective**: Implement ExecutionPolicyEngine, Execution Profiles (`Economy`, `Balanced`, `Performance`, `Custom`), CostEstimator, TokenBudgetManager, PromptCache, MissionCostReport, and CLI policy subcommands.
+- **Deliverables**:
+  - `src/v2/contracts/iexecution_policy.ts`
+  - `src/v2/application/policy/cost_estimator.ts`
+  - `src/v2/application/policy/token_budget_manager.ts`
+  - `src/v2/application/policy/prompt_cache.ts`
+  - `src/v2/application/policy/execution_policy_engine.ts`
+  - `tests/v2/milestone11_policy_engine.test.ts`
+- **Dependencies**: Milestone 10
+- **Complexity**: High
+- **Acceptance Criteria**: Profile-based resource constraints, prompt token cost estimation, hard/soft token budget limits, prompt cache hits & invalidation, mission cost reports with 35%+ token savings.
+
+---
+
+## Future Ideas / Backlog
+
+The following non-essential features and long-term extensions are tracked here:
+
+- **Distributed Workers & Multi-Machine Execution** — Status: BACKLOG
+- **Kubernetes & Cloud Workload Scheduling** — Status: BACKLOG
+- **GitHub Pull Requests & Webhook Integration** — Status: BACKLOG
+- **Slack & Discord Notification Adapters** — Status: BACKLOG
+- **Web Dashboard & Real-time Visualizer** — Status: BACKLOG
+- **Tmux Terminal Grid Dashboard TUI** — Status: BACKLOG
+- **VSCode Extension & IDE Plugins** — Status: BACKLOG
+- **Voice Interface & Mobile Companion App** — Status: BACKLOG
+- **AI Meeting Assistant & Auto-Documentation Website Generator** — Status: BACKLOG
+- **Plugin Marketplace & Marketplace Monetization Engine** — Status: BACKLOG
+
+---
+
 
 
 
