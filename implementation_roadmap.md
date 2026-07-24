@@ -34,6 +34,9 @@
                     │
                     ▼
 [Milestone 8: Multi-Agent Collaboration Engine] ──> COMPLETED
+                    │
+                    ▼
+[Milestone 9: Verification & Merge Engine] ──> COMPLETED
 ```
 
 ---
@@ -170,6 +173,21 @@
 - **Acceptance Criteria**: CompanyBus-only inter-worker communication, code review workflow (request → approve/reject), task ownership & delegation, conflict detection, collaborative memory ADR writing, SQLite event emissions.
 
 ---
+
+### Milestone 9: Verification & Merge Engine (COMPLETED)
+- **Objective**: Implement VerificationEngine, Quality Gates evaluation (Build, Tests, Lint, TypeCheck, Coverage), MergeEngine dry-run conflict analysis, MergeQueue candidate prioritization, and CLI verify/merge subcommands.
+- **Deliverables**:
+  - `src/v2/contracts/iverification_merge.ts`
+  - `src/v2/application/verification/verification_engine.ts`
+  - `src/v2/application/verification/merge_engine.ts`
+  - `src/v2/application/verification/merge_queue.ts`
+  - `tests/v2/milestone9_verification_merge.test.ts`
+- **Dependencies**: Milestone 8
+- **Complexity**: High
+- **Acceptance Criteria**: Configurable quality gate verification, dry-run merge conflict analysis, priority merge queue management, verification reports with quality scores (0-100), SQLite event emissions.
+
+---
+
 
 
 

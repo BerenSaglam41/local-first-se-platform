@@ -53,6 +53,35 @@ export class SeOsCli {
     await this.ps();
   }
 
+  async verifyTask(taskId: string, worktreeId: string = 'wt-01', workerId: string = 'emp-bob'): Promise<void> {
+    const report = await this.kernel.getVerificationEngine().verifyTask(taskId, worktreeId, workerId);
+    console.log(report.passed ? `✔ Verification PASSED for task ${taskId} (Quality Score: ${report.qualityScore}/100)` : `✖ Verification FAILED for task ${taskId}`);
+  }
+
+  async verifyReport(taskId: string): Promise<void> {
+    const report = this.kernel.getVerificationEngine().getReport(taskId);
+    console.log(report ? JSON.stringify(report, null, 2) : `✖ No verification report found for task ${taskId}`);
+  }
+
+  async mergeQueue(): Promise<void> {
+    const list = this.kernel.getMergeQueue().list();
+    console.log(`MERGE QUEUE (${list.length} candidates):`);
+    for (const mc of list) {
+      console.log(`  - [${mc.id}] Task: ${mc.taskId} | Priority: ${mc.priority} | Status: ${mc.status}`);
+    }
+  }
+
+  async mergeInspect(taskId: string): Promise<void> {
+    const plan = this.kernel.getMergeEngine().getMergePlan(taskId);
+    console.log(plan ? JSON.stringify(plan, null, 2) : `✖ No merge plan found for task ${taskId}`);
+  }
+
+  async mergePrepare(taskId: string, worktreeId: string = 'wt-01'): Promise<void> {
+    const plan = this.kernel.getMergeEngine().prepareMergePlan(taskId, worktreeId, `feature/mission-01/bob`, 'master');
+    this.kernel.getMergeQueue().enqueue(taskId, worktreeId);
+    console.log(`✔ Prepared dry-run merge plan for task ${taskId} (Can Merge: ${plan.canMerge})`);
+  }
+
   async workersMessages(): Promise<void> {
     const list = this.kernel.getCollaborationEngine().getReviewWorkflow().listReviews();
     console.log(`COLLABORATION MESSAGES / REVIEWS (${list.length}):`);

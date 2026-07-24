@@ -17,6 +17,9 @@ import { MissionEngine } from '../application/missions/mission_engine';
 import { ContextCompiler } from '../application/context-compiler/context_compiler';
 import { WorkspaceEngine } from '../application/workspace/workspace_engine';
 import { CollaborationEngine } from '../application/collaboration/collaboration_engine';
+import { VerificationEngine } from '../application/verification/verification_engine';
+import { MergeEngine } from '../application/verification/merge_engine';
+import { MergeQueue } from '../application/verification/merge_queue';
 import * as fs from 'fs';
 
 export class Kernel implements IKernel {
@@ -44,6 +47,13 @@ export class Kernel implements IKernel {
     const workspaceEngine = new WorkspaceEngine('./.se_workspaces', eventStore);
     const collaborationEngine = new CollaborationEngine(companyBus, eventStore, sharedMemory);
 
+    const verificationEngine = new VerificationEngine(
+      { enableBuild: true, enableTests: true, enableLint: true, enableTypeCheck: true, minCoveragePercent: 80 },
+      eventStore
+    );
+    const mergeEngine = new MergeEngine(eventStore);
+    const mergeQueue = new MergeQueue(eventStore);
+
     supervisor.startSupervision();
 
     this.container.registerSingleton<IEventStore>('IEventStore', eventStore);
@@ -58,6 +68,9 @@ export class Kernel implements IKernel {
     this.container.registerSingleton<ContextCompiler>('ContextCompiler', contextCompiler);
     this.container.registerSingleton<WorkspaceEngine>('WorkspaceEngine', workspaceEngine);
     this.container.registerSingleton<CollaborationEngine>('CollaborationEngine', collaborationEngine);
+    this.container.registerSingleton<VerificationEngine>('VerificationEngine', verificationEngine);
+    this.container.registerSingleton<MergeEngine>('MergeEngine', mergeEngine);
+    this.container.registerSingleton<MergeQueue>('MergeQueue', mergeQueue);
 
     if (fs.existsSync(configPath)) {
       try {
@@ -152,6 +165,18 @@ export class Kernel implements IKernel {
 
   getCollaborationEngine(): CollaborationEngine {
     return this.container.resolve<CollaborationEngine>('CollaborationEngine');
+  }
+
+  getVerificationEngine(): VerificationEngine {
+    return this.container.resolve<VerificationEngine>('VerificationEngine');
+  }
+
+  getMergeEngine(): MergeEngine {
+    return this.container.resolve<MergeEngine>('MergeEngine');
+  }
+
+  getMergeQueue(): MergeQueue {
+    return this.container.resolve<MergeQueue>('MergeQueue');
   }
 
   getTelemetry(): TelemetryService {
