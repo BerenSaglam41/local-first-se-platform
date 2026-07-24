@@ -407,9 +407,46 @@ export class SeOsCli {
     console.log(JSON.stringify(plan, null, 2));
   }
 
+  // ─── Runtime Session Manager CLI ────────────────────────────────
+
+  async runtimeSessions(): Promise<void> {
+    const list = this.kernel.getRuntimeSessionManager().getRegistry().listMetadata();
+    console.log(`ACTIVE RUNTIME SESSIONS (${list.length}):`);
+    for (const s of list) {
+      console.log(`  - [${s.sessionId}] Worker: ${s.workerId} | Plugin: ${s.pluginId} | Transport: ${s.transportType} | State: ${s.state} | Missions: ${s.missionCount}`);
+    }
+  }
+
+  async runtimeStatus(): Promise<void> {
+    const report = this.kernel.getRuntimeSessionManager().getHealthReport();
+    console.log(`RUNTIME SESSION HEALTH STATUS:`);
+    console.log(JSON.stringify(report, null, 2));
+  }
+
+  async runtimeStart(workerId: string = 'emp-bob'): Promise<void> {
+    const session = this.kernel.getRuntimeSessionManager().getOrCreateSessionForWorker(workerId);
+    console.log(`✔ Started runtime session '${session.sessionId}' for worker '${workerId}' (State: ${session.getState()})`);
+  }
+
+  async runtimeStop(sessionId: string): Promise<void> {
+    const ok = this.kernel.getRuntimeSessionManager().stopSession(sessionId);
+    console.log(ok ? `✔ Stopped runtime session ${sessionId}` : `✖ Failed to stop session ${sessionId}`);
+  }
+
+  async runtimeRestart(sessionId: string): Promise<void> {
+    const newSession = this.kernel.getRuntimeSessionManager().restartSession(sessionId);
+    console.log(newSession ? `✔ Restarted session -> new session '${newSession.sessionId}'` : `✖ Failed to restart session ${sessionId}`);
+  }
+
+  async runtimeInspect(sessionId: string): Promise<void> {
+    const session = this.kernel.getRuntimeSessionManager().getRegistry().getSession(sessionId);
+    console.log(session ? JSON.stringify(session.metadata, null, 2) : `✖ Session ${sessionId} not found`);
+  }
+
   async shutdown(): Promise<void> {
     console.log(`[SE-OS Kernel] Initiating workforce shutdown...`);
     await this.kernel.shutdown();
     console.log(`✔ Company workforce shutdown complete.`);
   }
 }
+

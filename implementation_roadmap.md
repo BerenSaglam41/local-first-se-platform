@@ -46,6 +46,9 @@
                     │
                     ▼
 [Milestone 12: Autonomous Planning & Reasoning Engine] ──> COMPLETED
+                    │
+                    ▼
+[Milestone 13: Runtime Session Manager] ──> COMPLETED
 ```
 
 ---
@@ -239,6 +242,22 @@
 - **Complexity**: High
 - **Planning Optimization**: Cache → ADR → Rule-based → Heuristic → AI fallback (threshold-gated, decision only)
 - **Acceptance Criteria**: Business goal → MissionPlan with planningSource tracking (CACHE/RULE_ENGINE/AI_REASONING/HYBRID), ADR generation & SharedMemory persistence, knowledge reuse via PromptCache, all 10 domain events emitted, AI invocation gate recorded but not invoked, CLI plan subcommands.
+
+### Milestone 13: Runtime Session Manager (COMPLETED)
+- **Objective**: Implement provider-agnostic Runtime Session Manager using `IRuntimeTransport` abstraction, managing local worker runtime sessions, streaming output, cancellation, backpressure, state transitions, worker isolation, session reuse, health monitoring, and crash recovery.
+- **Deliverables**:
+  - `src/v2/contracts/iruntime_transport.ts`
+  - `src/v2/contracts/iruntime_session.ts`
+  - `src/v2/infrastructure/transport/pty_transport.ts`
+  - `src/v2/application/session/runtime_session.ts`
+  - `src/v2/application/session/runtime_session_registry.ts`
+  - `src/v2/application/session/session_lifecycle_manager.ts`
+  - `src/v2/application/session/runtime_session_manager.ts`
+  - `tests/v2/milestone13_runtime_session.test.ts`
+- **Dependencies**: Milestone 12
+- **Complexity**: High
+- **Architecture**: Transport-agnostic via `IRuntimeTransport` interface; `PtyTransport` reference implementation. Zero provider-specific code, HTTP calls, or API keys.
+- **Acceptance Criteria**: Session lifecycle state machine (`Idle` → `Starting` → `Ready` → `Busy` → `Idle`/`Stopped`/`Failed`), worker session isolation, streaming stdout/stderr, stream cancellation, health monitoring, session reuse across missions, event emissions for all 9 session events, CLI subcommands (`runtimeSessions`, `runtimeStatus`, `runtimeStart`, `runtimeStop`, `runtimeRestart`, `runtimeInspect`).
 
 ---
 

@@ -23,6 +23,7 @@ import { MergeQueue } from '../application/verification/merge_queue';
 import { DepartmentOrchestrator } from '../application/organization/department_orchestrator';
 import { ExecutionPolicyEngine } from '../application/policy/execution_policy_engine';
 import { AutonomousPlanner } from '../application/planning/autonomous_planner';
+import { RuntimeSessionManager } from '../application/session/runtime_session_manager';
 import * as fs from 'fs';
 
 export class Kernel implements IKernel {
@@ -59,6 +60,7 @@ export class Kernel implements IKernel {
     const departmentOrchestrator = new DepartmentOrchestrator(eventStore);
     const policyEngine = new ExecutionPolicyEngine(eventStore);
     const autonomousPlanner = new AutonomousPlanner(eventStore, sharedMemory, policyEngine, departmentOrchestrator);
+    const sessionManager = new RuntimeSessionManager(eventStore);
 
     supervisor.startSupervision();
 
@@ -80,6 +82,7 @@ export class Kernel implements IKernel {
     this.container.registerSingleton<DepartmentOrchestrator>('DepartmentOrchestrator', departmentOrchestrator);
     this.container.registerSingleton<ExecutionPolicyEngine>('ExecutionPolicyEngine', policyEngine);
     this.container.registerSingleton<AutonomousPlanner>('AutonomousPlanner', autonomousPlanner);
+    this.container.registerSingleton<RuntimeSessionManager>('RuntimeSessionManager', sessionManager);
 
     if (fs.existsSync(configPath)) {
       try {
@@ -122,6 +125,9 @@ export class Kernel implements IKernel {
     for (const w of supervisor.getRegistry().list()) {
       supervisor.stopWorker(w.metadata.id);
     }
+
+    const sessionManager = this.container.resolve<RuntimeSessionManager>('RuntimeSessionManager');
+    sessionManager.shutdown();
 
     const eventStore = this.container.resolve<SqliteEventStore>('IEventStore');
     await eventStore.close();
@@ -198,6 +204,10 @@ export class Kernel implements IKernel {
 
   getAutonomousPlanner(): AutonomousPlanner {
     return this.container.resolve<AutonomousPlanner>('AutonomousPlanner');
+  }
+
+  getRuntimeSessionManager(): RuntimeSessionManager {
+    return this.container.resolve<RuntimeSessionManager>('RuntimeSessionManager');
   }
 
   getTelemetry(): TelemetryService {
