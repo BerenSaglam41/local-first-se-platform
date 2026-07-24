@@ -610,9 +610,46 @@ export class SeOsCli {
     }
   }
 
+  // ─── Mission Decomposition & Task Assignment CLI ────────────────
+
+  async missionPlanDecompose(title: string = 'User Management API', goal: string = 'Create a REST API for User Management'): Promise<void> {
+    console.log(`[Decomposing Mission '${title}' for goal: '${goal}']...`);
+    const { mission, plan } = await this.kernel.getMissionEngine().decomposeAndPlanMission(title, goal);
+    console.log(`✔ Mission '${mission.id}' decomposed into ${plan.tasks.length} tasks across ${plan.executionBatches.length} DAG batches:`);
+    console.log(JSON.stringify(plan, null, 2));
+  }
+
+  async missionAssign(missionId: string): Promise<void> {
+    const plan = this.kernel.getMissionEngine().getExecutionPlan(missionId);
+    if (!plan) {
+      console.log(`✖ No execution plan found for mission '${missionId}'`);
+      return;
+    }
+    const updatedPlan = this.kernel.getTaskAssignmentEngine().assignPlanTasks(plan);
+    console.log(`✔ Assigned ${updatedPlan.tasks.length} tasks for mission '${missionId}':`);
+    console.log(`  - Department Assignments: ${JSON.stringify(updatedPlan.departmentAssignments)}`);
+    console.log(`  - Worker Assignments: ${JSON.stringify(updatedPlan.workerAssignments)}`);
+  }
+
+  async missionInspectPlan(missionId: string): Promise<void> {
+    const plan = this.kernel.getMissionEngine().getExecutionPlan(missionId);
+    if (!plan) {
+      console.log(`✖ No execution plan found for mission '${missionId}'`);
+      return;
+    }
+    console.log(`MISSION EXECUTION PLAN ('${missionId}'):`);
+    console.log(`  - Goal: ${plan.goal}`);
+    console.log(`  - Total Tasks: ${plan.tasks.length}`);
+    console.log(`  - Execution Batches (DAG):`);
+    for (let i = 0; i < plan.executionBatches.length; i++) {
+      console.log(`     Batch ${i + 1}: [${plan.executionBatches[i].join(', ')}]`);
+    }
+  }
+
   async shutdown(): Promise<void> {
     console.log(`[SE-OS Kernel] Initiating workforce shutdown...`);
     await this.kernel.shutdown();
+
     console.log(`✔ Company workforce shutdown complete.`);
   }
 }

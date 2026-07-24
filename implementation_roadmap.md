@@ -61,6 +61,9 @@
                     │
                     ▼
 [Milestone 17: Autonomous Worker Execution] ──> COMPLETED
+                    │
+                    ▼
+[Milestone 18: Mission Decomposition & Task Assignment] ──> COMPLETED
 ```
 
 ---
@@ -321,6 +324,20 @@
 - **Complexity**: High
 - **Single Responsibility & Workspace Isolation**: `WorkerExecutionEngine` acts strictly as orchestrator generating `ExecutionPlan`; all filesystem mutations are delegated to `WorkspaceExecutionService`. Path boundary checks prevent path traversal outside workspace directory (`workspacePath`). Workers communicate strictly via `ReasoningCoordinator`.
 - **Acceptance Criteria**: Full autonomous worker execution flow, isolated workspace file creation/modification, artifact collection (`CREATED_FILE`, `MODIFIED_FILE`, `EXECUTION_LOG`, `REASONING_SUMMARY`), 5 domain events emitted (`WorkerExecutionStarted`, `WorkerExecutionCompleted`, `WorkerExecutionFailed`, `WorkerWorkspaceUpdated`, `ArtifactsGenerated`), CLI subcommands (`workerExecute`, `workerInspect`, `workerArtifacts`).
+
+### Milestone 18: Mission Decomposition & Task Assignment (COMPLETED)
+- **Objective**: Implement Mission Decomposition & Task Assignment (`MissionDecomposer`, `IMissionPlanningStrategy`, `DefaultMissionPlanningStrategy`, `TaskAssignmentEngine`, `imission_decomposition` contracts) allowing high-level goals to be automatically analyzed, decomposed into DAG subtasks, prioritized, assigned to departments, and routed to workers based on capability and workload.
+- **Deliverables**:
+  - `src/v2/contracts/imission_planning_strategy.ts`
+  - `src/v2/contracts/imission_decomposition.ts`
+  - `src/v2/application/missions/default_mission_planning_strategy.ts`
+  - `src/v2/application/missions/mission_decomposer.ts`
+  - `src/v2/application/missions/task_assignment_engine.ts`
+  - `tests/v2/milestone18_mission_decomposition.test.ts`
+- **Dependencies**: Milestone 17
+- **Complexity**: High
+- **Pluggable Architecture**: `MissionDecomposer` acts strictly as orchestrator delegating planning to `IMissionPlanningStrategy`. `TaskAssignmentEngine` uses `AssignmentPolicy` to route tasks to departments and workers without direct Worker coupling in `MissionEngine`.
+- **Acceptance Criteria**: High-level goal decomposition into 6 tasks, DAG dependency resolution, topological execution batching, capability & workload worker routing, `MissionExecutionPlan` compilation, 8 domain events emitted (`MissionDecomposed`, `TaskCreated`, `TaskAssigned`, `TaskStarted`, `TaskCompleted`, `TaskFailed`, `MissionCompleted`), CLI subcommands (`missionPlanDecompose`, `missionAssign`, `missionInspectPlan`).
 
 ---
 

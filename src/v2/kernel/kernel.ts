@@ -29,6 +29,8 @@ import { MockRuntimePlugin } from '../application/plugins/mock_runtime_plugin';
 import { ReasoningCoordinator } from '../application/reasoning/reasoning_coordinator';
 import { WorkspaceExecutionService } from '../application/worker/workspace_execution_service';
 import { WorkerExecutionEngine } from '../application/worker/worker_execution_engine';
+import { MissionDecomposer } from '../application/missions/mission_decomposer';
+import { TaskAssignmentEngine } from '../application/missions/task_assignment_engine';
 import * as fs from 'fs';
 
 export class Kernel implements IKernel {
@@ -51,7 +53,6 @@ export class Kernel implements IKernel {
     const pluginManager = new RuntimePluginManager();
     const supervisor = new LocalProcessSupervisor(eventStore);
     const telemetry = new TelemetryService();
-    const missionEngine = new MissionEngine(eventStore, pluginManager.getCapabilityRegistry());
     const contextCompiler = new ContextCompiler(sharedMemory, eventStore);
     const workspaceEngine = new WorkspaceEngine('./.se_workspaces', eventStore);
     const collaborationEngine = new CollaborationEngine(companyBus, eventStore, sharedMemory);
@@ -63,6 +64,9 @@ export class Kernel implements IKernel {
     const mergeEngine = new MergeEngine(eventStore);
     const mergeQueue = new MergeQueue(eventStore);
     const departmentOrchestrator = new DepartmentOrchestrator(eventStore);
+    const missionDecomposer = new MissionDecomposer(eventStore);
+    const taskAssignmentEngine = new TaskAssignmentEngine(departmentOrchestrator, eventStore);
+    const missionEngine = new MissionEngine(eventStore, pluginManager.getCapabilityRegistry(), departmentOrchestrator, missionDecomposer, taskAssignmentEngine);
     const policyEngine = new ExecutionPolicyEngine(eventStore);
     const sessionManager = new RuntimeSessionManager(eventStore);
     const runtimePluginSystemManager = new RuntimePluginSystemManager(eventStore);
@@ -97,6 +101,8 @@ export class Kernel implements IKernel {
     this.container.registerSingleton<ReasoningCoordinator>('ReasoningCoordinator', reasoningCoordinator);
     this.container.registerSingleton<WorkspaceExecutionService>('WorkspaceExecutionService', workspaceExecutionService);
     this.container.registerSingleton<WorkerExecutionEngine>('WorkerExecutionEngine', workerExecutionEngine);
+    this.container.registerSingleton<MissionDecomposer>('MissionDecomposer', missionDecomposer);
+    this.container.registerSingleton<TaskAssignmentEngine>('TaskAssignmentEngine', taskAssignmentEngine);
 
     if (fs.existsSync(configPath)) {
       try {
@@ -238,6 +244,14 @@ export class Kernel implements IKernel {
 
   getWorkerExecutionEngine(): WorkerExecutionEngine {
     return this.container.resolve<WorkerExecutionEngine>('WorkerExecutionEngine');
+  }
+
+  getMissionDecomposer(): MissionDecomposer {
+    return this.container.resolve<MissionDecomposer>('MissionDecomposer');
+  }
+
+  getTaskAssignmentEngine(): TaskAssignmentEngine {
+    return this.container.resolve<TaskAssignmentEngine>('TaskAssignmentEngine');
   }
 
   getTelemetry(): TelemetryService {
