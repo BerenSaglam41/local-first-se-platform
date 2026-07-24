@@ -31,6 +31,9 @@
                     │
                     ▼
 [Milestone 7: Git Worktree Isolation & Multi-Workspace Execution] ──> COMPLETED
+                    │
+                    ▼
+[Milestone 8: Multi-Agent Collaboration Engine] ──> COMPLETED
 ```
 
 ---
@@ -152,6 +155,22 @@
 - **Acceptance Criteria**: Independent worker branch creation, filesystem isolation, worker attach/detach, merge metadata generation, worktree cleanup, SQLite event persistence.
 
 ---
+
+### Milestone 8: Multi-Agent Collaboration Engine (COMPLETED)
+- **Objective**: Implement CollaborationEngine, inter-worker structured IPC via CompanyBus, TaskOwnershipManager, ReviewWorkflowManager, ConflictDetector for parallel edits, collaborative memory in SharedMemory, and CLI workers/review subcommands.
+- **Deliverables**:
+  - `src/v2/contracts/icollaboration.ts`
+  - `src/v2/application/collaboration/task_ownership_manager.ts`
+  - `src/v2/application/collaboration/review_workflow.ts`
+  - `src/v2/application/collaboration/conflict_detector.ts`
+  - `src/v2/application/collaboration/collaboration_engine.ts`
+  - `tests/v2/milestone8_collaboration.test.ts`
+- **Dependencies**: Milestone 7
+- **Complexity**: High
+- **Acceptance Criteria**: CompanyBus-only inter-worker communication, code review workflow (request → approve/reject), task ownership & delegation, conflict detection, collaborative memory ADR writing, SQLite event emissions.
+
+---
+
 
 
 

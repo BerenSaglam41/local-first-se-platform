@@ -53,6 +53,50 @@ export class SeOsCli {
     await this.ps();
   }
 
+  async workersMessages(): Promise<void> {
+    const list = this.kernel.getCollaborationEngine().getReviewWorkflow().listReviews();
+    console.log(`COLLABORATION MESSAGES / REVIEWS (${list.length}):`);
+    for (const r of list) {
+      console.log(`  - [Review ${r.reviewId}] Task: ${r.taskId} | Dev: ${r.developerId} -> Reviewer: ${r.reviewerId} | Status: ${r.status}`);
+    }
+  }
+
+  async workersInbox(workerId: string): Promise<void> {
+    const inbox = this.kernel.getCollaborationEngine().getInbox(workerId);
+    console.log(`INBOX FOR WORKER ${workerId} (${inbox.length} messages):`);
+    for (const msg of inbox) {
+      console.log(`  - [${msg.messageType}] From ${msg.senderId}: ${msg.summary}`);
+    }
+  }
+
+  async workersOutbox(workerId: string): Promise<void> {
+    const outbox = this.kernel.getCollaborationEngine().getOutbox(workerId);
+    console.log(`OUTBOX FOR WORKER ${workerId} (${outbox.length} messages):`);
+    for (const msg of outbox) {
+      console.log(`  - [${msg.messageType}] To ${msg.recipientId || 'Broadcast'}: ${msg.summary}`);
+    }
+  }
+
+  async workersDelegate(taskId: string, newOwnerId: string, currentOwnerId: string = 'emp-alice'): Promise<void> {
+    await this.kernel.getCollaborationEngine().delegateTask(taskId, currentOwnerId, newOwnerId, 'mission-01');
+    console.log(`✔ Delegated task ${taskId} from ${currentOwnerId} to ${newOwnerId}`);
+  }
+
+  async reviewRequest(taskId: string, reviewerId: string, developerId: string = 'emp-bob'): Promise<void> {
+    await this.kernel.getCollaborationEngine().requestReview(taskId, developerId, reviewerId, 'mission-01');
+    console.log(`✔ Requested review for task ${taskId} from ${reviewerId}`);
+  }
+
+  async reviewApprove(taskId: string, reviewerId: string = 'emp-alice'): Promise<void> {
+    await this.kernel.getCollaborationEngine().approveReview(taskId, reviewerId, 'mission-01', 'LGTM');
+    console.log(`✔ Approved review for task ${taskId}`);
+  }
+
+  async reviewReject(taskId: string, reason: string, reviewerId: string = 'emp-alice'): Promise<void> {
+    await this.kernel.getCollaborationEngine().rejectReview(taskId, reviewerId, 'mission-01', reason);
+    console.log(`✔ Rejected review for task ${taskId}: ${reason}`);
+  }
+
   async pluginsList(): Promise<void> {
     const manager = this.kernel.getPluginManager();
     const plugins = manager ? manager.listPlugins() : [];

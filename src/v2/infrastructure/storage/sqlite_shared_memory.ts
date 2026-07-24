@@ -51,7 +51,7 @@ export class SqliteSharedMemory implements ISharedMemory {
 
   async readADR(adrId: string): Promise<ADRRecord | null> {
     const db = await this.connect();
-    const row = await db.get<any>(`SELECT * FROM adrs_v2 WHERE id = ?`, [adrId]);
+    const row = await db.get<any>(`SELECT * FROM adrs_v2 WHERE id LIKE ? LIMIT 1`, [`${adrId}%`]);
     if (!row) return null;
     return {
       id: row.id,
@@ -62,6 +62,7 @@ export class SqliteSharedMemory implements ISharedMemory {
       timestamp: row.timestamp,
     };
   }
+
 
   async writeADR(adr: ADRRecord): Promise<void> {
     const db = await this.connect();

@@ -16,6 +16,7 @@ import { RuntimePluginManager } from '../application/plugins/runtime_plugin_mana
 import { MissionEngine } from '../application/missions/mission_engine';
 import { ContextCompiler } from '../application/context-compiler/context_compiler';
 import { WorkspaceEngine } from '../application/workspace/workspace_engine';
+import { CollaborationEngine } from '../application/collaboration/collaboration_engine';
 import * as fs from 'fs';
 
 export class Kernel implements IKernel {
@@ -41,6 +42,7 @@ export class Kernel implements IKernel {
     const missionEngine = new MissionEngine(eventStore, pluginManager.getCapabilityRegistry());
     const contextCompiler = new ContextCompiler(sharedMemory, eventStore);
     const workspaceEngine = new WorkspaceEngine('./.se_workspaces', eventStore);
+    const collaborationEngine = new CollaborationEngine(companyBus, eventStore, sharedMemory);
 
     supervisor.startSupervision();
 
@@ -55,6 +57,7 @@ export class Kernel implements IKernel {
     this.container.registerSingleton<MissionEngine>('MissionEngine', missionEngine);
     this.container.registerSingleton<ContextCompiler>('ContextCompiler', contextCompiler);
     this.container.registerSingleton<WorkspaceEngine>('WorkspaceEngine', workspaceEngine);
+    this.container.registerSingleton<CollaborationEngine>('CollaborationEngine', collaborationEngine);
 
     if (fs.existsSync(configPath)) {
       try {
@@ -145,6 +148,10 @@ export class Kernel implements IKernel {
 
   getWorkspaceEngine(): WorkspaceEngine {
     return this.container.resolve<WorkspaceEngine>('WorkspaceEngine');
+  }
+
+  getCollaborationEngine(): CollaborationEngine {
+    return this.container.resolve<CollaborationEngine>('CollaborationEngine');
   }
 
   getTelemetry(): TelemetryService {
