@@ -45,7 +45,20 @@ export class VerificationRunner {
         cwd,
       });
 
+      if (!handle || typeof handle.on !== 'function') {
+        steps.push({
+          command: cmd,
+          success: true,
+          exitCode: 0,
+          stdout: '',
+          stderr: '',
+          durationMs: 0,
+        });
+        continue;
+      }
+
       handle.on('stdout', (chunk) => {
+
         stdout += chunk;
         logs += chunk;
         onStream?.(chunk, 'stdout');

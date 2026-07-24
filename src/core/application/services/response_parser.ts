@@ -28,11 +28,13 @@ export class ResponseParser {
     while ((match = regex.exec(response)) !== null) {
       hasBlocks = true;
       const lang = match[1];
-      const code = match[2];
+      let code = match[2];
       const contextText = parts[i] || '';
       i++;
 
       const detectedFile = this.detectFile(contextText, code, workspaceFiles);
+      code = this.sanitizeCodeContent(code);
+
       blocks.push({
         fileName: detectedFile,
         content: code,
@@ -41,8 +43,9 @@ export class ResponseParser {
     }
 
     if (!hasBlocks && response.trim().length > 0) {
-      const code = response.trim();
+      let code = response.trim();
       const detectedFile = this.detectFile('', code, workspaceFiles) || defaultFile;
+      code = this.sanitizeCodeContent(code);
       blocks.push({
         fileName: detectedFile,
         content: code,
@@ -86,5 +89,36 @@ export class ResponseParser {
 
     // Do NOT infer filenames from conversational contextText or fuzzy strings
     return undefined;
+  }
+
+  /**
+   * Sanitizes code content by stripping leading // FILE: comments and any conversational
+   * prose prepended by the LLM before valid source code keywords.
+   */
+  private sanitizeCodeContent(code: string): string {
+    const lines = code.split('\n');
+
+    // 1. Remove leading // FILE: header comments
+    let startIndex = 0;
+    while (startIndex < lines.length && /^\s*(?:\/\/|#|\/\*)\s*FILE:/i.test(lines[startIndex])) {
+      startIndex++;
+    }
+
+    // 2. Find first line starting with valid source code syntax or comment
+    const VALID_CODE_START = /^\s*(?:import|export|class|interface|type|enum|function|const|let|var|module|namespace|describe|test|it|expect|require|\/\*|\/\/|#|\/\*\*|'use strict'|"use strict"|\{|\}|\[|\@)/;
+
+    let validCodeIndex = startIndex;
+    for (let idx = startIndex; idx < lines.length; idx++) {
+      const line = lines[idx];
+      // Skip empty lines
+      if (!line.trim()) continue;
+
+      if (VALID_CODE_START.test(line)) {
+        validCodeIndex = idx;
+        break;
+      }
+    }
+
+    return lines.slice(validCodeIndex).join('\n').trim();
   }
 }

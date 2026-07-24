@@ -1,523 +1,407 @@
-# Local-First AI Software Engineering Platform: Architecture Specification
+# SE-OS v2.0 Architecture Specification — The AI Software Company Operating System
 
-This document details the architectural design for the provider-agnostic, local-first AI Software Engineering Platform. This platform orchestrates multiple AI coding assistants as a virtual software company, entirely offline and local-first, communicating through their respective command-line interfaces (CLIs).
-
----
-
-## 1. Folder Structure
-
-```
-local-first-se-platform/
-├── config/                         # Configuration schemas and default settings
-│   └── default.json                # Global default config
-├── docs/                           # Documentation
-│   └── architecture.md             # This architecture design document
-├── src/
-│   ├── core/                       # Clean Architecture: Core Domain & Application Rules
-│   │   ├── domain/                 # Pure domain models and core interfaces (no dependencies)
-│   │   │   ├── models/             # Domain entities (Agent, Job, Task, Event, Message)
-│   │   │   └── interfaces/         # Core abstractions (IProvider, IAgent, IMemory, IEventBus)
-│   │   └── application/            # Use cases, workflow orchestrators, state machine logic
-│   │       ├── state/              # State machine definitions and status tracking
-│   │       ├── workflow/           # Workflow engine, DSL parsers, DAG execution
-│   │       └── event_bus/          # Event system, event dispatchers, and subscribers
-│   ├── infrastructure/             # Clean Architecture: Frameworks, CLI wrappers, DBs
-│   │   ├── providers/              # CLI / LLM wrappers (Claude CLI, Gemini CLI, Goose, etc.)
-│   │   ├── storage/                # SQLite, local file-system persistence implementations
-│   │   ├── memory/                 # Vector index (local SQLite-VSS/ChromaDB), semantic memory
-│   │   ├── terminal/               # Interactive bash process manager and sandboxed execution
-│   │   ├── git/                    # Git repository manipulation wrapper (branch, commit, diff)
-│   │   ├── logging/                # Structured local JSON logging
-│   │   └── approval/               # Interactive terminal / web-view human gatekeeper
-│   └── main.ts                     # Application entry point, CLI bootstrap, and DI setup
-└── tests/                          # Integration and unit test suite
-```
+> **AUTHOR**: Chief Technology Officer (SE-OS Platform Team)  
+> **STATUS**: Architecture Reset & Vision Blueprint  
+> **SCOPE**: System Domain Model, Multi-Agent Organizational Runtime, AI-Agnostic Kernel, Company Bus & Shared Memory  
 
 ---
 
-## 2. Module Boundaries & Explanations
+## 1. Executive Summary & Vision Statement
 
-To enforce strong separation of concerns, the system is split into three main concentric layers based on Clean Architecture principles:
+**SE-OS is an Operating System for an AI Software Engineering Company.**
 
-### Core Domain (`src/core/domain`)
-- **Zero External Dependencies**: Has no dependencies on third-party frameworks, databases, libraries, or network processes.
-- **Models**: Defines raw data structures (`Project`, `Task`, `Message`, `ToolResult`, `MemorySnippet`) which represent the core business logic of the platform.
-- **Interfaces**: Defines abstractions (`IProvider`, `ISession`, `IConversation`, `IToolExecutor`, `IAgent`, `IMemory`, `IWorkflow`) that establish how agents and providers must behave.
+It is **NOT** a wrapper around any single LLM, **NOT** a Claude CLI automation script, and **NOT** a provider-centric framework.
 
-### Core Application (`src/core/application`)
-- **Workflow & State Management**: Contains the implementation of the `WorkflowStateMachine`, the DAG Workflow Engine execution parser, and scheduling loops.
-- **Event Bus**: Implements the memory-backed `EventBus` to allow loose coupling between independent agents and infrastructure events.
-- **Rules of Engagement**: Implements logic governing when tasks transition and when agents are invoked.
-
-### Infrastructure (`src/infrastructure`)
-- **Adapters & Wrappers**: Implements all interfaces defined in the domain layer.
-- **CLI subprocess interfaces**: Houses the terminal handlers that spawn and manage background child processes (such as the `Claude CLI`, `Codex CLI`, `Gemini CLI`).
-- **File System & Persistence**: Connects local SQLite instances and file directories for project workspaces, logs, and long-term vector embeddings.
+In SE-OS:
+- **The User is the CEO**.
+- **Roles are Permanent System Entities** (`Lead Architect`, `Backend Engineer`, `Frontend Engineer`, `QA Engineer`, `Research Engineer`, `DevOps Engineer`).
+- **Employees are Operational Workers** (e.g., Alice, Bob, Charlie) assigned to a Role.
+- **AI Models are Replaceable Engines** powering individual Workers.
+- **The Kernel is 100% AI-Agnostic**: It contains zero vendor-specific prompts, zero LLM-specific parsers, and zero `if (provider === 'Claude')` branching logic.
 
 ---
 
-## 3. Clean Architecture Diagram
-
-The circular flow of control and dependency resolution is implemented as follows:
-
-```
-+-----------------------------------------------------------------------------+
-|                               INFRASTRUCTURE                                |
-|   +---------------------------------------------------------------------+   |
-|   |                            APPLICATION                              |   |
-|   |   +-------------------------------------------------------------+   |   |
-|   |   |                           DOMAIN                            |   |   |
-|   |   |                                                             |   |   |
-|   |   |   Entities:                                                 |   |   |
-|   |   |     - Task, Project, Event, Message                         |   |   |
-|   |   |                                                             |   |   |
-|   |   |   Interfaces:                                               |   |   |
-|   |   |     - IProvider, ISession, IAgent, IWorkflow                |   |   |
-|   |   +-------------------------------------------------------------+   |   |
-|   |                                                                     |   |
-|   |   Use Cases / Controls:                                             |   |
-|   |     - Workflow Orchestrator (DAG Executor)                          |   |
-|   |     - State Machine (Task & Agent States)                           |   |
-|   |     - Event Dispatcher / Local PubSub                               |   |
-|   +---------------------------------------------------------------------+   |
-|                                                                             |
-|   Gateways / Adapters / Concrete Implementations:                           |
-|     - ClaudeCliProvider, GeminiCliProvider (Subprocesses)                   |
-|     - GitClient, TerminalManager                                            |
-|     - SQLiteStorage, SQLiteVSSMemory                                        |
-|     - CLI / Console IO (Human Approval Gate)                                |
-+-----------------------------------------------------------------------------+
-```
-
----
-
-## 4. Interfaces
-
-Every major building block is defined via contract interfaces to support unlimited extension and substitution.
-
-### Provider Abstraction Interfaces
-
-```typescript
-export interface IProvider {
-  id: string; // e.g. "claude-cli", "gemini-cli"
-  name: string;
-  capabilities: Capability[];
-  
-  createSession(projectId: string, sessionId: string): Promise<ISession>;
-}
-
-export interface ISession {
-  id: string;
-  projectId: string;
-  providerId: string;
-  
-  createConversation(): Promise<IConversation>;
-  getToolExecutor(): IToolExecutor;
-  close(): Promise<void>;
-}
-
-export interface IConversation {
-  id: string;
-  sessionId: string;
-  
-  // Sends a message to the CLI sub-process and yields incremental output chunks
-  sendMessage(prompt: string): AsyncGenerator<string, string, void>;
-  getHistory(): Promise<Message[]>;
-}
-
-export interface IToolExecutor {
-  // Parsers and execution hooks for CLI tool calls (files, shell command intercepts)
-  executeTool(toolName: string, args: Record<string, any>): Promise<ToolResult>;
-  registerInterceptor(toolName: string, hook: (args: any) => Promise<boolean>): void;
-}
-```
-
-### Agent & Workflow Interfaces
-
-```typescript
-export interface IAgent {
-  id: string;
-  role: IRole;
-  capabilities: Capability[];
-  memory: IMemory;
-  provider: IProvider;
-  
-  executeTask(task: Task, context: WorkflowContext): Promise<TaskResult>;
-}
-
-export interface IRole {
-  name: string; // e.g. "Architect", "QA Engineer"
-  systemPromptTemplate: string;
-  allowedTools: string[];
-}
-
-export interface Capability {
-  name: string; // e.g. "git-commit", "run-linter"
-  description: string;
-  parametersSchema: Record<string, any>;
-}
-
-export interface IMemory {
-  // Local semantic & episodic memory abstraction
-  store(key: string, content: string, tags?: string[]): Promise<void>;
-  query(semanticQuery: string, limit?: number): Promise<MemorySnippet[]>;
-  clear(): Promise<void>;
-}
-
-export interface IWorkflow {
-  id: string;
-  name: string;
-  // DAG of tasks defined in YAML/JSON
-  tasks: TaskNode[];
-  
-  getNextTasks(completedTask: Task, results: Record<string, TaskResult>): TaskNode[];
-  isCompleted(results: Record<string, TaskResult>): boolean;
-}
-```
-
----
-
-## 5. Domain Models
-
-```typescript
-export interface Project {
-  id: string;
-  name: string;
-  rootPath: string;
-  createdAt: Date;
-}
-
-export interface Task {
-  id: string;
-  projectId: string;
-  workflowId: string;
-  title: string;
-  description: string;
-  assignedAgentId?: string;
-  status: TaskStatus;
-  dependencies: string[]; // List of task IDs that must complete first
-  output?: string;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-export interface Message {
-  id: string;
-  conversationId: string;
-  sender: 'user' | 'agent' | 'system' | 'tool';
-  content: string;
-  timestamp: Date;
-}
-
-export interface ToolResult {
-  toolName: string;
-  success: boolean;
-  output: string;
-  error?: string;
-}
-
-export interface MemorySnippet {
-  id: string;
-  content: string;
-  score: number; // Retrieval match score
-  timestamp: Date;
-}
-```
-
----
-
-## 6. Event System
-
-The platform uses an asynchronous, single-process, memory-backed Event Bus (PubSub pattern) to maintain decoupling. 
-
-### Core Event Structure
-```typescript
-export interface AppEvent<T = any> {
-  id: string;
-  type: string; // e.g., "TASK_STARTED", "HUMAN_APPROVAL_REQUESTED"
-  payload: T;
-  timestamp: Date;
-}
-
-export interface IEventBus {
-  publish(event: AppEvent): void;
-  subscribe(type: string, handler: (event: AppEvent) => void): void;
-  unsubscribe(type: string, handler: (event: AppEvent) => void): void;
-}
-```
-
-### Key Event Types
-- `PROJECT_INITIATED`: New project registered.
-- `WORKFLOW_STARTED`: Workflow engine triggers a new DAG execution.
-- `TASK_STATUS_CHANGED`: Task transitions between states.
-- `AGENT_ACTION_REQUESTED`: Agent requests a tools run or approval.
-- `HUMAN_DECISION_SUBMITTED`: Human approves or rejects agent action.
-- `PROVIDER_SESSION_LOGGED`: CLI input/output activity.
-
----
-
-## 7. Task Lifecycle
-
-Tasks inside a workflow progress through a strict, deterministic sequence:
-
-```
-[Pending] ---> [Ready] ---> [Running] ---> [Approval Required]
-                  ^             |                  |
-                  |             v                  v
-                  +-------- [Failed] <------- [Rejected]
-                                |
-                                v
-                            [Aborted]
-```
-
-1. **Pending**: Waiting on dependency tasks.
-2. **Ready**: All dependencies resolved; queued for execution.
-3. **Running**: Assigned to an agent; provider session executing.
-4. **Approval Required**: Waiting for a human decision (e.g. before executing mutating command or writing file).
-5. **Completed**: Finished execution successfully.
-6. **Failed**: Technical error or unhandled exception during execution.
-7. **Rejected**: Rejected by human approval; loops back or transitions to Failed.
-
----
-
-## 8. Agent Lifecycle
-
-Agents are dynamically instantiated, assigned to tasks, and cleaned up to prevent resource leakage:
+## 2. High-Level Architectural Topology
 
 ```mermaid
-stateDiagram-v2
-    [*] --> Idle : Instantiated
-    Idle --> RetrievingContext : Task Assigned
-    RetrievingContext --> Executing : Load Memory & Context
-    Executing --> Executing : Subprocess Loop (CLI run)
-    Executing --> AwaitingApproval : Needs Human Approval
-    AwaitingApproval --> Executing : Approved
-    AwaitingApproval --> Executing : Corrective Feedback (Rejected)
-    Executing --> Concluding : Task Execution Done
-    Concluding --> Idle : Write to Memory & Tear Down Session
-    Idle --> [*] : Destroyed
+graph TD
+  CEO[Human CEO / User] -->|Mission / Goal| Kernel[SE-OS AI-Agnostic Kernel]
+
+  subgraph Organization [Company & Team Domain]
+    Kernel --> Company[Company Organization]
+    Company --> Board[Task Board / Scheduler]
+    Company --> Memory[Shared Company Memory / Blackboard]
+    Company --> Bus[Company Event & Message Bus]
+  end
+
+  subgraph Employees [Active Employee Workforce]
+    Alice["Employee: Alice (Role: Lead Architect)"]
+    Bob["Employee: Bob (Role: Backend Engineer)"]
+    Charlie["Employee: Charlie (Role: Frontend Engineer)"]
+    Dave["Employee: Dave (Role: QA Engineer)"]
+  end
+
+  Company --> Alice
+  Company --> Bob
+  Company --> Charlie
+  Company --> Dave
+
+  subgraph Runtimes [Worker Runtime Layer]
+    Alice --> RT1[Worker Runtime 1]
+    Bob --> RT2[Worker Runtime 2]
+    Charlie --> RT3[Worker Runtime 3]
+    Dave --> RT4[Worker Runtime 4]
+  end
+
+  subgraph Adapters [Decoupled AI Adapters]
+    RT1 --> Adapt1[Claude Adapter]
+    RT2 --> Adapt2[Codex / OpenAI Adapter]
+    RT3 --> Adapt3[ChatGPT / OpenRouter Adapter]
+    RT4 --> Adapt4[Gemini / Ollama Adapter]
+  end
+
+  Adapt1 --> Model1[Claude CLI / API]
+  Adapt2 --> Model2[Codex CLI / API]
+  Adapt3 --> Model3[ChatGPT / OpenRouter]
+  Adapt4 --> Model4[Gemini / Ollama Local]
 ```
 
 ---
 
-## 9. State Machine
+## 3. Core Domain Model & Entity Definitions
 
-The workflow runtime runs a centralized State Machine verifying the integrity of the active project graph.
+### 3.1 Domain Model Diagram
 
-### State Transitions Configuration
-```typescript
-export class WorkflowStateMachine {
-  private currentState: Record<string, TaskStatus> = {};
-
-  transition(taskId: string, action: 'START' | 'COMPLETE' | 'FAIL' | 'GATE_REJECT' | 'REQUIRE_APPROVAL'): TaskStatus {
-    const fromStatus = this.currentState[taskId] || 'PENDING';
-    let toStatus: TaskStatus = fromStatus;
-
-    switch (fromStatus) {
-      case 'PENDING':
-        if (action === 'START') toStatus = 'RUNNING';
-        break;
-      case 'RUNNING':
-        if (action === 'COMPLETE') toStatus = 'COMPLETED';
-        if (action === 'FAIL') toStatus = 'FAILED';
-        if (action === 'REQUIRE_APPROVAL') toStatus = 'APPROVAL_REQUIRED';
-        break;
-      case 'APPROVAL_REQUIRED':
-        if (action === 'START') toStatus = 'RUNNING'; // resumes running
-        if (action === 'GATE_REJECT') toStatus = 'FAILED';
-        break;
-      default:
-        throw new Error(`Invalid transition: ${fromStatus} -> ${action}`);
+```mermaid
+classDiagram
+    class Company {
+        +string companyId
+        +string name
+        +List~Employee~ employees
+        +SharedMemory memory
+        +CompanyBus bus
+        +TaskBoard taskBoard
+        +dispatchMission(mission)
     }
 
-    this.currentState[taskId] = toStatus;
-    return toStatus;
-  }
+    class Employee {
+        +string id
+        +string name
+        +Role role
+        +Capability[] capabilities
+        +WorkerRuntime runtime
+        +EmployeeStatus status
+        +receiveMessage(message)
+        +executeAssignedTask(task)
+    }
+
+    class Role {
+        +string roleId
+        +string title
+        +string description
+        +string systemPromptTemplate
+        +RequiredCapability[] requiredCapabilities
+    }
+
+    class WorkerRuntime {
+        +string runtimeId
+        +IAIAdapter aiAdapter
+        +WorkspaceContext workspace
+        +ToolRegistry tools
+        +executeCycle(task, context)
+    }
+
+    class IAIAdapter {
+        <<interface>>
+        +getAdapterName()
+        +sendInferenceRequest(request)
+        +streamInferenceResponse(request, callback)
+    }
+
+    class SharedMemory {
+        +ArchitectureDecisions adrs
+        +TaskBoard board
+        +KnowledgeGraph knowledge
+        +GitState git
+        +IssueTracker issues
+        +read(key)
+        +write(key, data)
+    }
+
+    class CompanyBus {
+        +publish(message)
+        +subscribe(topic, handler)
+        +broadcast(message)
+    }
+
+    Company "1" *-- "*" Employee
+    Company "1" *-- "1" SharedMemory
+    Company "1" *-- "1" CompanyBus
+    Employee "1" o-- "1" Role
+    Employee "1" *-- "1" WorkerRuntime
+    WorkerRuntime "1" o-- "1" IAIAdapter
+```
+
+### 3.2 Key Entity Definitions
+
+| Entity | Primary Purpose | Lifecycle & Constraints |
+| :--- | :--- | :--- |
+| **`Company`** | Top-level organizational container | Holds workforce, shared memory, company bus, and active mission state. |
+| **`Role`** | Permanent functional persona definition | Defines role responsibilities, default capabilities, and system prompt templates (e.g. `Backend Engineer`). |
+| **`Employee`** | Operational team member instance | Configured with a `Name` (e.g. "Alice"), assigned a `Role`, bound to a `WorkerRuntime` and `AIAdapter`. |
+| **`Capability`** | Discrete permission or skill | Granular tags (`CODE_GENERATION`, `REFACTORING`, `AST_ANALYSIS`, `TEST_EXECUTION`, `GIT_CHECKPOINT`, `SECURITY_AUDIT`). |
+| **`WorkerRuntime`** | Execution container for an Employee | Handles tool invocation, local workspace isolation, process lifecycle, and context compilation. |
+| **`IAIAdapter`** | Decoupled model provider interface | Normalizes communication with external LLM engines (Claude, Codex, ChatGPT, Gemini, DeepSeek, Ollama, etc.). |
+| **`CompanyBus`** | Inter-employee pub/sub message broker | Routes direct messages, broadcasts, task delegations, and review feedback between workers. |
+| **`SharedMemory`** | Single company blackboard | Universal state holding ADRs, active branches, task dependencies, code knowledge index, and issue trackers. |
+| **`Mission`** | High-level CEO objective | Initial prompt or product specification decomposed by the `Lead Architect` and scheduled across the team. |
+
+---
+
+## 4. Startup & Execution Lifecycle
+
+### 4.1 Company Boot Sequence
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor CEO as Human CEO
+    participant Kernel as SE-OS Kernel
+    participant Comp as Company Org
+    participant Config as Company Config
+    participant Bus as Company Bus
+    participant Mem as Shared Memory
+    participant TUI as Tmux Runtime Dashboard
+
+    CEO->>Kernel: se-os boot --config company.json --workspace ./my-app
+    Kernel->>Config: Load workforce & workspace configuration
+    Kernel->>Mem: Initialize Shared Memory (Git, VFS, ADRs, Task Board)
+    Kernel->>Bus: Initialize Company Bus (Pub/Sub topics)
+    Kernel->>Comp: Instantiate Workforce (Alice: Architect, Bob: Backend, Charlie: QA...)
+    Kernel->>TUI: Launch Multi-Pane Terminal (Terminal 1: Architect, 2: Backend, 3: QA...)
+    Kernel-->>CEO: Company Online. All employees active & listening on Company Bus.
+```
+
+### 4.2 Mission Dispatch & Team Collaboration Flow
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor CEO as Human CEO
+    participant Bus as Company Bus
+    participant Mem as Shared Memory
+    participant Arch as Alice (Lead Architect)
+    participant Back as Bob (Backend Engineer)
+    participant QA as Dave (QA Engineer)
+
+    CEO->>Bus: Dispatch Mission ("Build authentication layer")
+    Bus->>Arch: Notify Mission Received
+    Arch->>Mem: Read Codebase VFS & Architectural Decisions
+    Arch->>Arch: Produce System Architecture Specification
+    Arch->>Mem: Write ADR-004: JWT Auth Architecture
+    Arch->>Bus: Publish Task Assignment -> Bob (Backend Engineer)
+    
+    Bus->>Back: Receive Task ("Implement JWT auth endpoints")
+    Back->>Mem: Read ADR-004 & VFS Context
+    Back->>Back: Generate & Verify Code (via Worker Runtime)
+    Back->>Mem: Commit Checkpoint & Update Task Board
+    Back->>Bus: Publish Notification -> Dave (QA Engineer) ("Backend complete. Verify tests.")
+
+    Bus->>QA: Receive Verification Request
+    QA->>Mem: Read modified files & test specs
+    QA->>QA: Run Integration & Security Test Suite
+    QA->>Mem: Record Test Results
+    QA->>Bus: Publish Status -> CEO & Team ("All 14 auth tests PASSED cleanly.")
+```
+
+---
+
+## 5. Employee Configuration & AI Adapter Swapping
+
+### 5.1 Declarative Workforce Configuration (`company.json`)
+
+Every employee is declared in a clear, provider-agnostic schema. The AI engine is simply an adapter reference:
+
+```json
+{
+  "companyName": "Acme AI Software Labs",
+  "workspaceRoot": "./projects/e-commerce-api",
+  "employees": [
+    {
+      "id": "emp-001",
+      "name": "Alice",
+      "role": "LEAD_ARCHITECT",
+      "aiAdapter": {
+        "provider": "claude",
+        "model": "claude-3-7-sonnet",
+        "transport": "cli",
+        "executable": "claude"
+      },
+      "capabilities": ["SYSTEM_DESIGN", "ADR_WRITING", "TASK_DECOMPOSITION"],
+      "terminalPane": 1
+    },
+    {
+      "id": "emp-002",
+      "name": "Bob",
+      "role": "BACKEND_ENGINEER",
+      "aiAdapter": {
+        "provider": "codex",
+        "model": "gpt-4o",
+        "transport": "openrouter",
+        "apiKeyEnv": "OPENROUTER_API_KEY"
+      },
+      "capabilities": ["CODE_GENERATION", "REFACTORING", "UNIT_TESTING"],
+      "terminalPane": 2
+    },
+    {
+      "id": "emp-003",
+      "name": "Charlie",
+      "role": "QA_ENGINEER",
+      "aiAdapter": {
+        "provider": "ollama",
+        "model": "qwen2.5-coder:32b",
+        "transport": "local_rest",
+        "endpoint": "http://localhost:11434"
+      },
+      "capabilities": ["TEST_EXECUTION", "SECURITY_AUDIT", "VALIDATION"],
+      "terminalPane": 3
+    }
+  ]
 }
 ```
 
----
+### 5.2 Zero-Code AI Adapter Swapping
 
-## 10. Provider Abstraction (CLI Integration)
+To swap the AI model for any employee, **zero orchestration code changes are required**.
 
-Instead of using raw API HTTP requests, each Provider wraps a locally installed CLI utility. This is achieved by spawning a persistent pseudo-terminal (PTY) or process wrapper:
-
-```typescript
-export class CLIProviderWrapper implements ISession {
-  private childProcess: any; // e.g. node-pty instance or execa child process
-  
-  constructor(private cliExecutablePath: string, private initialArgs: string[]) {}
-
-  async createConversation(): Promise<IConversation> {
-    // Spawns the CLI executable (e.g. `claude` or `gemini`) in interactive mode
-    // Sends raw input lines to stdin, monitors stdout/stderr for outputs
-    return {
-      id: crypto.randomUUID(),
-      sessionId: this.id,
-      sendMessage: async function* (prompt: string) {
-        // 1. Write prompt to subprocess stdin
-        // 2. Stream chunk responses from stdout via generator yielding text
-        // 3. Detect completion prompt marker (e.g. custom prompt symbol, shell EOF)
-      }
-    };
-  }
-  
-  getToolExecutor(): IToolExecutor {
-    // Intercepts CLI output that looks like markdown codeblocks or shell execution commands
-    // and funnels them through the local Human-in-the-loop validation
-    return new LocalToolExecutor();
-  }
-
-  async close(): Promise<void> {
-    if (this.childProcess) {
-      this.childProcess.kill();
-    }
-  }
-}
+#### Example: Swapping Bob (Backend Engineer) from Codex to Claude
+Change `company.json` from:
+```json
+"aiAdapter": { "provider": "codex", "model": "gpt-4o" }
+```
+to:
+```json
+"aiAdapter": { "provider": "claude", "model": "claude-3-5-sonnet", "transport": "cli" }
 ```
 
+The `WorkerRuntime`, `Role`, `CompanyBus` subscriptions, `Capabilities`, and `SharedMemory` access remain **100% unchanged**.
+
 ---
 
-## 11. Memory Abstraction
+## 6. Inter-Employee Communication & Shared Memory
 
-Memory is entirely local, combining two strategies:
-1. **Episodic memory**: Local text files recording conversation history logs and agent logs.
-2. **Semantic memory**: Vector search built directly into the app using a local SQLite instance with an extension like `sqlite-vss`, or a pure-in-memory vector index (like `hnswlib-node`) serialized to disk.
+### 6.1 Company Message Bus Schema
+
+Messages are structured domain objects passed over the event bus:
 
 ```typescript
-export interface MemoryRecord {
+export type MessageType = 
+  | 'TASK_DELEGATION'   // Employee A assigns a sub-task to Employee B
+  | 'TASK_COMPLETED'    // Employee B notifies Employee A of task completion
+  | 'BROADCAST_ADR'     // Architect broadcasts architectural decision
+  | 'REVIEW_REQUEST'    // Engineer requests code review / QA verification
+  | 'ISSUE_REPORTED';   // QA reports a failing test or vulnerability
+
+export interface CompanyMessage {
   id: string;
-  embedding?: number[];
-  text: string;
-  tags: string[];
-  timestamp: number;
-}
-```
-
----
-
-## 12. Storage Abstraction
-
-To ensure local-first resilience without running heavy external DB servers, the persistence engine is designed around:
-- **SQLite**: Structured relational database storing projects, jobs, workflow states, and logs.
-- **Local File System**: Raw file cache, git diff trees, and workspace checkouts.
-
-```typescript
-export interface IStorage {
-  initialize(): Promise<void>;
-  saveProject(project: Project): Promise<void>;
-  getProject(id: string): Promise<Project | null>;
-  saveTask(task: Task): Promise<void>;
-  getTasksForProject(projectId: string): Promise<Task[]>;
-  saveMessage(message: Message): Promise<void>;
-}
-```
-
----
-
-## 13. Configuration System
-
-Configuration is read from a simple local YAML or JSON file in the project's config directory (e.g. `~/.config/local-first-se/config.json`).
-- Environment variables override file-based configurations.
-- Custom plugins can register configuration options dynamically.
-
-```typescript
-export interface SystemConfig {
-  workspaceRoot: string;
-  providers: {
-    [providerId: string]: {
-      enabled: boolean;
-      cliPath: string;
-      defaultArgs: string[];
-    }
+  senderEmployeeId: string;
+  recipientEmployeeId?: string; // Omitting recipient = Broadcast to all
+  messageType: MessageType;
+  topic: string;
+  payload: {
+    taskId?: string;
+    summary: string;
+    artifactReferences?: string[];
+    data?: Record<string, any>;
   };
-  approvalMode: 'interactive' | 'automatic' | 'disabled';
-  maxConcurrentAgents: number;
+  timestamp: string;
+}
+```
+
+### 6.2 Shared Company Memory (Blackboard Architecture)
+
+There is **one single source of company memory** accessible by all employees:
+
+```typescript
+export interface SharedCompanyMemory {
+  // Architectural Decisions Record (ADRs)
+  architecturalDecisions: ADRRecord[];
+
+  // Global Task Board
+  taskBoard: {
+    backlog: Task[];
+    inProgress: Task[];
+    review: Task[];
+    completed: Task[];
+  };
+
+  // Codebase Virtual File System & AST Knowledge Graph
+  knowledgeGraph: {
+    symbols: SymbolMap;
+    dependencies: DependencyGraph;
+    fileIndex: FileKnowledgeMap;
+  };
+
+  // Version Control State
+  vcsState: {
+    currentBranch: string;
+    activeCheckpoints: Record<string, string>; // subtaskId -> commitHash
+    cleanState: boolean;
+  };
+
+  // Issues & Test Results
+  issueTracker: {
+    openIssues: Issue[];
+    resolvedIssues: Issue[];
+  };
 }
 ```
 
 ---
 
-## 14. Logging System
+## 7. How the Kernel Remains 100% AI-Agnostic
 
-The platform uses a structured, local-first logging module writing JSON lines (`.jsonl`) to a local `.logs/` folder within the active project workspace.
-- Logs include correlation IDs (`traceId`, `taskId`, `agentId`) to allow timeline tracing.
-- Console outputs use terminal styling but maintain clean file writes.
+To prevent vendor lock-in and vendor drift, the SE-OS Kernel is strictly decoupled from LLM mechanics:
 
----
-
-## 15. Workflow Engine
-
-The Workflow Engine compiles a YAML configuration file representing the graph of dependencies into a Directed Acyclic Graph (DAG).
-
-### Example Workflow DSL (YAML Conceptual Model)
-```yaml
-name: "Feature Implementation Workflow"
-tasks:
-  - id: "architect-design"
-    agent: "Architect"
-    description: "Design the component module boundary interfaces"
-  - id: "impl-backend"
-    agent: "Backend Engineer"
-    dependencies: ["architect-design"]
-    description: "Write the classes implementing the interfaces"
-  - id: "impl-frontend"
-    agent: "Frontend Engineer"
-    dependencies: ["architect-design"]
-    description: "Implement the interactive user interface"
-  - id: "qa-verification"
-    agent: "QA Engineer"
-    dependencies: ["impl-backend", "impl-frontend"]
-    description: "Create tests and verify logic"
+```
+[ Kernel Engine ]
+       │  (Only knows: Employees, Roles, Tasks, Messages, SharedMemory)
+       ▼
+[ IAIAdapter Contract ]
+  + sendInference(prompt, spec): Promise<NormalizedInferenceResult>
+       │
+ ┌─────┴───────────────┬──────────────────┬─────────────────┐
+ ▼                     ▼                  ▼                 ▼
+[ClaudeAdapter]  [CodexAdapter]  [ChatGPTAdapter]  [OllamaAdapter]
+ (CLI/SDK)        (OpenRouter)     (REST API)       (Local REST)
 ```
 
-The engine iterates through the DAG, spawning agents as their dependencies complete.
+### The Strict Kernel Constraints:
+1. **Zero Provider Conditionals**: `if (provider === 'claude')` is strictly forbidden in core domain/application code.
+2. **Normalized Inference Contract**: All adapters return a normalized `NormalizedInferenceResult` containing parsed code blocks, metadata, and token metrics.
+3. **No Vendor Prompt Hacks**: Prompt formatting, system tags, and spec wrappers belong to the `AIAdapter` or `Role` templates, not the kernel executor.
 
 ---
 
-## 16. Scheduler
+## 8. Refactoring & Rename Blueprint (v1.x -> v2.0 Transition)
 
-Since the execution is local, the Scheduler is a basic FIFO priority event loop:
-- Enqueues ready tasks.
-- Respects resource limits (`maxConcurrentAgents`).
-- Dispatches tasks to available agent runner instances.
+The following components from SE-OS v1.x are renamed and refactored to align with the AI Company Architecture:
 
----
-
-## 17. Human Approval System
-
-Every mutating system action (e.g., executing a command on the user terminal, editing a local file, performing a git branch push) requests approval from the local user.
-
-- **Interactive Mode**: Prompts the user directly in the terminal executing the platform.
-- **Interruptible State**: The task is placed in `APPROVAL_REQUIRED` state and publishes a `HUMAN_APPROVAL_REQUESTED` event.
-- The human can:
-  - **Approve**: Action proceeds.
-  - **Reject with Feedback**: Action is aborted, user feedback is injected back into the agent conversation as a prompt to let it self-correct.
-  - **Modify**: The user modifies the code/command directly and marks it resolved.
+| Current Component (v1.x) | New v2.0 Entity | Refactoring & Conceptual Shift |
+| :--- | :--- | :--- |
+| `TaskExecutionService` | `WorkerRuntime` | Shifted from a monolith execution service to a worker runtime container for an individual Employee. |
+| `ClaudeProvider` | `ClaudeAIAdapter` | Moved to `src/infrastructure/adapters/` implementing `IAIAdapter`. |
+| `TaskPlanner` | `ArchitectRole` | Task decomposition is now performed by the `Lead Architect` employee using the Company Bus. |
+| `ProjectKnowledgeService` | `SharedMemory` | Integrated into the universal company blackboard accessible by all workers. |
+| `CliFormatter` / `main.ts` | `TmuxDashboard` | Expanded into multi-pane terminal runtime rendering live panes for each Employee. |
+| `EngineeringTask` | `CompanyMission` | Transformed from a raw file task into a company-wide mission assigned to the team. |
 
 ---
 
-## 18. Git Integration
+## 9. Next Steps Blueprint
 
-The platform manages codebases strictly via a sandboxed local git client wrapper.
-- All agent operations are performed on separate auto-generated feature branches (e.g., `ai-feature/architect-design`).
-- Agents commit changes step-by-step with structured logs.
-- Merges to the local master branch require human approval and successful execution of QA/testing tasks.
-
----
-
-## 19. Terminal Manager
-
-Commands run by agents (such as running test commands, installing node packages, checking directory listings) must run locally but in a controlled shell environment:
-- Spawns command-line shell scripts using subprocesses.
-- Implements execution timeouts to prevent hanging processes (e.g., infinite loops in test execution).
-- Buffers output to capture logs.
-
----
-
-## 20. Future Extension Points
-
-The platform is designed to scale:
-- **Provider Plugin Register**: To support future CLIs (Aider, Goose, Ollama, etc.), developers drop a TypeScript file into `src/infrastructure/providers/` that implements the `IProvider` interface.
-- **Workflow Action Hooks**: Pre-execution and post-execution triggers hooked into the Event Bus.
-- **Custom Agent Personas**: Defining new custom roles simply by adding a schema definition configuration to `config/roles/` specifying capabilities and templates.
+1. **Domain Models**: Update `src/core/domain/models/company.ts` with `Company`, `Employee`, `Role`, `CompanyMessage`, `SharedMemory`.
+2. **AI Adapter Interface**: Define `IAIAdapter` in `src/core/domain/interfaces/iai_adapter.ts`.
+3. **Worker Runtime**: Refactor `TaskExecutionService` into `WorkerRuntime`.
+4. **Company Bus**: Implement in-memory event bus `CompanyBus` in `src/infrastructure/bus/company_bus.ts`.
+5. **Dashboard TUI**: Multi-pane dashboard showing live feeds for Lead Architect, Backend Engineer, QA Engineer.

@@ -2,7 +2,13 @@ import { IContextBuilder } from '../../domain/interfaces/icontext_builder';
 import { IProvider, ProviderResult } from '../../domain/interfaces/iprovider';
 import { IConfig } from '../../domain/interfaces/iconfig';
 import { IProcessRuntime } from '../../domain/interfaces/iprocess_runtime';
-import { EngineeringTask, ExecutionResult, StageProgressCallback } from '../../domain/models/execution';
+import {
+  EngineeringTask,
+  ExecutionResult,
+  StageProgressCallback,
+  SubTaskResult,
+  SubTaskStatus,
+} from '../../domain/models/execution';
 import { ResponseParser } from './response_parser';
 import { PatchGenerator } from './patch_generator';
 import { WorkspaceUpdater } from './workspace_updater';
@@ -42,111 +48,29 @@ export class TaskExecutionService {
 
     // 1. Validate task request
     if (!task.id) {
-      return {
-        taskId: 'unknown',
-        status: 'ERROR',
-        output: '',
-        error: 'Invalid task: Task ID is required',
-        durationMs: Date.now() - startTime,
-        modifiedFiles: [],
-        filesSkipped: [],
-        parserWarnings: [],
-        patchStatus: 'none',
-        validationStatus: 'skipped',
-        validationErrors: ['Invalid task request'],
-        validationWarnings: [],
-        parserConfidence: 0.0,
-        verificationStatus: 'skipped',
-        verificationSteps: [],
-        verificationLogs: '',
-        buildPassed: false,
-        testsPassed: false,
-        verificationDuration: 0,
-        retryCount: 0,
-        retryHistory: [],
-        finalVerificationResult: 'skipped',
-        finalProviderResponse: '',
-      };
+      return this.makeErrorResult('unknown', 'Invalid task: Task ID is required', startTime);
     }
     if (!task.description || task.description.trim() === '') {
-      return {
-        taskId: task.id,
-        status: 'ERROR',
-        output: '',
-        error: 'Invalid task: Task description cannot be empty',
-        durationMs: Date.now() - startTime,
-        modifiedFiles: [],
-        filesSkipped: [],
-        parserWarnings: [],
-        patchStatus: 'none',
-        validationStatus: 'skipped',
-        validationErrors: ['Invalid task request'],
-        validationWarnings: [],
-        parserConfidence: 0.0,
-        verificationStatus: 'skipped',
-        verificationSteps: [],
-        verificationLogs: '',
-        buildPassed: false,
-        testsPassed: false,
-        verificationDuration: 0,
-        retryCount: 0,
-        retryHistory: [],
-        finalVerificationResult: 'skipped',
-        finalProviderResponse: '',
-      };
-    }
-    if (!task.entryFile || task.entryFile.trim() === '') {
-      return {
-        taskId: task.id,
-        status: 'ERROR',
-        output: '',
-        error: 'Invalid task: Entry file path is required',
-        durationMs: Date.now() - startTime,
-        modifiedFiles: [],
-        filesSkipped: [],
-        parserWarnings: [],
-        patchStatus: 'none',
-        validationStatus: 'skipped',
-        validationErrors: ['Invalid task request'],
-        validationWarnings: [],
-        parserConfidence: 0.0,
-        verificationStatus: 'skipped',
-        verificationSteps: [],
-        verificationLogs: '',
-        buildPassed: false,
-        testsPassed: false,
-        verificationDuration: 0,
-        retryCount: 0,
-        retryHistory: [],
-        finalVerificationResult: 'skipped',
-        finalProviderResponse: '',
-      };
+      return this.makeErrorResult(task.id, 'Invalid task: Task description cannot be empty', startTime);
     }
 
-    // 1.5. Index project knowledge before building context
+    const wsRoot = task.workspaceRoot || process.cwd();
+
+    // 1.5. Knowledge Engine indexing
     if (this.projectKnowledgeService) {
       const kStartTime = Date.now();
       onProgress?.({ stage: 'Project Knowledge Engine', status: 'started' });
       try {
-        const rootPath = process.cwd();
-        await this.projectKnowledgeService.indexProject(
-          task.id,
-          rootPath,
-          task.workspaceFiles
-        );
-        const meta = await this.projectKnowledgeService.getProjectMetadata(task.id);
+        await this.projectKnowledgeService.indexProject(task.id, wsRoot, task.workspaceFiles);
         onProgress?.({
           stage: 'Project Knowledge Engine',
           status: 'completed',
           durationMs: Date.now() - kStartTime,
           metrics: {
-            techStack: meta?.techStack || ['TypeScript', 'Node.js'],
-            schemaVersion: meta?.schemaVersion || 1,
             workspaceFilesCount: task.workspaceFiles.length,
           },
         });
       } catch (err: any) {
-        console.warn(`[WARN] ProjectKnowledgeService: Indexing failed, falling back to dynamic context generation: ${err.message}`);
         onProgress?.({
           stage: 'Project Knowledge Engine',
           status: 'failed',
@@ -176,89 +100,103 @@ export class TaskExecutionService {
       },
     });
 
-    // 2. Build context
-    const cbStartTime = Date.now();
-    onProgress?.({ stage: 'Context Builder', status: 'started' });
-    let contextContent = '';
-    try {
-      const contextResult = await this.contextBuilder.buildContext(
-        task.description,
-        task.entryFile,
-        task.workspaceFiles
-      );
-      contextContent = contextResult.codeContent;
+    const subTaskResults: SubTaskResult[] = [];
+    const maxRetryCount = this.config.get().maxRetryCount;
+    let totalRetryCount = 0;
+    const retryHistory: string[] = [];
+
+    let overallStatus: 'SUCCESS' | 'FAILED' | 'ERROR' = 'SUCCESS';
+    let lastOutput = '';
+    let lastError = '';
+    const allModifiedFiles = new Set<string>();
+    const allFilesSkipped = new Set<string>();
+    let lastParserWarnings: string[] = [];
+    let lastValidationErrors: string[] = [];
+    let lastValidationWarnings: string[] = [];
+    let lastParserConfidence = 1.0;
+    let lastVerificationLogs = '';
+    let lastBuildPassed = false;
+    let lastTestsPassed = false;
+    let lastVerificationDuration = 0;
+
+    const totalSubTasks = plan.subTasks.length;
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // SEQUENTIAL MULTI-SUB-TASK ORCHESTRATION LOOP
+    // ─────────────────────────────────────────────────────────────────────────
+    for (let stIndex = 0; stIndex < totalSubTasks; stIndex++) {
+      const st = plan.subTasks[stIndex];
+      const stNum = `[${stIndex + 1}/${totalSubTasks}]`;
+      st.status = 'RUNNING';
+
       onProgress?.({
-        stage: 'Context Builder',
-        status: 'completed',
-        durationMs: Date.now() - cbStartTime,
+        stage: 'Sub-task Orchestrator',
+        status: 'started',
         metrics: {
-          contextSizeChars: contextContent.length,
-          contextSizeKB: (contextContent.length / 1024).toFixed(2),
-          selectedFilesCount: contextResult.extractedSymbols ? contextResult.extractedSymbols.length : 1,
+          label: stNum,
+          subTaskId: st.id,
+          targetFile: st.targetFile,
+          objective: st.objective,
+          selectionReason: st.selectionReason,
+          selectionBasis: st.selectionBasis,
         },
       });
-    } catch (err: any) {
-      onProgress?.({
-        stage: 'Context Builder',
-        status: 'failed',
-        durationMs: Date.now() - cbStartTime,
-        error: `Context generation failure: ${err.message || err}`,
-        exceptionStack: err.stack,
-        recoveryAction: 'Ensure entry file exists and contains valid TypeScript syntax.',
-      });
-      return {
-        taskId: task.id,
-        status: 'ERROR',
-        output: '',
-        error: `Context generation failure: ${err.message || err}`,
-        durationMs: Date.now() - startTime,
-        modifiedFiles: [],
-        filesSkipped: [],
-        parserWarnings: [],
-        patchStatus: 'none',
-        validationStatus: 'skipped',
-        validationErrors: [`Context compilation error: ${err.message || err}`],
-        validationWarnings: [],
-        parserConfidence: 0.0,
-        verificationStatus: 'skipped',
-        verificationSteps: [],
-        verificationLogs: '',
-        buildPassed: false,
-        testsPassed: false,
-        verificationDuration: 0,
-        retryCount: 0,
-        retryHistory: [],
-        finalVerificationResult: 'skipped',
-        finalProviderResponse: '',
-      };
-    }
 
-    // 3. Construct ExecutionSpecification & Prompt Contract
-    const allowedTargetFiles = task.plan?.subTasks.map(st => st.targetFile) || [task.entryFile];
-    const forbiddenFiles = [
-      'package.json', 'package-lock.json', 'tsconfig.json',
-      'Cargo.toml', 'go.mod', 'pom.xml', 'build.gradle',
-      'Dockerfile', 'docker-compose.yml', '.gitignore'
-    ];
+      const stStartTime = Date.now();
+      let stRetryCount = 0;
+      let stSuccess = false;
+      let stError = '';
+      let stOutput = '';
+      let stConfidence = 0;
+      let stBuildPassed = false;
+      let stTestsPassed = false;
+      let stGitHash: string | undefined = undefined;
 
-    let currentPrompt = `====================================================
+      // 2. Build context slice for this specific target file
+      let contextContent = '';
+      try {
+        const query = totalSubTasks === 1 ? task.description : st.objective;
+        const cbRes = await this.contextBuilder.buildContext(
+          query,
+          st.targetFile,
+          task.workspaceFiles
+        );
+        contextContent = cbRes.codeContent;
+      } catch (err: any) {
+
+        onProgress?.({
+          stage: 'Context Builder',
+          status: 'failed',
+          error: `Context generation failure: ${err.message || err}`,
+        });
+        return this.makeErrorResult(task.id, `Context generation failure: ${err.message || err}`, startTime);
+      }
+
+      // Build execution specification contract for this sub-task
+      const forbiddenFiles = [
+        'package.json', 'package-lock.json', 'tsconfig.json',
+        'jest.config.js', 'jest.config.ts', 'Cargo.toml', 'go.mod',
+        'pom.xml', 'build.gradle', 'Dockerfile', 'docker-compose.yml', '.gitignore',
+      ];
+
+      let currentPrompt = `====================================================
 EXECUTION SPECIFICATION CONTRACT
 ====================================================
 
-1. OBJECTIVE:
-"${task.description}"
+1. SUB-TASK OBJECTIVE ${stNum}:
+"${st.objective}"
 
-2. ALLOWED TARGET FILES:
-- ${allowedTargetFiles.join('\n- ')}
+2. ALLOWED TARGET FILE (STRICT — DO NOT MODIFY ANY OTHER FILE):
+- ${st.targetFile}
 
 3. FORBIDDEN PROTECTED FILES (NEVER MODIFY):
 - ${forbiddenFiles.join('\n- ')}
 
 4. EXPECTED OUTPUT FORMAT CONTRACT:
 You are a non-interactive source code generator.
-Output ONLY pure source code blocks matching the allowed target files.
+Output ONLY pure source code blocks matching the allowed target file (${st.targetFile}).
 Every code block MUST start with the explicit file header comment:
-// FILE: relative/path/to/file.ext
+// FILE: ${st.targetFile}
 
 FORBIDDEN OUTPUT TYPES:
 - NO conversational text or explanations outside code blocks
@@ -268,309 +206,342 @@ FORBIDDEN OUTPUT TYPES:
 
 5. CODEBASE CONTEXT:
 ${contextContent}`;
-    const maxRetryCount = this.config.get().maxRetryCount;
-    let retryCount = 0;
-    const retryHistory: string[] = [];
 
-    // Tracks final/current execution state
-    let lastOutput = '';
-    let lastError = '';
-    let lastModifiedFiles: string[] = [];
-    let lastFilesSkipped: string[] = [];
-    let lastParserWarnings: string[] = [];
-    let lastPatchStatus: 'applied' | 'failed' | 'skipped' | 'none' = 'none';
-    let lastValidationStatus: 'passed' | 'failed' | 'skipped' = 'skipped';
-    let lastValidationErrors: string[] = [];
-    let lastValidationWarnings: string[] = [];
-    let lastParserConfidence = 0.0;
+      // ── Sub-task retry loop ──────────────────────────────────────────────
+      while (stRetryCount <= maxRetryCount) {
+        if (stRetryCount > 0) {
+          totalRetryCount++;
+          onProgress?.({
+            stage: 'Autonomous Retry Engine',
+            status: 'started',
+            metrics: { attempt: stRetryCount, maxRetries: maxRetryCount, prompt: currentPrompt },
+          });
+        }
 
-    let verificationStatus: 'passed' | 'failed' | 'skipped' = 'skipped';
-    let buildPassed = false;
-    let testsPassed = false;
-    let verificationSteps: string[] = [];
-    let verificationLogs = '';
-    let verificationDuration = 0;
-
-    while (true) {
-      lastError = '';
-      if (retryCount > 0) {
+        // Provider Call
+        const provStartTime = Date.now();
         onProgress?.({
-          stage: 'Autonomous Retry Engine',
+          stage: 'AI Provider Execution',
           status: 'started',
-          metrics: { attempt: retryCount, maxRetries: maxRetryCount, prompt: currentPrompt },
+          metrics: { providerName: this.provider.providerName(), targetFile: st.targetFile },
         });
-      }
 
-      // 4. Invoke provider
-      const provStartTime = Date.now();
-      onProgress?.({
-        stage: 'AI Provider Execution',
-        status: 'started',
-        metrics: { providerName: this.provider.providerName() },
-      });
-      let output = '';
-      let errorMsg = '';
-      let success = false;
-      let exitCode: number | null = null;
-
-      let providerResult: ProviderResult | undefined;
-      try {
-        if (typeof this.provider.stream === 'function') {
-          providerResult = await this.provider.stream(currentPrompt, (chunk) => {
-            onProgress?.({
-              stage: 'Provider Stream',
-              status: 'completed',
-              metrics: { chunk },
+        let providerResult: ProviderResult | undefined;
+        try {
+          if (typeof this.provider.stream === 'function') {
+            providerResult = await this.provider.stream(currentPrompt, (chunk) => {
+              onProgress?.({ stage: 'Provider Stream', status: 'completed', metrics: { chunk } });
             });
-          });
-        }
-        if (!providerResult) {
-          providerResult = await this.provider.execute(currentPrompt);
-        }
-        output = providerResult.output;
-        errorMsg = providerResult.error || '';
-        success = providerResult.success;
-        exitCode = providerResult.exitCode;
-      } catch (err: any) {
-        lastError = `Provider execution failure: ${err.message || err}`;
-        onProgress?.({
-          stage: 'AI Provider Execution',
-          status: 'failed',
-          durationMs: Date.now() - provStartTime,
-          error: lastError,
-          exceptionStack: err.stack,
-          recoveryAction: 'Check AI provider availability or CLI executable.',
-        });
-        break;
-      }
-
-      lastOutput = output;
-
-      if (!success) {
-        lastError = errorMsg || `Provider process exited with status code ${exitCode}`;
-        onProgress?.({
-          stage: 'AI Provider Execution',
-          status: 'failed',
-          durationMs: Date.now() - provStartTime,
-          error: lastError,
-          recoveryAction: 'Verify AI provider parameters and environment variables.',
-        });
-        
-        // If provider fails during retry, we decide if we can retry again
-        if (retryCount < maxRetryCount) {
-          retryHistory.push(`Attempt ${retryCount + 1} failed: Provider error: ${lastError}`);
-          retryCount++;
-          currentPrompt = this.retryEngine.buildRetryPrompt(task, lastOutput, lastError, retryCount);
-          continue;
-        }
-        break;
-      } else {
-        onProgress?.({
-          stage: 'AI Provider Execution',
-          status: 'completed',
-          durationMs: Date.now() - provStartTime,
-          metrics: { providerName: this.provider.providerName(), responseLength: output.length, exitCode },
-        });
-      }
-
-      // 5. Parse Response & Extract Code Blocks
-      const valStartTime = Date.now();
-      onProgress?.({ stage: 'Response Validation & Parser', status: 'started' });
-      const parsed = this.parser.parse(output, task.workspaceFiles, task.entryFile);
-      lastParserWarnings = parsed.warnings;
-
-      // 6. Response Validation Pipeline
-      const validation = this.validator.validate(output, parsed, task.workspaceFiles);
-      lastValidationStatus = validation.isValid ? 'passed' : 'failed';
-      lastValidationErrors = validation.errors;
-      lastValidationWarnings = validation.warnings;
-      lastParserConfidence = validation.confidence;
-
-      if (!validation.isValid) {
-        lastError = `Response validation failed: ${validation.errors.join('; ')}`;
-        lastPatchStatus = 'skipped';
-        onProgress?.({
-          stage: 'Response Validation & Parser',
-          status: 'failed',
-          durationMs: Date.now() - valStartTime,
-          error: lastError,
-          metrics: { errors: lastValidationErrors, confidence: lastParserConfidence, warnings: lastValidationWarnings },
-          recoveryAction: 'Autonomous Retry Engine will feed validation errors back to provider for self-repair.',
-        });
-
-        if (retryCount < maxRetryCount) {
-          retryHistory.push(`Attempt ${retryCount + 1} failed: ${lastError}`);
-          retryCount++;
-          currentPrompt = this.retryEngine.buildRetryPrompt(task, lastOutput, lastError, retryCount);
-          continue;
-        }
-        break;
-      } else {
-        onProgress?.({
-          stage: 'Response Validation & Parser',
-          status: 'completed',
-          durationMs: Date.now() - valStartTime,
-          metrics: { confidence: lastParserConfidence, codeBlocksCount: parsed.blocks.length },
-        });
-      }
-
-      // 7. Generate patches
-      const patchStartTime = Date.now();
-      onProgress?.({ stage: 'Patch Generator & Workspace Updater', status: 'started' });
-      const patchResult = this.patchGenerator.generatePatches(parsed.blocks, task.workspaceFiles);
-      if (!patchResult.success) {
-        lastError = `Patch generation failed: ${patchResult.error}`;
-        lastPatchStatus = 'failed';
-        onProgress?.({
-          stage: 'Patch Generator & Workspace Updater',
-          status: 'failed',
-          durationMs: Date.now() - patchStartTime,
-          error: lastError,
-          recoveryAction: 'The generated code blocks target file paths outside allowed workspace files.',
-        });
-
-        if (retryCount < maxRetryCount) {
-          retryHistory.push(`Attempt ${retryCount + 1} failed: ${lastError}`);
-          retryCount++;
-          currentPrompt = this.retryEngine.buildRetryPrompt(task, lastOutput, lastError, retryCount);
-          continue;
-        }
-        break;
-      }
-
-      // 8. Update workspace
-      const updateResult = this.updater.update(patchResult.patches);
-      lastModifiedFiles = updateResult.modifiedFiles;
-      lastFilesSkipped = updateResult.filesSkipped;
-
-      if (!updateResult.success) {
-        lastError = `Workspace update failed: ${updateResult.error}`;
-        lastPatchStatus = 'failed';
-        onProgress?.({
-          stage: 'Patch Generator & Workspace Updater',
-          status: 'failed',
-          durationMs: Date.now() - patchStartTime,
-          error: lastError,
-          recoveryAction: 'Failed to write patch updates to disk filesystem.',
-        });
-
-        if (retryCount < maxRetryCount) {
-          retryHistory.push(`Attempt ${retryCount + 1} failed: ${lastError}`);
-          retryCount++;
-          currentPrompt = this.retryEngine.buildRetryPrompt(task, lastOutput, lastError, retryCount);
-          continue;
-        }
-        break;
-      }
-
-      lastPatchStatus = 'applied';
-      onProgress?.({
-        stage: 'Patch Generator & Workspace Updater',
-        status: 'completed',
-        durationMs: Date.now() - patchStartTime,
-        metrics: { modifiedFiles: lastModifiedFiles, filesSkipped: lastFilesSkipped },
-      });
-
-      // 9. Run Verification Runner
-      const verificationStartTime = Date.now();
-      onProgress?.({ stage: 'Verification Runner', status: 'started' });
-      const verificationCmds = task.verificationCommands && task.verificationCommands.length > 0
-        ? task.verificationCommands
-        : this.config.get().verificationCommands;
-      const targetCwd = task.workspaceRoot || process.cwd();
-
-      if (verificationCmds && verificationCmds.length > 0) {
-        const vResult = await this.verificationRunner.run(
-          verificationCmds,
-          (chunk, type) => {
-            onProgress?.({ stage: 'Verification Stream', status: 'completed', metrics: { chunk, streamType: type } });
-          },
-          targetCwd
-        );
-        verificationStatus = vResult.success ? 'passed' : 'failed';
-        buildPassed = vResult.buildPassed;
-        testsPassed = vResult.testsPassed;
-        verificationSteps = vResult.steps.map(s => `${s.command}: ${s.success ? 'PASSED' : 'FAILED'}`);
-        verificationLogs = vResult.logs;
-        verificationDuration = Date.now() - verificationStartTime;
-
-        if (vResult.success) {
-          onProgress?.({
-            stage: 'Verification Runner',
-            status: 'completed',
-            durationMs: verificationDuration,
-            metrics: { buildPassed, testsPassed, steps: verificationSteps },
-          });
+          }
+          if (!providerResult) {
+            providerResult = await this.provider.execute(currentPrompt);
+          }
+        } catch (err: any) {
+          stError = `Provider crashed: ${err.message}`;
+          onProgress?.({ stage: 'AI Provider Execution', status: 'failed', error: stError });
           break;
-        } else {
-          lastError = `Verification failed: One or more verification steps did not pass.`;
-          onProgress?.({
-            stage: 'Verification Runner',
-            status: 'failed',
-            durationMs: verificationDuration,
-            error: lastError,
-            metrics: { buildPassed, testsPassed, verificationSteps, verificationLogs },
-            recoveryAction: 'Verification commands (build/test) failed. Passing test output back to Retry Engine for self-repair.',
-          });
+        }
 
-          if (retryCount < maxRetryCount) {
-            retryHistory.push(`Attempt ${retryCount + 1} failed: Verification failed.`);
-            retryCount++;
-            currentPrompt = this.retryEngine.buildRetryPrompt(task, lastOutput, verificationLogs, retryCount);
+        stOutput = providerResult?.output || '';
+        lastOutput = stOutput;
+
+        if (!providerResult || !providerResult.success) {
+          stError = providerResult?.error || `Provider process exited with code ${providerResult?.exitCode ?? -1}`;
+          onProgress?.({ stage: 'AI Provider Execution', status: 'failed', error: stError });
+
+          if (stRetryCount < maxRetryCount) {
+            stRetryCount++;
+            retryHistory.push(`Sub-task ${stNum} attempt ${stRetryCount} failed: ${stError}`);
+            currentPrompt = this.retryEngine.buildRetryPrompt(task, stOutput, stError, stRetryCount);
             continue;
           }
-
-          // Verification failed after max retries: trigger Git checkpoint rollback
-          await this.gitManager.rollbackToCheckpoint(task.id);
-          onProgress?.({
-            stage: 'Git Integration',
-            status: 'failed',
-            error: `Sub-task execution failed verification after ${maxRetryCount} retries. Rolled back Git checkpoint to preserve workspace integrity.`,
-            recoveryAction: 'Rolled back workspace changes to last clean Git checkpoint.',
-          });
           break;
         }
-      } else {
-        verificationStatus = 'skipped';
-        buildPassed = true;
-        testsPassed = true;
+
+        onProgress?.({
+          stage: 'AI Provider Execution',
+          status: 'completed',
+          durationMs: Date.now() - provStartTime,
+          metrics: { providerName: this.provider.providerName(), responseLength: stOutput.length },
+        });
+
+        // Response Parser
+        const parsed = this.parser.parse(stOutput, [st.targetFile], st.targetFile);
+        lastParserWarnings = parsed.warnings;
+
+        // Response Validator
+        const valRes = this.validator.validate(stOutput, parsed, [st.targetFile]);
+        lastValidationErrors = valRes.errors;
+        lastValidationWarnings = valRes.warnings;
+        stConfidence = valRes.confidence;
+        lastParserConfidence = valRes.confidence;
+
+        if (!valRes.isValid) {
+          stError = `Response validation failed: ${valRes.errors.join('; ')}`;
+          onProgress?.({ stage: 'Response Validation & Parser', status: 'failed', error: stError });
+
+          if (stRetryCount < maxRetryCount) {
+            stRetryCount++;
+            retryHistory.push(`Sub-task ${stNum} attempt ${stRetryCount} failed: ${stError}`);
+            currentPrompt = this.retryEngine.buildRetryPrompt(task, stOutput, stError, stRetryCount);
+            continue;
+          }
+          break;
+        }
+
+        onProgress?.({
+          stage: 'Response Validation & Parser',
+          status: 'completed',
+          metrics: { confidence: valRes.confidence, codeBlocksCount: parsed.blocks.length },
+        });
+
+        // Patch Generator — STRICTLY target only this subtask's target file
+        const patchRes = this.patchGenerator.generatePatches(parsed.blocks, [st.targetFile]);
+        if (!patchRes.success) {
+          stError = `Patch generation failed: ${patchRes.error}`;
+          onProgress?.({ stage: 'Patch Generator & Workspace Updater', status: 'failed', error: stError });
+
+          if (stRetryCount < maxRetryCount) {
+            stRetryCount++;
+            retryHistory.push(`Sub-task ${stNum} attempt ${stRetryCount} failed: ${stError}`);
+            currentPrompt = this.retryEngine.buildRetryPrompt(task, stOutput, stError, stRetryCount);
+            continue;
+          }
+          break;
+        }
+
+        // Workspace Updater
+        const updateRes = this.updater.update(patchRes.patches);
+        updateRes.modifiedFiles.forEach((f) => allModifiedFiles.add(f));
+        updateRes.filesSkipped.forEach((f) => allFilesSkipped.add(f));
+
+        if (!updateRes.success) {
+          stError = `Workspace update failed: ${updateRes.error}`;
+          onProgress?.({ stage: 'Patch Generator & Workspace Updater', status: 'failed', error: stError });
+
+          if (stRetryCount < maxRetryCount) {
+            stRetryCount++;
+            retryHistory.push(`Sub-task ${stNum} attempt ${stRetryCount} failed: ${stError}`);
+            currentPrompt = this.retryEngine.buildRetryPrompt(task, stOutput, stError, stRetryCount);
+            continue;
+          }
+          break;
+        }
+
+        onProgress?.({
+          stage: 'Patch Generator & Workspace Updater',
+          status: 'completed',
+          metrics: { modifiedFiles: updateRes.modifiedFiles },
+        });
+
+        // Verification Runner
+        const vStartTime = Date.now();
+        onProgress?.({ stage: 'Verification Runner', status: 'started' });
+        const configCmds = this.config.get().verificationCommands;
+        const commandsToRun = (task.verificationCommands && task.verificationCommands.length > 0)
+          ? task.verificationCommands
+          : (configCmds && configCmds.length > 0 ? configCmds : ['npm run build', 'npm test']);
+
+        const vRes = await this.verificationRunner.run(
+          commandsToRun,
+          (chunk: string, _type: 'stdout' | 'stderr') => {
+            onProgress?.({ stage: 'Verification Stream', status: 'completed', metrics: { chunk } });
+          },
+          wsRoot
+        );
+
+        lastVerificationDuration = Date.now() - vStartTime;
+        lastVerificationLogs = vRes.logs;
+        stBuildPassed = vRes.buildPassed;
+        stTestsPassed = vRes.testsPassed;
+        lastBuildPassed = vRes.buildPassed;
+        lastTestsPassed = vRes.testsPassed;
+
+        if (!vRes.success) {
+          stError = `Verification failed: ${vRes.logs || 'Build/test error'}`;
+          onProgress?.({ stage: 'Verification Runner', status: 'failed', error: stError });
+
+          if (stRetryCount < maxRetryCount) {
+            stRetryCount++;
+            retryHistory.push(`Attempt ${stRetryCount} failed: ${stError}`);
+            currentPrompt = this.retryEngine.buildRetryPrompt(task, stOutput, stError, stRetryCount);
+            continue;
+          }
+          break;
+        }
+
         onProgress?.({
           stage: 'Verification Runner',
           status: 'completed',
-          durationMs: Date.now() - verificationStartTime,
-          metrics: { buildPassed: true, testsPassed: true, verificationStatus: 'skipped' },
+          durationMs: lastVerificationDuration,
+          metrics: { buildPassed: vRes.buildPassed, testsPassed: vRes.testsPassed },
         });
-        break;
+
+        // Git Checkpoint (commit on success)
+        try {
+          const cpRes = await this.gitManager.commit(
+            [st.targetFile],
+            `feat(se-os): task-${task.id}-subtask-${stIndex + 1} (${st.targetFile})`,
+            wsRoot
+          );
+          if (cpRes.success) {
+            stGitHash = cpRes.commitHash;
+            onProgress?.({
+              stage: 'Git Integration',
+              status: 'completed',
+              metrics: { commitHash: stGitHash, targetFile: st.targetFile },
+            });
+          }
+        } catch (gitErr: any) {
+          console.warn(`[WARN] Git checkpoint failed for sub-task ${stNum}: ${gitErr.message}`);
+        }
+
+        stSuccess = true;
+        break; // Exit retry loop for this sub-task
+      }
+
+      const stEndTime = Date.now();
+      const stDuration = stEndTime - stStartTime;
+
+      if (stSuccess) {
+        st.status = 'SUCCESS';
+        subTaskResults.push({
+          subTaskId: st.id,
+          targetFile: st.targetFile,
+          objective: st.objective,
+          status: 'SUCCESS',
+          startTime: stStartTime,
+          endTime: stEndTime,
+          durationMs: stDuration,
+          retryCount: stRetryCount,
+          providerResponseLength: stOutput.length,
+          parserConfidence: stConfidence,
+          verificationPassed: true,
+          gitCommitHash: stGitHash,
+        });
+
+        onProgress?.({
+          stage: 'Sub-task Orchestrator',
+          status: 'completed',
+          durationMs: stDuration,
+          metrics: { label: stNum, targetFile: st.targetFile, commitHash: stGitHash },
+        });
+      } else {
+        st.status = 'FAILED';
+        overallStatus = 'FAILED';
+        lastError = stError;
+
+        subTaskResults.push({
+          subTaskId: st.id,
+          targetFile: st.targetFile,
+          objective: st.objective,
+          status: 'FAILED',
+          startTime: stStartTime,
+          endTime: stEndTime,
+          durationMs: stDuration,
+          retryCount: stRetryCount,
+          providerResponseLength: stOutput.length,
+          parserConfidence: stConfidence,
+          verificationPassed: false,
+          error: stError,
+        });
+
+        // Roll back ONLY this failed sub-task's uncommitted workspace changes
+        try {
+          await this.gitManager.rollback([st.targetFile], wsRoot);
+          onProgress?.({
+            stage: 'Git Integration',
+            status: 'failed',
+            error: `Sub-task ${stNum} failed verification after ${stRetryCount} retries. Rolled back workspace changes.`,
+            recoveryAction: 'Rolled back workspace changes to last clean Git checkpoint.',
+          });
+        } catch (rbErr: any) {
+          console.warn(`[WARN] Git rollback failed for sub-task ${stNum}: ${rbErr.message}`);
+        }
+
+        onProgress?.({
+          stage: 'Sub-task Orchestrator',
+          status: 'failed',
+          durationMs: stDuration,
+          error: stError,
+          metrics: { label: stNum, targetFile: st.targetFile },
+        });
+
+        // Mark remaining planned sub-tasks as SKIPPED
+        for (let rem = stIndex + 1; rem < totalSubTasks; rem++) {
+          plan.subTasks[rem].status = 'SKIPPED';
+        }
+
+        break; // Halt orchestration loop on first sub-task failure
       }
     }
 
-    const durationMs = Date.now() - startTime;
-    const isSuccess = lastError === '' && (verificationStatus === 'passed' || verificationStatus === 'skipped');
+    const completedCount = subTaskResults.filter((r) => r.status === 'SUCCESS').length;
+    const failedCount = subTaskResults.filter((r) => r.status === 'FAILED').length;
+    const skippedCount = totalSubTasks - completedCount - failedCount;
 
     return {
       taskId: task.id,
-      status: isSuccess ? 'SUCCESS' : 'FAILED',
+      status: overallStatus,
       output: lastOutput,
-      error: lastError || undefined,
-      durationMs,
-      modifiedFiles: lastModifiedFiles,
-      filesSkipped: lastFilesSkipped,
+      error: overallStatus !== 'SUCCESS' ? lastError : undefined,
+      durationMs: Date.now() - startTime,
+      modifiedFiles: Array.from(allModifiedFiles),
+      filesSkipped: Array.from(allFilesSkipped),
       parserWarnings: lastParserWarnings,
-      patchStatus: lastPatchStatus,
-      validationStatus: lastValidationStatus,
+      patchStatus: overallStatus === 'SUCCESS' ? 'applied' : 'failed',
+      validationStatus: overallStatus === 'SUCCESS' ? 'passed' : 'failed',
       validationErrors: lastValidationErrors,
       validationWarnings: lastValidationWarnings,
       parserConfidence: lastParserConfidence,
-      verificationStatus,
-      verificationSteps,
-      verificationLogs,
-      buildPassed,
-      testsPassed,
-      verificationDuration,
-      retryCount,
+      verificationStatus: overallStatus === 'SUCCESS' ? 'passed' : 'failed',
+      verificationSteps: [],
+      verificationLogs: lastVerificationLogs,
+      buildPassed: lastBuildPassed,
+      testsPassed: lastTestsPassed,
+      verificationDuration: lastVerificationDuration,
+      retryCount: totalRetryCount,
       retryHistory,
-      finalVerificationResult: verificationStatus,
+      finalVerificationResult: overallStatus === 'SUCCESS' ? 'passed' : 'failed',
       finalProviderResponse: lastOutput,
+      subTaskResults,
+      totalSubTasks,
+      completedSubTasks: completedCount,
+      failedSubTasks: failedCount,
+      skippedSubTasks: skippedCount,
+    };
+  }
+
+  private makeErrorResult(taskId: string, errorMsg: string, startTime: number): ExecutionResult {
+    return {
+      taskId,
+      status: 'ERROR',
+      output: '',
+      error: errorMsg,
+      durationMs: Date.now() - startTime,
+      modifiedFiles: [],
+      filesSkipped: [],
+      parserWarnings: [],
+      patchStatus: 'none',
+      validationStatus: 'skipped',
+      validationErrors: [errorMsg],
+      validationWarnings: [],
+      parserConfidence: 0.0,
+      verificationStatus: 'skipped',
+      verificationSteps: [],
+      verificationLogs: '',
+      buildPassed: false,
+      testsPassed: false,
+      verificationDuration: 0,
+      retryCount: 0,
+      retryHistory: [],
+      finalVerificationResult: 'skipped',
+      finalProviderResponse: '',
+      subTaskResults: [],
+      totalSubTasks: 0,
+      completedSubTasks: 0,
+      failedSubTasks: 0,
+      skippedSubTasks: 0,
     };
   }
 }
