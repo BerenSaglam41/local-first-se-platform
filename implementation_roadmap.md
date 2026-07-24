@@ -24,10 +24,10 @@
 [Milestone 4: Claude CLI Reference Runtime Plugin] ──> COMPLETED
                     │
                     ▼
-[Milestone 5: Context Compiler & Git Worktree Engine]
+[Milestone 5: Mission Engine & Task Orchestration] ──> COMPLETED
                     │
                     ▼
-[Milestone 6: Scheduler & Department State Machine]
+[Milestone 6: Multi-Pane Tmux TUI & End-to-End Release]
 ```
 
 ---
@@ -108,6 +108,21 @@
 - **Acceptance Criteria**: Independent sessions per worker, task execution converting Claude output to Kernel-neutral `ExecutionResult`, 0 Claude imports in Kernel, CLI plugin management commands.
 
 ---
+
+### Milestone 5: Mission Engine & Task Orchestration (COMPLETED)
+- **Objective**: Implement Mission domain models, DAG Task Graph resolution, topological execution batching, capability-based task dispatch, state transitions, and CLI mission commands.
+- **Deliverables**:
+  - `src/v2/domain/missions/mission_models.ts`
+  - `src/v2/application/missions/task_graph.ts`
+  - `src/v2/application/missions/mission_planner.ts`
+  - `src/v2/application/missions/mission_engine.ts`
+  - `tests/v2/milestone5_mission_engine.test.ts`
+- **Dependencies**: Milestone 4
+- **Complexity**: High
+- **Acceptance Criteria**: DAG topological sorting, cycle detection, capability-based worker matching, mission lifecycle state transitions (`CREATED` → `RUNNING` → `PAUSED` → `COMPLETED`), SQLite event emission.
+
+---
+
 
 
 

@@ -2,7 +2,7 @@ import { Kernel } from '../kernel/kernel';
 
 export class SeOsCli {
   private kernel = new Kernel();
-  private attachedPlugins = new Map<string, string>(); // workerId -> pluginId
+  private attachedPlugins = new Map<string, string>();
 
   async boot(configPath: string = './company.json'): Promise<void> {
     console.log(`[SE-OS Kernel v2.0] Booting local workforce processes from ${configPath}...`);
@@ -54,7 +54,7 @@ export class SeOsCli {
   }
 
   async pluginsList(): Promise<void> {
-    const manager = (this.kernel as any).pluginManager;
+    const manager = this.kernel.getPluginManager();
     const plugins = manager ? manager.listPlugins() : [];
     console.log(`LOADED RUNTIME PLUGINS (${plugins.length}):`);
     for (const p of plugins) {
@@ -63,7 +63,7 @@ export class SeOsCli {
   }
 
   async pluginsHealth(): Promise<void> {
-    const manager = (this.kernel as any).pluginManager;
+    const manager = this.kernel.getPluginManager();
     const health = manager ? await manager.healthCheckAll() : {};
     console.log(`RUNTIME PLUGIN HEALTH:`);
     console.log(JSON.stringify(health, null, 2));
@@ -77,6 +77,64 @@ export class SeOsCli {
   async workerDetach(workerId: string): Promise<void> {
     this.attachedPlugins.delete(workerId);
     console.log(`✔ Detached plugin from worker '${workerId}'`);
+  }
+
+  async missionCreate(title: string, goal: string): Promise<void> {
+    const m = this.kernel.getMissionEngine().createMission(title, goal);
+    console.log(`✔ Created Mission '${m.id}': ${m.title}`);
+  }
+
+  async missionStart(id: string): Promise<void> {
+    const ok = this.kernel.getMissionEngine().startMission(id);
+    console.log(ok ? `✔ Mission ${id} started.` : `✖ Failed to start mission ${id}`);
+  }
+
+  async missionPause(id: string): Promise<void> {
+    const ok = this.kernel.getMissionEngine().pauseMission(id);
+    console.log(ok ? `✔ Mission ${id} paused.` : `✖ Failed to pause mission ${id}`);
+  }
+
+  async missionResume(id: string): Promise<void> {
+    const ok = this.kernel.getMissionEngine().resumeMission(id);
+    console.log(ok ? `✔ Mission ${id} resumed.` : `✖ Failed to resume mission ${id}`);
+  }
+
+  async missionStatus(id?: string): Promise<void> {
+    if (id) {
+      const m = this.kernel.getMissionEngine().getMission(id);
+      console.log(m ? JSON.stringify(m, null, 2) : `✖ Mission ${id} not found`);
+    } else {
+      const list = this.kernel.getMissionEngine().listMissions();
+      console.log(`ALL MISSIONS (${list.length}):`);
+      for (const m of list) {
+        console.log(`  - [${m.id}] ${m.title} (Status: ${m.status})`);
+      }
+    }
+  }
+
+  async missionGraph(id: string): Promise<void> {
+    const graph = this.kernel.getMissionEngine().getTaskGraph(id);
+    if (!graph) {
+      console.log(`✖ Mission graph for ${id} not found.`);
+      return;
+    }
+    console.log(`TASK GRAPH FOR MISSION ${id}:`);
+    for (const t of graph.getAllTasks()) {
+      console.log(`  Task ${t.id} [${t.status}] Priority:${t.priority} -> DependsOn: [${t.dependsOnTaskIds.join(', ')}]`);
+    }
+  }
+
+  async tasks(): Promise<void> {
+    const list = this.kernel.getMissionEngine().listMissions();
+    console.log(`TASK ENGINE BOARD:`);
+    for (const m of list) {
+      const graph = this.kernel.getMissionEngine().getTaskGraph(m.id);
+      if (graph) {
+        for (const t of graph.getAllTasks()) {
+          console.log(`  - [${t.id}] ${t.title} | Status: ${t.status} | Capabilities: ${t.requiredCapabilities.join(', ')}`);
+        }
+      }
+    }
   }
 
   async workerStart(id: string): Promise<void> {

@@ -12,8 +12,9 @@ import { SchedulerSkeleton } from '../application/scheduler/scheduler_skeleton';
 import { PluginRegistry } from '../application/plugins/plugin_registry';
 import { LocalProcessSupervisor } from '../application/runtime/local_process_supervisor';
 import { TelemetryService } from '../infrastructure/telemetry/telemetry_service';
+import { RuntimePluginManager } from '../application/plugins/runtime_plugin_manager';
+import { MissionEngine } from '../application/missions/mission_engine';
 import * as fs from 'fs';
-import * as path from 'path';
 
 export class Kernel implements IKernel {
   private container = new DIContainer();
@@ -32,8 +33,10 @@ export class Kernel implements IKernel {
     const companyBus = new InMemoryCompanyBus();
     const scheduler = new SchedulerSkeleton();
     const pluginRegistry = new PluginRegistry();
+    const pluginManager = new RuntimePluginManager();
     const supervisor = new LocalProcessSupervisor(eventStore);
     const telemetry = new TelemetryService();
+    const missionEngine = new MissionEngine(eventStore, pluginManager.getCapabilityRegistry());
 
     supervisor.startSupervision();
 
@@ -42,10 +45,11 @@ export class Kernel implements IKernel {
     this.container.registerSingleton<ICompanyBus>('ICompanyBus', companyBus);
     this.container.registerSingleton<IScheduler>('IScheduler', scheduler);
     this.container.registerSingleton<IPluginRegistry>('IPluginRegistry', pluginRegistry);
+    this.container.registerSingleton<RuntimePluginManager>('RuntimePluginManager', pluginManager);
     this.container.registerSingleton<LocalProcessSupervisor>('LocalProcessSupervisor', supervisor);
     this.container.registerSingleton<TelemetryService>('TelemetryService', telemetry);
+    this.container.registerSingleton<MissionEngine>('MissionEngine', missionEngine);
 
-    // Load workforce config if file exists
     if (fs.existsSync(configPath)) {
       try {
         const raw = fs.readFileSync(configPath, 'utf8');
@@ -74,13 +78,9 @@ export class Kernel implements IKernel {
   }
 
   private loadDefaultWorkforce(supervisor: LocalProcessSupervisor): void {
-    const dummyScript = path.join(__dirname, '../application/runtime/dummy_worker.js');
-    const exe = fs.existsSync(dummyScript) ? process.execPath : process.execPath;
-    const args = fs.existsSync(dummyScript) ? [dummyScript] : ['-e', 'setInterval(() => {}, 1000)'];
-
-    supervisor.spawnWorker({ id: 'emp-alice', name: 'Alice', role: 'Lead Architect', department: 'Architecture', executable: exe, args, tmuxPaneIndex: 1 });
-    supervisor.spawnWorker({ id: 'emp-bob', name: 'Bob', role: 'Backend Engineer', department: 'Backend Engineering', executable: exe, args, tmuxPaneIndex: 2 });
-    supervisor.spawnWorker({ id: 'emp-charlie', name: 'Charlie', role: 'QA Engineer', department: 'Quality Assurance', executable: exe, args, tmuxPaneIndex: 3 });
+    supervisor.spawnWorker({ id: 'emp-alice', name: 'Alice', role: 'Lead Architect', department: 'Architecture', executable: process.execPath, args: ['-e', 'setInterval(() => {}, 1000)'], tmuxPaneIndex: 1 });
+    supervisor.spawnWorker({ id: 'emp-bob', name: 'Bob', role: 'Backend Engineer', department: 'Backend Engineering', executable: process.execPath, args: ['-e', 'setInterval(() => {}, 1000)'], tmuxPaneIndex: 2 });
+    supervisor.spawnWorker({ id: 'emp-charlie', name: 'Charlie', role: 'QA Engineer', department: 'Quality Assurance', executable: process.execPath, args: ['-e', 'setInterval(() => {}, 1000)'], tmuxPaneIndex: 3 });
   }
 
   async shutdown(signal?: string): Promise<void> {
@@ -123,6 +123,14 @@ export class Kernel implements IKernel {
 
   getSupervisor(): LocalProcessSupervisor {
     return this.container.resolve<LocalProcessSupervisor>('LocalProcessSupervisor');
+  }
+
+  getPluginManager(): RuntimePluginManager {
+    return this.container.resolve<RuntimePluginManager>('RuntimePluginManager');
+  }
+
+  getMissionEngine(): MissionEngine {
+    return this.container.resolve<MissionEngine>('MissionEngine');
   }
 
   getTelemetry(): TelemetryService {
