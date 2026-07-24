@@ -33,6 +33,8 @@ import { MissionDecomposer } from '../application/missions/mission_decomposer';
 import { TaskAssignmentEngine } from '../application/missions/task_assignment_engine';
 import { DefaultWorkerDispatcher } from '../application/missions/worker_dispatcher';
 import { MissionExecutionOrchestrator } from '../application/missions/mission_execution_orchestrator';
+import { DefaultProjectLifecycleStrategy } from '../application/project/project_lifecycle_strategy';
+import { ProjectLifecycleOrchestrator } from '../application/project/project_lifecycle_orchestrator';
 import * as fs from 'fs';
 
 export class Kernel implements IKernel {
@@ -79,6 +81,8 @@ export class Kernel implements IKernel {
     const workerExecutionEngine = new WorkerExecutionEngine(workspaceEngine, workspaceExecutionService, reasoningCoordinator, eventStore);
     const workerDispatcher = new DefaultWorkerDispatcher(workerExecutionEngine);
     const missionExecutionOrchestrator = new MissionExecutionOrchestrator(workerDispatcher, eventStore);
+    const projectLifecycleStrategy = new DefaultProjectLifecycleStrategy(autonomousPlanner, missionEngine, missionExecutionOrchestrator);
+    const projectLifecycleOrchestrator = new ProjectLifecycleOrchestrator(projectLifecycleStrategy, eventStore);
 
     supervisor.startSupervision();
 
@@ -109,6 +113,8 @@ export class Kernel implements IKernel {
     this.container.registerSingleton<TaskAssignmentEngine>('TaskAssignmentEngine', taskAssignmentEngine);
     this.container.registerSingleton<DefaultWorkerDispatcher>('WorkerDispatcher', workerDispatcher);
     this.container.registerSingleton<MissionExecutionOrchestrator>('MissionExecutionOrchestrator', missionExecutionOrchestrator);
+    this.container.registerSingleton<DefaultProjectLifecycleStrategy>('ProjectLifecycleStrategy', projectLifecycleStrategy);
+    this.container.registerSingleton<ProjectLifecycleOrchestrator>('ProjectLifecycleOrchestrator', projectLifecycleOrchestrator);
 
     if (fs.existsSync(configPath)) {
       try {
@@ -266,6 +272,14 @@ export class Kernel implements IKernel {
 
   getMissionExecutionOrchestrator(): MissionExecutionOrchestrator {
     return this.container.resolve<MissionExecutionOrchestrator>('MissionExecutionOrchestrator');
+  }
+
+  getProjectLifecycleStrategy(): DefaultProjectLifecycleStrategy {
+    return this.container.resolve<DefaultProjectLifecycleStrategy>('ProjectLifecycleStrategy');
+  }
+
+  getProjectLifecycleOrchestrator(): ProjectLifecycleOrchestrator {
+    return this.container.resolve<ProjectLifecycleOrchestrator>('ProjectLifecycleOrchestrator');
   }
 
   getTelemetry(): TelemetryService {

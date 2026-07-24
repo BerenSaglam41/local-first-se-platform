@@ -685,6 +685,41 @@ export class SeOsCli {
     }
   }
 
+  // ─── Project Lifecycle Orchestrator CLI ─────────────────────────────
+
+  async projectRun(goal: string = 'Create a REST API for User Management'): Promise<void> {
+    console.log(`[Starting Autonomous Project Lifecycle for Goal: '${goal}']...`);
+    const result = await this.kernel.getProjectLifecycleOrchestrator().runProject(goal);
+    console.log(`✔ Project Lifecycle Finished (Success: ${result.success} | Status: ${result.state.status})`);
+    console.log(`  - Project ID: ${result.state.projectId}`);
+    console.log(`  - Summary: ${result.summary}`);
+    console.log(`  - Reports Harvested (${Object.keys(result.reports).length}): [${Object.keys(result.reports).join(', ')}]`);
+  }
+
+  async projectStatus(projectId: string): Promise<void> {
+    const state = this.kernel.getProjectLifecycleOrchestrator().getState(projectId);
+    if (!state) {
+      console.log(`✖ No project state found for ID '${projectId}'`);
+      return;
+    }
+    console.log(`PROJECT EXECUTION STATUS ('${projectId}'):`);
+    console.log(JSON.stringify(state, null, 2));
+  }
+
+  async projectReport(projectId: string): Promise<void> {
+    const result = this.kernel.getProjectLifecycleOrchestrator().getResult(projectId);
+    if (!result) {
+      console.log(`✖ No project execution result found for ID '${projectId}'`);
+      return;
+    }
+    console.log(`PROJECT EXECUTION REPORT ('${projectId}'):`);
+    console.log(`  - Goal: ${result.state.goal}`);
+    console.log(`  - Status: ${result.state.status}`);
+    console.log(`  - Summary: ${result.summary}`);
+    console.log(`  - Execution Reports:`);
+    console.log(JSON.stringify(result.reports, null, 2));
+  }
+
   async shutdown(): Promise<void> {
     console.log(`[SE-OS Kernel] Initiating workforce shutdown...`);
     await this.kernel.shutdown();

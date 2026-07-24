@@ -67,6 +67,9 @@
                     │
                     ▼
 [Milestone 19: Mission Execution Orchestrator] ──> COMPLETED
+                    │
+                    ▼
+[Milestone 20: Autonomous Project Lifecycle Orchestrator] ──> COMPLETED
 ```
 
 ---
@@ -356,6 +359,19 @@
 - **Complexity**: High
 - **Pluggable Dispatcher & Layer Isolation**: `MissionExecutionOrchestrator` delegates task execution strictly to `IWorkerDispatcher`. `MissionExecutionOrchestrator` communicates NEVER directly with Runtime Plugins or `WorkerExecutionEngine`. Enforces `maxParallelWorkers` and `maxTaskRetries` execution policy limits.
 - **Acceptance Criteria**: Automatic end-to-end execution of all 6 tasks across 5 DAG batches, topological dependency unlocking, parallel task scheduling, task retries & cancellation, 6 domain events emitted (`MissionExecutionStarted`, `TaskExecutionStarted`, `TaskExecutionCompleted`, `TaskExecutionFailed`, `MissionExecutionCompleted`, `MissionExecutionCancelled`), CLI subcommands (`missionExecute`, `missionExecutionStatus`, `missionCancel`).
+
+### Milestone 20: Autonomous Project Lifecycle Orchestrator (COMPLETED)
+- **Objective**: Implement Autonomous Project Lifecycle Orchestrator (`ProjectLifecycleOrchestrator`, `IProjectLifecycleStrategy`, `DefaultProjectLifecycleStrategy`, `iproject_lifecycle_orchestrator` contracts) unifying all SE-OS engines (`AutonomousPlanner`, `MissionEngine`, `MissionExecutionOrchestrator`) into a single autonomous software engineering workflow.
+- **Deliverables**:
+  - `src/v2/contracts/iproject_lifecycle_strategy.ts`
+  - `src/v2/contracts/iproject_lifecycle_orchestrator.ts`
+  - `src/v2/application/project/project_lifecycle_strategy.ts`
+  - `src/v2/application/project/project_lifecycle_orchestrator.ts`
+  - `tests/v2/milestone20_project_orchestrator.test.ts`
+- **Dependencies**: Milestone 19
+- **Complexity**: High
+- **Pluggable Strategy & Layer Isolation**: `ProjectLifecycleOrchestrator` delegates workflow execution strictly to `IProjectLifecycleStrategy`. `ProjectLifecycleOrchestrator` communicates ONLY with existing engines, NEVER directly with Workers, Runtime Plugins, Workspace, or `ReasoningCoordinator`. Reuses 100% of existing engines with zero code duplication.
+- **Acceptance Criteria**: Single business goal prompt (`"Create a REST API for User Management"`) executed autonomously end-to-end (Autonomous Planning → Mission Decomposition → Task Assignment → Mission Execution → Final Report Compilation), 6 domain events emitted (`ProjectExecutionStarted`, `ProjectPlanningCompleted`, `MissionExecutionStarted`, `MissionExecutionCompleted`, `ProjectExecutionCompleted`, `ProjectExecutionFailed`), CLI subcommands (`projectRun`, `projectStatus`, `projectReport`).
 
 ---
 
