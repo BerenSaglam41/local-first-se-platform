@@ -18,7 +18,7 @@
 [Milestone 2: Local Process Runtime & PTY Engine] ──> COMPLETED
                     │
                     ▼
-[Milestone 3: Process Supervisor & Runtime Plugin SDK]
+[Milestone 3: Runtime Plugin Framework] ──> COMPLETED
                     │
                     ▼
 [Milestone 4: Context Compiler & Git Worktree Engine]
@@ -77,6 +77,23 @@
 - **Acceptance Criteria**: Real OS processes spawn with PIDs, stdin/stdout PTY streaming works, workers restart/kill with SIGKILL, domain events persist to SQLite Event Store, zero AI provider dependency.
 
 ---
+
+### Milestone 3: Runtime Plugin Framework (COMPLETED)
+- **Objective**: Implement AI-agnostic Runtime Plugin Framework supporting dynamic discovery, loading, capability mapping, sandboxing, and version validation.
+- **Deliverables**:
+  - `src/v2/contracts/iplugin_framework.ts`
+  - `src/v2/application/plugins/capability_registry.ts`
+  - `src/v2/application/plugins/plugin_loader.ts`
+  - `src/v2/application/plugins/plugin_sandbox.ts`
+  - `src/v2/application/plugins/runtime_plugin_manager.ts`
+  - `src/v2/application/plugins/dummy_runtime_plugin.ts` (Refactored reference plugin)
+  - `tests/v2/milestone3_plugin_framework.test.ts`
+- **Dependencies**: Milestone 2
+- **Complexity**: High
+- **Acceptance Criteria**: Dynamic registration, capability mapping, sandboxed error trapping, version validation, zero AI provider dependency.
+
+---
+
 
 
 ### Milestone 2: Company Message Bus & Shared Memory Blackboard
