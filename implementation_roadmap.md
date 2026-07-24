@@ -15,7 +15,7 @@
 [Milestone 1: Kernel Domain & Event Store] ──> COMPLETED
                     │
                     ▼
-[Milestone 2: Company Bus & Shared Memory Blackboard]
+[Milestone 2: Local Process Runtime & PTY Engine] ──> COMPLETED
                     │
                     ▼
 [Milestone 3: Process Supervisor & Runtime Plugin SDK]
@@ -62,6 +62,22 @@
 - **Acceptance Criteria**: Kernel boots, ProcessSupervisor spawns/stops/restarts workers, SQLite persists events & ADRs, CLI executes `boot`/`status`/`workers`/`shutdown` cleanly with zero AI provider code.
 
 ---
+
+### Milestone 2: Local Process Runtime & PTY Engine (COMPLETED)
+- **Objective**: Implement real local process runtime using `child_process.spawn()`, PTY engine abstraction, extracted `WorkerRegistry`, `TmuxIntegration` abstraction, extended telemetry, and CLI `ps`/`worker` commands.
+- **Deliverables**:
+  - `src/v2/application/runtime/worker_registry.ts`
+  - `src/v2/infrastructure/pty/pty_engine.ts`
+  - `src/v2/infrastructure/dashboard/tmux_integration.ts`
+  - `src/v2/application/runtime/local_process_supervisor.ts`
+  - `src/v2/application/plugins/dummy_runtime_plugin.ts` & `src/v2/application/runtime/dummy_worker.js`
+  - `tests/v2/milestone2_local_runtime.test.ts`
+- **Dependencies**: Milestone 1
+- **Complexity**: High
+- **Acceptance Criteria**: Real OS processes spawn with PIDs, stdin/stdout PTY streaming works, workers restart/kill with SIGKILL, domain events persist to SQLite Event Store, zero AI provider dependency.
+
+---
+
 
 ### Milestone 2: Company Message Bus & Shared Memory Blackboard
 - **Objective**: Implement typed IPC Company Bus and shared SQLite blackboard.

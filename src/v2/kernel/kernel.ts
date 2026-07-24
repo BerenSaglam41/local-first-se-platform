@@ -10,7 +10,7 @@ import { SqliteSharedMemory } from '../infrastructure/storage/sqlite_shared_memo
 import { InMemoryCompanyBus } from '../application/company-bus/in_memory_company_bus';
 import { SchedulerSkeleton } from '../application/scheduler/scheduler_skeleton';
 import { PluginRegistry } from '../application/plugins/plugin_registry';
-import { ProcessSupervisor } from '../application/runtime/process_supervisor';
+import { LocalProcessSupervisor } from '../application/runtime/local_process_supervisor';
 import { TelemetryService } from '../infrastructure/telemetry/telemetry_service';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -32,7 +32,7 @@ export class Kernel implements IKernel {
     const companyBus = new InMemoryCompanyBus();
     const scheduler = new SchedulerSkeleton();
     const pluginRegistry = new PluginRegistry();
-    const supervisor = new ProcessSupervisor();
+    const supervisor = new LocalProcessSupervisor(eventStore);
     const telemetry = new TelemetryService();
 
     supervisor.startSupervision();
@@ -42,7 +42,7 @@ export class Kernel implements IKernel {
     this.container.registerSingleton<ICompanyBus>('ICompanyBus', companyBus);
     this.container.registerSingleton<IScheduler>('IScheduler', scheduler);
     this.container.registerSingleton<IPluginRegistry>('IPluginRegistry', pluginRegistry);
-    this.container.registerSingleton<ProcessSupervisor>('ProcessSupervisor', supervisor);
+    this.container.registerSingleton<LocalProcessSupervisor>('LocalProcessSupervisor', supervisor);
     this.container.registerSingleton<TelemetryService>('TelemetryService', telemetry);
 
     // Load workforce config if file exists
@@ -57,12 +57,13 @@ export class Kernel implements IKernel {
               name: emp.name,
               role: emp.role,
               department: emp.department || 'Engineering',
-              tmuxPaneIndex: emp.tmuxPaneIndex,
+              executable: process.execPath,
+              args: ['-e', 'setInterval(() => {}, 1000)'],
+              tmuxPaneIndex: emp.tmuxPaneIndex || 1,
             });
           }
         }
       } catch (err) {
-        // Fallback default workforce
         this.loadDefaultWorkforce(supervisor);
       }
     } else {
@@ -72,19 +73,23 @@ export class Kernel implements IKernel {
     this.isBooted = true;
   }
 
-  private loadDefaultWorkforce(supervisor: ProcessSupervisor): void {
-    supervisor.spawnWorker({ id: 'emp-alice', name: 'Alice', role: 'Lead Architect', department: 'Architecture', tmuxPaneIndex: 1 });
-    supervisor.spawnWorker({ id: 'emp-bob', name: 'Bob', role: 'Backend Engineer', department: 'Backend Engineering', tmuxPaneIndex: 2 });
-    supervisor.spawnWorker({ id: 'emp-charlie', name: 'Charlie', role: 'QA Engineer', department: 'Quality Assurance', tmuxPaneIndex: 3 });
+  private loadDefaultWorkforce(supervisor: LocalProcessSupervisor): void {
+    const dummyScript = path.join(__dirname, '../application/runtime/dummy_worker.js');
+    const exe = fs.existsSync(dummyScript) ? process.execPath : process.execPath;
+    const args = fs.existsSync(dummyScript) ? [dummyScript] : ['-e', 'setInterval(() => {}, 1000)'];
+
+    supervisor.spawnWorker({ id: 'emp-alice', name: 'Alice', role: 'Lead Architect', department: 'Architecture', executable: exe, args, tmuxPaneIndex: 1 });
+    supervisor.spawnWorker({ id: 'emp-bob', name: 'Bob', role: 'Backend Engineer', department: 'Backend Engineering', executable: exe, args, tmuxPaneIndex: 2 });
+    supervisor.spawnWorker({ id: 'emp-charlie', name: 'Charlie', role: 'QA Engineer', department: 'Quality Assurance', executable: exe, args, tmuxPaneIndex: 3 });
   }
 
   async shutdown(signal?: string): Promise<void> {
     if (!this.isBooted) return;
 
-    const supervisor = this.container.resolve<ProcessSupervisor>('ProcessSupervisor');
+    const supervisor = this.container.resolve<LocalProcessSupervisor>('LocalProcessSupervisor');
     supervisor.stopSupervision();
-    for (const w of supervisor.listWorkers()) {
-      supervisor.stopWorker(w.id);
+    for (const w of supervisor.getRegistry().list()) {
+      supervisor.stopWorker(w.metadata.id);
     }
 
     const eventStore = this.container.resolve<SqliteEventStore>('IEventStore');
@@ -116,8 +121,8 @@ export class Kernel implements IKernel {
     return this.container.resolve<IEventStore>('IEventStore');
   }
 
-  getSupervisor(): ProcessSupervisor {
-    return this.container.resolve<ProcessSupervisor>('ProcessSupervisor');
+  getSupervisor(): LocalProcessSupervisor {
+    return this.container.resolve<LocalProcessSupervisor>('LocalProcessSupervisor');
   }
 
   getTelemetry(): TelemetryService {

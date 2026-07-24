@@ -31,15 +31,15 @@ describe('SE-OS v2.0 Milestone 1 — Kernel Bootstrap Suite', () => {
 
     expect(kernel.isReady()).toBe(true);
     const supervisor = kernel.getSupervisor();
-    const workers = supervisor.listWorkers();
+    const workers = supervisor.getRegistry().list();
 
     expect(workers.length).toBe(3); // Alice, Bob, Charlie
-    expect(workers[0].name).toBe('Alice');
-    expect(workers[0].role).toBe('Lead Architect');
-    expect(workers[1].name).toBe('Bob');
-    expect(workers[1].role).toBe('Backend Engineer');
-    expect(workers[2].name).toBe('Charlie');
-    expect(workers[2].role).toBe('QA Engineer');
+    expect(workers[0].metadata.name).toBe('Alice');
+    expect(workers[0].metadata.role).toBe('Lead Architect');
+    expect(workers[1].metadata.name).toBe('Bob');
+    expect(workers[1].metadata.role).toBe('Backend Engineer');
+    expect(workers[2].metadata.name).toBe('Charlie');
+    expect(workers[2].metadata.role).toBe('QA Engineer');
   });
 
   it('should spawn, list, stop, and restart workers via ProcessSupervisor', async () => {
@@ -53,17 +53,18 @@ describe('SE-OS v2.0 Milestone 1 — Kernel Bootstrap Suite', () => {
       department: 'Research',
     });
 
-    expect(newWorker.pid).toBeGreaterThan(0);
-    expect(supervisor.listWorkers().length).toBe(4);
+    expect(newWorker.metrics.pid).toBeGreaterThan(0);
+    expect(supervisor.getRegistry().list().length).toBe(4);
 
     const restarted = supervisor.restartWorker('emp-dave');
     expect(restarted).toBeDefined();
-    expect(restarted?.status).toBe('IDLE');
+    expect(restarted?.state).toBe('IDLE');
 
     const stopped = supervisor.stopWorker('emp-dave');
     expect(stopped).toBe(true);
-    expect(supervisor.listWorkers().length).toBe(3);
+    expect(supervisor.getRegistry().list().length).toBe(3);
   });
+
 
   it('should persist domain events in SQLite Event Store and replay stream', async () => {
     const eventStore = new SqliteEventStore(testDbPath);
@@ -132,13 +133,14 @@ describe('SE-OS v2.0 Milestone 1 — Kernel Bootstrap Suite', () => {
     telemetry.recordHeartbeat();
     telemetry.recordMission();
 
-    const snapshot = telemetry.getSnapshot(3, 0);
+    const snapshot = telemetry.getSnapshot(kernel.getSupervisor().getRegistry().list(), 0);
 
     expect(snapshot.activeWorkerCount).toBe(3);
     expect(snapshot.totalMissions).toBe(1);
     expect(snapshot.heartbeatsCount).toBe(2);
     expect(snapshot.memoryRssMb).toBeGreaterThan(0);
   });
+
 
   it('should execute CLI commands via SeOsCli cleanly', async () => {
     const cli = new SeOsCli();
