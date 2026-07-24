@@ -1,5 +1,6 @@
 import { Kernel } from '../kernel/kernel';
 import { ExecutionProfileName } from '../contracts/iexecution_policy';
+import { ClaudeCodeRuntimePlugin } from '../application/plugins/claude/claude_code_runtime_plugin';
 
 export class SeOsCli {
   private kernel = new Kernel();
@@ -8,6 +9,7 @@ export class SeOsCli {
   async boot(configPath: string = './company.json'): Promise<void> {
     console.log(`[SE-OS Kernel v2.0] Booting local workforce processes from ${configPath}...`);
     await this.kernel.boot(configPath);
+    await this.kernel.getRuntimePluginSystemManager().loadAndRegisterPlugin(new ClaudeCodeRuntimePlugin(this.kernel.getEventStore()));
     const workers = this.kernel.getSupervisor().getRegistry().list();
     console.log(`✔ Kernel booted successfully.`);
     console.log(`✔ Active Employees (${workers.length}):`);
@@ -478,11 +480,68 @@ export class SeOsCli {
     console.log(JSON.stringify(val, null, 2));
   }
 
+  // ─── Claude Code CLI Integration CLI ────────────────────────────
+
+  async claudeStatus(): Promise<void> {
+    const plugin = this.kernel.getRuntimePluginSystemManager().getPlugin('plugin-claude-code') as any;
+    if (!plugin) {
+      console.log(`✖ Claude Code Runtime Plugin ('plugin-claude-code') is not active`);
+      return;
+    }
+    const detection = plugin.getDetectionResult();
+    console.log(`CLAUDE CODE CLI DISCOVERY STATUS:`);
+    console.log(`  - Executable Available: ${detection.available}`);
+    console.log(`  - Executable Path: ${detection.executablePath || 'Not found'}`);
+    console.log(`  - CLI Version: ${detection.version || 'N/A'}`);
+    if (detection.error) {
+      console.log(`  - Resolution Note: ${detection.error}`);
+    }
+  }
+
+  async claudeHealth(): Promise<void> {
+    const plugin = this.kernel.getRuntimePluginSystemManager().getPlugin('plugin-claude-code');
+    if (!plugin) {
+      console.log(`✖ Claude Code Runtime Plugin ('plugin-claude-code') is not active`);
+      return;
+    }
+    const health = await plugin.heartbeat();
+    console.log(JSON.stringify(health, null, 2));
+  }
+
+  async claudeExecute(prompt: string = 'Hello Claude'): Promise<void> {
+    const plugin = this.kernel.getRuntimePluginSystemManager().getPlugin('plugin-claude-code');
+    if (!plugin) {
+      console.log(`✖ Claude Code Runtime Plugin ('plugin-claude-code') is not active`);
+      return;
+    }
+    const result = await plugin.execute({ prompt });
+    console.log(JSON.stringify(result, null, 2));
+  }
+
+  async claudeStream(prompt: string = 'Hello Claude Streaming'): Promise<void> {
+    const plugin = this.kernel.getRuntimePluginSystemManager().getPlugin('plugin-claude-code');
+    if (!plugin) {
+      console.log(`✖ Claude Code Runtime Plugin ('plugin-claude-code') is not active`);
+      return;
+    }
+    const sessionManager = this.kernel.getRuntimeSessionManager();
+    const session = sessionManager.getOrCreateSessionForWorker('emp-bob');
+    await plugin.attachSession(session);
+
+    console.log(`[Streaming Claude Response for prompt '${prompt}']...`);
+    const streamResult = await plugin.stream(session.sessionId, prompt, {
+      onStdoutChunk: (chunk) => process.stdout.write(chunk),
+    });
+    console.log(`\n✔ Stream finished (Completed: ${streamResult.completed} | Duration: ${streamResult.durationMs}ms)`);
+    await plugin.detachSession(session.sessionId);
+  }
+
   async shutdown(): Promise<void> {
     console.log(`[SE-OS Kernel] Initiating workforce shutdown...`);
     await this.kernel.shutdown();
     console.log(`✔ Company workforce shutdown complete.`);
   }
 }
+
 
 

@@ -49,6 +49,12 @@
                     │
                     ▼
 [Milestone 13: Runtime Session Manager] ──> COMPLETED
+                    │
+                    ▼
+[Milestone 14: Runtime Plugin System & Local CLI Integration] ──> COMPLETED
+                    │
+                    ▼
+[Milestone 15: Claude Code Runtime Plugin (First Real AI Integration)] ──> COMPLETED
 ```
 
 ---
@@ -258,6 +264,32 @@
 - **Complexity**: High
 - **Architecture**: Transport-agnostic via `IRuntimeTransport` interface; `PtyTransport` reference implementation. Zero provider-specific code, HTTP calls, or API keys.
 - **Acceptance Criteria**: Session lifecycle state machine (`Idle` → `Starting` → `Ready` → `Busy` → `Idle`/`Stopped`/`Failed`), worker session isolation, streaming stdout/stderr, stream cancellation, health monitoring, session reuse across missions, event emissions for all 9 session events, CLI subcommands (`runtimeSessions`, `runtimeStatus`, `runtimeStart`, `runtimeStop`, `runtimeRestart`, `runtimeInspect`).
+
+### Milestone 14: Runtime Plugin System & Local CLI Integration (COMPLETED)
+- **Objective**: Implement provider-agnostic Runtime Plugin System using `IRuntimePlugin` contract, `RuntimePluginLoader`, `RuntimePluginRegistry`, generic capabilities, health monitoring, and `MockRuntimePlugin` reference implementation.
+- **Deliverables**:
+  - `src/v2/contracts/iruntime_plugin_system.ts`
+  - `src/v2/application/plugins/runtime_plugin_loader.ts`
+  - `src/v2/application/plugins/runtime_plugin_registry.ts`
+  - `src/v2/application/plugins/mock_runtime_plugin.ts`
+  - `src/v2/application/plugins/runtime_plugin_system_manager.ts`
+  - `tests/v2/milestone14_runtime_plugin_system.test.ts`
+- **Dependencies**: Milestone 13
+- **Complexity**: High
+- **Architecture**: Provider-agnostic plugin contract & capability model. No provider-specific methods, login, or HTTP APIs.
+- **Acceptance Criteria**: Manifest validation, semver kernel compatibility, capability queries, session attachment/detachment, health monitoring, 9 domain events emitted, CLI plugin subcommands (`runtimePluginList`, `runtimePluginEnable`, `runtimePluginDisable`, `runtimePluginInspect`, `runtimePluginValidate`).
+
+### Milestone 15: Claude Code Runtime Plugin (First Real AI Integration) (COMPLETED)
+- **Objective**: Implement the first production Runtime Plugin using Claude Code CLI (`ClaudeCodeRuntimePlugin`) with executable discovery, readiness verification, session attachment via `IRuntimeSession`, prompt execution, incremental output streaming, stream cancellation, health monitoring, generic provider-independent domain events, and CLI integration (`se-os claude ...`).
+- **Deliverables**:
+  - `src/v2/application/plugins/claude/claude_cli_detector.ts`
+  - `src/v2/application/plugins/claude/claude_code_runtime_plugin.ts`
+  - `plugins/claude-cli/index.ts`
+  - `tests/v2/milestone15_claude_plugin.test.ts`
+- **Dependencies**: Milestone 14
+- **Complexity**: High
+- **Provider Isolation**: All Claude-specific logic resides strictly inside `src/v2/application/plugins/claude/`. Kernel, Runtime Session Manager, Planning Engine, and Mission Engine remain 100% provider-agnostic with zero provider imports in `src/v2/kernel/`.
+- **Acceptance Criteria**: Dynamic executable discovery via PATH or `CLAUDE_PATH` env, session attachment, prompt execution, streaming stdout chunks, stream cancellation, generic domain events (`RuntimePluginAttached`, `RuntimePluginDetached`, `RuntimeExecutionStarted`, `RuntimeExecutionCompleted`, `RuntimeExecutionCancelled`), CLI subcommands (`claudeStatus`, `claudeHealth`, `claudeExecute`, `claudeStream`).
 
 ---
 
