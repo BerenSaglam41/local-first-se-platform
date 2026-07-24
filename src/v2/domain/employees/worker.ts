@@ -3,8 +3,12 @@ import { DepartmentType } from '../organization/organization_models';
 /**
  * Real, OS-process-level health of the worker's supervised process — mutated only by
  * LocalProcessSupervisor, which owns the actual spawn/kill/restart lifecycle.
+ *
+ * 'QUARANTINED' (see ADR-0008 / WorkerLifecyclePolicy): set when a worker has crashed too many
+ * times within a bounded window. It stops auto-restart from firing again — a real, honest,
+ * visible state distinct from a single 'CRASHED' event, never hidden from telemetry.
  */
-export type WorkerProcessState = 'STARTING' | 'IDLE' | 'BUSY' | 'PAUSED' | 'CRASHED' | 'STOPPED';
+export type WorkerProcessState = 'STARTING' | 'IDLE' | 'BUSY' | 'PAUSED' | 'CRASHED' | 'STOPPED' | 'QUARANTINED';
 
 export interface WorkerProcessMetrics {
   pid: number;

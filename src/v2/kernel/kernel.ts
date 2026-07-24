@@ -33,6 +33,7 @@ import { WorkerStore } from '../application/worker/worker_store';
 import { WorkspaceExecutionService } from '../application/worker/workspace_execution_service';
 import { WorkerExecutionEngine } from '../application/worker/worker_execution_engine';
 import { WorkerTerminalLog } from '../application/worker/worker_terminal_log';
+import { WorkerLifecyclePolicy } from '../application/worker/worker_lifecycle_policy';
 import { TmuxIntegration } from '../infrastructure/dashboard/tmux_integration';
 import { MissionDecomposer } from '../application/missions/mission_decomposer';
 import { TaskAssignmentEngine } from '../application/missions/task_assignment_engine';
@@ -65,6 +66,7 @@ export class Kernel implements IKernel {
     const workerStore = new WorkerStore();
     const workerTerminalLog = new WorkerTerminalLog();
     const supervisor = new LocalProcessSupervisor(workerStore, eventStore, workerTerminalLog);
+    const workerLifecyclePolicy = new WorkerLifecyclePolicy(supervisor, workerStore);
     const telemetry = new TelemetryService();
     const contextCompiler = new ContextCompiler(sharedMemory, eventStore);
     const workspaceEngine = new WorkspaceEngine('./.se_workspaces', eventStore);
@@ -115,6 +117,7 @@ export class Kernel implements IKernel {
     this.container.registerSingleton<RuntimePluginManager>('RuntimePluginManager', pluginManager);
     this.container.registerSingleton<WorkerStore>('WorkerStore', workerStore);
     this.container.registerSingleton<LocalProcessSupervisor>('LocalProcessSupervisor', supervisor);
+    this.container.registerSingleton<WorkerLifecyclePolicy>('WorkerLifecyclePolicy', workerLifecyclePolicy);
     this.container.registerSingleton<TelemetryService>('TelemetryService', telemetry);
     this.container.registerSingleton<MissionEngine>('MissionEngine', missionEngine);
     this.container.registerSingleton<ContextCompiler>('ContextCompiler', contextCompiler);
@@ -199,8 +202,13 @@ export class Kernel implements IKernel {
     const supervisor = this.container.resolve<LocalProcessSupervisor>('LocalProcessSupervisor');
     supervisor.stopSupervision();
     const workerStore = this.container.resolve<WorkerStore>('WorkerStore');
+    // The whole company closing for the night is not the same as any one employee being fired:
+    // stopping every worker as a side effect of the *process* exiting must preserve their real
+    // terminal history (preserveLog), exactly like a restart does — only an explicit, individual
+    // workerStop()/workerKill() call is a genuine permanent removal (see ADR-0008, closing the
+    // regression this conflation caused since ADR-0007).
     for (const w of workerStore.list()) {
-      supervisor.stopWorker(w.id);
+      supervisor.stopWorker(w.id, { preserveLog: true });
     }
 
     const eventStore = this.container.resolve<SqliteEventStore>('IEventStore');
@@ -234,6 +242,10 @@ export class Kernel implements IKernel {
 
   getSupervisor(): LocalProcessSupervisor {
     return this.container.resolve<LocalProcessSupervisor>('LocalProcessSupervisor');
+  }
+
+  getWorkerLifecyclePolicy(): WorkerLifecyclePolicy {
+    return this.container.resolve<WorkerLifecyclePolicy>('WorkerLifecyclePolicy');
   }
 
   getWorkerStore(): WorkerStore {
