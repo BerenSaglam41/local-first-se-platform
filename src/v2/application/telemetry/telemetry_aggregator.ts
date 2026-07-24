@@ -100,16 +100,21 @@ export class TelemetryAggregator implements ITelemetryAggregator {
         assignedProvider: providerName,
         workingDirectory,
         terminalPane: `PID ${w.process.pid}`,
-        currentCommand: execution ? `${providerName} -p "${execution.goal.slice(0, 80)}"` : 'idle',
+        // Not the real invoked command line: each provider builds its own CLI args (Claude/Gemini
+        // use `-p`, Codex uses `exec`, etc. — see CliRuntimePluginConfig.buildArgs), and that
+        // real command isn't threaded back out of the plugin today. Stating a goal-directed
+        // description instead of a fabricated flag syntax avoids implying a specific CLI
+        // invocation this worker's actual provider may not use.
+        currentCommand: execution ? `${providerName}: ${execution.goal.slice(0, 80)}` : 'idle',
         currentFile: lastHistoryEntry?.filesTouched?.slice(-1)[0] || '',
         gitBranch,
         durationMs: execution ? Date.now() - new Date(execution.startedAt).getTime() : 0,
       };
     });
 
-    // A worker has a session worth showing if it's currently active OR has ever completed/failed
-    // a task — matches the field's own status union (STREAMING/COMPLETED/FAILED), so a finished
-    // session stays visible after the fact instead of vanishing the instant work completes.
+    // A worker has a session worth showing if it's currently active OR has ever completed/failed/
+    // been interrupted on a task — matches the field's own status union, so a finished session
+    // stays visible after the fact instead of vanishing the instant work completes.
     const aiSessions: TelemetryAiSessionInfo[] = allWorkers
       .filter((w) => w.activeExecution || w.history.length > 0)
       .map((w) => {
@@ -119,7 +124,9 @@ export class TelemetryAggregator implements ITelemetryAggregator {
           ? 'STREAMING'
           : lastEntry?.outcome === 'FAILED'
             ? 'FAILED'
-            : 'COMPLETED';
+            : lastEntry?.outcome === 'INTERRUPTED'
+              ? 'INTERRUPTED'
+              : 'COMPLETED';
 
         return {
           sessionId: `session-${w.id}-${execution?.taskId || lastEntry?.taskId || 'session'}`,

@@ -70,7 +70,7 @@ export const WorkersTab: React.FC<WorkersTabProps> = ({ snapshot, kernel }) => {
             <Text bold color="green" underline>WORKER INSPECTOR: {selectedWorker.name}</Text>
             <Text color="white">Role: <Text bold color="cyan">{selectedWorker.role}</Text></Text>
             <Text color="white">Assigned AI Provider: <Text bold color="yellow">{selectedWorker.assignedProvider}</Text></Text>
-            <Text color="white">Status: <Text color={selectedWorker.status === 'EXECUTING' || selectedWorker.status === 'REASONING' ? 'green' : 'gray'}>[{selectedWorker.status}]</Text></Text>
+            <Text color="white">Status: <Text color={selectedWorker.status === 'BUSY' ? 'green' : 'gray'}>[{selectedWorker.status}]</Text></Text>
             <Text color="white">Working Directory (pwd): <Text bold color="cyan">{selectedWorker.workingDirectory || '(idle — no active workspace)'}</Text></Text>
             <Text color="white">Process: <Text color="gray">{selectedWorker.terminalPane}</Text></Text>
             <Text color="white">Git Branch: <Text color="gray">{selectedWorker.gitBranch}</Text></Text>

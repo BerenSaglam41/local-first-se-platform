@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v2.0.0-m28-audit-4] - 2026-07-24
+
+### Fixed (Remaining Cheap Fixes — Milestone 28 Audit, Step 4, final)
+- **Fixed a real UI regression from Step 1's telemetry simplification**: `TelemetryAggregator`
+  now only ever emits worker `status: 'BUSY'|'IDLE'` (the old `'EXECUTING'`/`'REASONING'` split
+  was removed along with the deleted `WorkerActivityRegistry`), but `ProjectExecutionScreen`,
+  `DashboardTab`, and `WorkersTab` still checked for the old values — every busy worker rendered
+  as gray/idle in those three screens. Updated all three to check `'BUSY'`, and narrowed
+  `TelemetryWorkerInfo.status`'s type to `'IDLE' | 'BUSY'` so the type can no longer claim states
+  the aggregator never actually produces.
+- **`currentCommand` no longer fabricates a specific CLI flag syntax**: it previously always
+  showed `<provider> -p "<goal>"`, which is simply wrong for non-Claude-convention providers
+  (Codex uses `exec`, not `-p`). Replaced with a goal-directed description that doesn't imply a
+  specific invocation. Same fix applied to the equivalent line `ReasoningCoordinator` writes to
+  the worker's real terminal log.
+- **`TelemetryAiSessionInfo.status` gained `'INTERRUPTED'`**: a cancelled task
+  (`Worker.completeExecution('INTERRUPTED', ...)`, wired up by `cancelForWorker()`) was falling
+  through to `'COMPLETED'` in the telemetry snapshot — an interrupted task is not a completed one.
+- **`RuntimePluginSystemManager.loadAndRegisterPlugin()` no longer silently leaks a
+  duplicate-id registration**: `RuntimePluginRegistry.register()` overwrites via a plain
+  `Map.set`, so registering a second plugin under an id that's already registered (e.g.
+  `registerDefaultProviders()` called twice) silently orphaned the old instance — including any
+  real in-flight child process, which became unreachable via `cancel()` forever. The manager now
+  shuts the old instance down and unregisters it before registering the replacement.
+
+---
+
 ## [v2.0.0-m28-audit-3] - 2026-07-24
 
 ### Added / Fixed (Terminal Log Lifecycle — Milestone 28 Audit, Step 3)

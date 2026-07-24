@@ -24,6 +24,17 @@ export class RuntimePluginSystemManager extends EventEmitter {
   ): Promise<RuntimeValidationResult> {
     const manifest = plugin.metadata();
 
+    // Registering a second plugin under an id that's already registered (e.g.
+    // registerDefaultProviders() called twice) would otherwise silently overwrite the registry
+    // entry via a plain Map.set, orphaning the old instance's real in-flight child process —
+    // unreachable via cancel() forever, since the registry would only ever return the new
+    // instance for that id from then on. Shut the old one down cleanly first.
+    const existing = this.registry.getRecord(manifest.id)?.plugin;
+    if (existing && existing !== plugin) {
+      await existing.shutdown().catch(() => {});
+      this.registry.unregister(manifest.id);
+    }
+
     const validationResult = await this.loader.loadPlugin(plugin);
     this.emitEvent('RuntimePluginValidated', manifest.id, {
       valid: validationResult.valid,

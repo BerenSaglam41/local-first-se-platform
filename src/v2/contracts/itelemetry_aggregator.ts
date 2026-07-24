@@ -24,7 +24,7 @@ export interface TelemetryWorkerInfo {
   name: string;
   role: string;
   departmentId: string;
-  status: 'IDLE' | 'BUSY' | 'EXECUTING' | 'REASONING';
+  status: 'IDLE' | 'BUSY';
   currentTaskId?: string;
   currentTaskTitle?: string;
   runtimeProvider: string;
@@ -58,7 +58,7 @@ export interface TelemetryAiSessionInfo {
   durationMs: number;
   tokenUsage?: number;
   workspacePath: string;
-  status: 'IDLE' | 'STREAMING' | 'COMPLETED' | 'FAILED';
+  status: 'IDLE' | 'STREAMING' | 'COMPLETED' | 'FAILED' | 'INTERRUPTED';
   startedAt: string;
 }
 

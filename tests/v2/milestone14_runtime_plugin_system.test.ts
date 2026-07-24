@@ -88,6 +88,29 @@ describe('SE-OS v2.0 Milestone 14 — Runtime Plugin System Suite', () => {
     expect(registry.getPlugin('mock-runtime-plugin')).toBeUndefined();
   });
 
+  // ─── 3b. Duplicate registration shuts down the old instance, never leaks it ────────
+
+  it('should shut down and replace an already-registered plugin instead of silently overwriting it', async () => {
+    const manager = new RuntimePluginSystemManager();
+
+    let firstShutdownCalled = false;
+    const first = new MockRuntimePlugin();
+    const originalShutdown = first.shutdown.bind(first);
+    first.shutdown = async () => {
+      firstShutdownCalled = true;
+      await originalShutdown();
+    };
+
+    await manager.loadAndRegisterPlugin(first);
+    expect(manager.getPlugin('mock-runtime-plugin')).toBe(first);
+
+    const second = new MockRuntimePlugin();
+    await manager.loadAndRegisterPlugin(second);
+
+    expect(firstShutdownCalled).toBe(true);
+    expect(manager.getPlugin('mock-runtime-plugin')).toBe(second);
+  });
+
   // ─── 4. Real Execution (no session layer — see ADR-0005) ──────────
 
   it('should execute tasks directly through MockRuntimePlugin, keyed by workerId', async () => {

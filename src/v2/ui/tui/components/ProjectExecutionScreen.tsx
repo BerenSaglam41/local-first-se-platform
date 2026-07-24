@@ -73,7 +73,7 @@ export const ProjectExecutionScreen: React.FC<ProjectExecutionScreenProps> = ({
                 <Box justifyContent="space-between">
                   <Text color="green" bold>{w.name} ({w.role})</Text>
                   <Text color="cyan">AI: {w.assignedProvider || w.runtimeProvider}</Text>
-                  <Text color={w.status === 'EXECUTING' ? 'green' : 'gray'}>[{w.status}]</Text>
+                  <Text color={w.status === 'BUSY' ? 'green' : 'gray'}>[{w.status}]</Text>
                 </Box>
                 <Text color="white">  pwd: {w.workingDirectory || './src'}</Text>
                 <Text color="gray">  pane: {w.terminalPane || 'tmux pane 1'} | branch: {w.gitBranch || 'master'}</Text>

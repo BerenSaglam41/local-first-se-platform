@@ -108,9 +108,11 @@ export class ReasoningCoordinator extends EventEmitter {
       pluginId: plugin.metadata().id,
       workerId: request.workerId,
     });
+    // Not the real invoked command line — each provider builds its own CLI args (see
+    // CliRuntimePluginConfig.buildArgs), which isn't threaded back out of the plugin today.
     this.terminalLog?.writeLine(
       request.workerId,
-      `[${startedAt}] $ ${plugin.metadata().name} -p "${request.goal.slice(0, 160).replace(/\n/g, ' ')}"`
+      `[${startedAt}] ${plugin.metadata().name} <- "${request.goal.slice(0, 160).replace(/\n/g, ' ')}"`
     );
 
     const startTime = Date.now();

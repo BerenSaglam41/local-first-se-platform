@@ -37,7 +37,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({ snapshot }) => {
             <Box key={w.id} justifyContent="space-between">
               <Text color="white">{w.name} ({w.role})</Text>
               <Text color="cyan">{w.assignedProvider || w.runtimeProvider}</Text>
-              <Text color={w.status === 'EXECUTING' ? 'green' : 'gray'}>[{w.status}]</Text>
+              <Text color={w.status === 'BUSY' ? 'green' : 'gray'}>[{w.status}]</Text>
             </Box>
           ))}
         </Box>

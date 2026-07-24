@@ -1,5 +1,6 @@
 import { Kernel } from '../../src/v2/kernel/kernel';
 import { TelemetryAggregator } from '../../src/v2/application/telemetry/telemetry_aggregator';
+import { WorkerStore } from '../../src/v2/application/worker/worker_store';
 import { ScreenManager } from '../../src/v2/ui/tui/managers/screen_manager';
 import { LayoutManager } from '../../src/v2/ui/tui/managers/layout_manager';
 import { IPanel } from '../../src/v2/ui/tui/contracts/ipanel';
@@ -58,6 +59,20 @@ describe('SE-OS v2.0 Milestone 23 — Core TUI Framework & Telemetry Layer Suite
     aggregator.setActiveRuntimeProvider('plugin-codex-cli');
     const updated = aggregator.getSnapshot();
     expect(updated.activeRuntimeProviderId).toBe('plugin-codex-cli');
+  });
+
+  it('should report INTERRUPTED status for a cancelled task instead of mislabeling it COMPLETED', () => {
+    const workerStore = new WorkerStore();
+    const worker = workerStore.register('emp-cancel-test', 'CancelTest', 'Tester', 'QA');
+    worker.beginExecution({
+      executionId: 'e1', requestId: 'r1', taskId: 't1', goal: 'g', pluginId: 'p', startedAt: new Date().toISOString(),
+    });
+    worker.completeExecution('INTERRUPTED', { durationMs: 5 });
+
+    const aggregator = new TelemetryAggregator(undefined, undefined, undefined, undefined, workerStore);
+    const snapshot = aggregator.getSnapshot();
+    const session = snapshot.aiSessions.find((s) => s.workerId === 'emp-cancel-test');
+    expect(session?.status).toBe('INTERRUPTED');
   });
 
   // ─── 2. ScreenManager Transitions ─────────────────────────────────
