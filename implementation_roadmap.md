@@ -58,6 +58,9 @@
                     │
                     ▼
 [Milestone 16: Runtime Reasoning Pipeline] ──> COMPLETED
+                    │
+                    ▼
+[Milestone 17: Autonomous Worker Execution] ──> COMPLETED
 ```
 
 ---
@@ -306,6 +309,18 @@
 - **Complexity**: High
 - **Architecture**: Pluggable plugin selection via `IRuntimeSelectionStrategy` abstraction. Planning Engine and Mission Engine talk ONLY to `ReasoningCoordinator`. Zero provider-specific code outside Runtime Plugins.
 - **Acceptance Criteria**: `ReasoningRequest` → `ReasoningResponse` lifecycle, low-confidence planning fallback reaching `ClaudeCodeRuntimePlugin` through `ReasoningCoordinator`, streaming stdout chunks, stream cancellation, concurrency & timeout policy enforcement, 6 domain events emitted, CLI subcommands (`reasoningExecute`, `reasoningStream`, `reasoningInspect`).
+
+### Milestone 17: Autonomous Worker Execution (COMPLETED)
+- **Objective**: Implement Autonomous Worker Execution (`WorkerExecutionEngine`, `WorkspaceExecutionService`, `iautonomous_worker` contracts) allowing AI workers to receive tasks, invoke ReasoningCoordinator, produce an ExecutionPlan, delegate workspace file mutations, harvest execution artifacts, and generate structured reports.
+- **Deliverables**:
+  - `src/v2/contracts/iautonomous_worker.ts`
+  - `src/v2/application/worker/workspace_execution_service.ts`
+  - `src/v2/application/worker/worker_execution_engine.ts`
+  - `tests/v2/milestone17_autonomous_worker.test.ts`
+- **Dependencies**: Milestone 16
+- **Complexity**: High
+- **Single Responsibility & Workspace Isolation**: `WorkerExecutionEngine` acts strictly as orchestrator generating `ExecutionPlan`; all filesystem mutations are delegated to `WorkspaceExecutionService`. Path boundary checks prevent path traversal outside workspace directory (`workspacePath`). Workers communicate strictly via `ReasoningCoordinator`.
+- **Acceptance Criteria**: Full autonomous worker execution flow, isolated workspace file creation/modification, artifact collection (`CREATED_FILE`, `MODIFIED_FILE`, `EXECUTION_LOG`, `REASONING_SUMMARY`), 5 domain events emitted (`WorkerExecutionStarted`, `WorkerExecutionCompleted`, `WorkerExecutionFailed`, `WorkerWorkspaceUpdated`, `ArtifactsGenerated`), CLI subcommands (`workerExecute`, `workerInspect`, `workerArtifacts`).
 
 ---
 

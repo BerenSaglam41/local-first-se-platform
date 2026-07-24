@@ -1,0 +1,165 @@
+import { Kernel } from '../../src/v2/kernel/kernel';
+import { WorkerExecutionEngine } from '../../src/v2/application/worker/worker_execution_engine';
+import { WorkspaceExecutionService } from '../../src/v2/application/worker/workspace_execution_service';
+import { WorkerExecutionRequest, ExecutionPlan } from '../../src/v2/contracts/iautonomous_worker';
+import { ClaudeCodeRuntimePlugin } from '../../src/v2/application/plugins/claude/claude_code_runtime_plugin';
+import { SeOsCli } from '../../src/v2/cli/se_os_cli';
+import * as fs from 'fs';
+import * as path from 'path';
+
+describe('SE-OS v2.0 Milestone 17 — Autonomous Worker Execution Suite', () => {
+  const testDbPath = './se_company_m17_test.db';
+  const testWorkspacesDir = './.se_workspaces_m17_test';
+  let kernel: Kernel;
+
+  beforeEach(async () => {
+    if (fs.existsSync(testDbPath)) fs.unlinkSync(testDbPath);
+    if (fs.existsSync(testWorkspacesDir)) fs.rmSync(testWorkspacesDir, { recursive: true, force: true });
+    kernel = new Kernel();
+  });
+
+  afterEach(async () => {
+    if (kernel.isReady()) {
+      await kernel.shutdown();
+    }
+    if (fs.existsSync(testDbPath)) fs.unlinkSync(testDbPath);
+    if (fs.existsSync(testWorkspacesDir)) fs.rmSync(testWorkspacesDir, { recursive: true, force: true });
+  });
+
+  async function bootKernelWithClaude(): Promise<Kernel> {
+    await kernel.boot('./non_existent_config.json');
+    await kernel.getRuntimePluginSystemManager().loadAndRegisterPlugin(new ClaudeCodeRuntimePlugin(kernel.getEventStore()));
+    return kernel;
+  }
+
+  // ─── 1. WorkspaceExecutionService Mutations & Boundary Checks ─────
+
+  it('should apply filesystem mutations via WorkspaceExecutionService and enforce workspace boundaries', () => {
+    const service = new WorkspaceExecutionService();
+    const wsDir = path.resolve(testWorkspacesDir, 'ws-boundary-test');
+
+    const validPlan: ExecutionPlan = {
+      planId: 'plan-01',
+      taskId: 'task-boundary',
+      workspacePath: wsDir,
+      summary: 'Valid plan',
+      filesToCreate: [
+        { relativePath: 'src/app.ts', content: 'export const app = "SE-OS";' },
+      ],
+      filesToModify: [],
+    };
+
+    const res = service.applyExecutionPlan(validPlan);
+    expect(res.success).toBe(true);
+    expect(res.createdFiles.length).toBe(1);
+    expect(fs.existsSync(path.join(wsDir, 'src/app.ts'))).toBe(true);
+
+    // Path traversal attack test
+    const invalidPlan: ExecutionPlan = {
+      planId: 'plan-hack',
+      taskId: 'task-hack',
+      workspacePath: wsDir,
+      summary: 'Malicious plan',
+      filesToCreate: [
+        { relativePath: '../../outside.txt', content: 'hacked' },
+      ],
+      filesToModify: [],
+    };
+
+    const hackRes = service.applyExecutionPlan(invalidPlan);
+    expect(hackRes.success).toBe(false);
+    expect(hackRes.error).toContain('Security Violation');
+  });
+
+  // ─── 2. WorkerExecutionEngine Autonomous Task Execution ────────────
+
+  it('should execute task autonomously through ReasoningCoordinator and WorkspaceExecutionService', async () => {
+    await bootKernelWithClaude();
+    const engine = kernel.getWorkerExecutionEngine();
+
+    const request: WorkerExecutionRequest = {
+      executionId: 'exec-auto-1',
+      taskId: 'task-101',
+      missionId: 'm-101',
+      workerId: 'emp-bob',
+      goal: 'Implement authentication middleware and README documentation',
+    };
+
+    const result = await engine.executeTask(request);
+    expect(result.success).toBe(true);
+    expect(result.report).toBeDefined();
+    expect(result.report!.status).toBe('COMPLETED');
+    expect(result.report!.workerId).toBe('emp-bob');
+    expect(result.report!.filesCreated.length).toBeGreaterThan(0);
+
+    // Verify generated code file exists on disk inside isolated workspace
+    const createdFile = result.report!.filesCreated[0];
+    expect(fs.existsSync(createdFile)).toBe(true);
+    expect(fs.readFileSync(createdFile, 'utf8')).toContain('task-101');
+  });
+
+  // ─── 3. Artifact Collection ────────────────────────────────────────
+
+  it('should harvest CREATED_FILE, EXECUTION_LOG, and REASONING_SUMMARY artifacts', async () => {
+    await bootKernelWithClaude();
+    const engine = kernel.getWorkerExecutionEngine();
+
+    const result = await engine.executeTask({
+      executionId: 'exec-artifacts-1',
+      taskId: 'task-102',
+      missionId: 'm-102',
+      workerId: 'emp-alice',
+      goal: 'Create logger module with unit tests',
+    });
+
+    expect(result.success).toBe(true);
+    const artifacts = result.report!.artifacts;
+    expect(artifacts.length).toBeGreaterThanOrEqual(3);
+
+    const types = artifacts.map((a) => a.type);
+    expect(types).toContain('CREATED_FILE');
+    expect(types).toContain('REASONING_SUMMARY');
+    expect(types).toContain('EXECUTION_LOG');
+  });
+
+  // ─── 4. Domain Event Emissions ─────────────────────────────────────
+
+  it('should emit and persist all 5 Worker & Artifact domain events', async () => {
+    await bootKernelWithClaude();
+    const engine = kernel.getWorkerExecutionEngine();
+    const events: string[] = [];
+
+    engine.on('WorkerExecutionStarted', () => events.push('WorkerExecutionStarted'));
+    engine.on('ArtifactsGenerated', () => events.push('ArtifactsGenerated'));
+    engine.on('WorkerExecutionCompleted', () => events.push('WorkerExecutionCompleted'));
+
+    await engine.executeTask({
+      executionId: 'exec-events-1',
+      taskId: 'task-103',
+      missionId: 'm-103',
+      workerId: 'emp-charlie',
+      goal: 'Test event emission in worker execution',
+    });
+
+    expect(events).toContain('WorkerExecutionStarted');
+    expect(events).toContain('ArtifactsGenerated');
+    expect(events).toContain('WorkerExecutionCompleted');
+  });
+
+  // ─── 5. CLI Integration ──────────────────────────────────────────
+
+  it('should execute CLI worker subcommands cleanly', async () => {
+    const cli = new SeOsCli();
+    await cli.boot('./non_existent_config.json');
+
+    await cli.workerExecute('task-cli-1', 'Build CLI test feature');
+    const reports = cli['kernel'].getWorkerExecutionEngine().listReports();
+    expect(reports.length).toBeGreaterThan(0);
+
+    const execId = reports[0].executionId;
+    await cli.workerInspect(execId);
+    await cli.workerArtifacts(execId);
+
+    await cli.shutdown();
+  });
+});

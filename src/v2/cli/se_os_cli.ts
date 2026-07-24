@@ -574,12 +574,49 @@ export class SeOsCli {
     console.log(`  - Selection Strategy: DefaultRuntimeSelectionStrategy`);
   }
 
+  // ─── Autonomous Worker Execution CLI ────────────────────────────
+
+  async workerExecute(taskId: string = 'task-200', goal: string = 'Build autonomous worker test module'): Promise<void> {
+    const executionId = `exec-${Date.now()}`;
+    console.log(`[Executing Autonomous Task '${taskId}' (Execution ID: ${executionId})]...`);
+    const result = await this.kernel.getWorkerExecutionEngine().executeTask({
+      executionId,
+      taskId,
+      missionId: 'cli-mission-m17',
+      workerId: 'emp-bob',
+      goal,
+    });
+    console.log(JSON.stringify(result, null, 2));
+  }
+
+  async workerInspect(executionId: string): Promise<void> {
+    const report = this.kernel.getWorkerExecutionEngine().getReport(executionId);
+    if (!report) {
+      console.log(`✖ No worker execution report found for ID '${executionId}'`);
+      return;
+    }
+    console.log(JSON.stringify(report, null, 2));
+  }
+
+  async workerArtifacts(executionId: string): Promise<void> {
+    const report = this.kernel.getWorkerExecutionEngine().getReport(executionId);
+    if (!report) {
+      console.log(`✖ No worker execution report found for ID '${executionId}'`);
+      return;
+    }
+    console.log(`EXECUTION ARTIFACTS (${report.artifacts.length}):`);
+    for (const art of report.artifacts) {
+      console.log(`  - [${art.type}] ${art.path} (${art.sizeBytes} bytes)`);
+    }
+  }
+
   async shutdown(): Promise<void> {
     console.log(`[SE-OS Kernel] Initiating workforce shutdown...`);
     await this.kernel.shutdown();
     console.log(`✔ Company workforce shutdown complete.`);
   }
 }
+
 
 
 

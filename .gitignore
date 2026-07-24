@@ -6,3 +6,4 @@ logs/
 *.db-wal
 *.db-shm
 .env
+.se_workspaces*/

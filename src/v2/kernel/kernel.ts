@@ -27,6 +27,8 @@ import { RuntimeSessionManager } from '../application/session/runtime_session_ma
 import { RuntimePluginSystemManager } from '../application/plugins/runtime_plugin_system_manager';
 import { MockRuntimePlugin } from '../application/plugins/mock_runtime_plugin';
 import { ReasoningCoordinator } from '../application/reasoning/reasoning_coordinator';
+import { WorkspaceExecutionService } from '../application/worker/workspace_execution_service';
+import { WorkerExecutionEngine } from '../application/worker/worker_execution_engine';
 import * as fs from 'fs';
 
 export class Kernel implements IKernel {
@@ -67,6 +69,8 @@ export class Kernel implements IKernel {
     await runtimePluginSystemManager.loadAndRegisterPlugin(new MockRuntimePlugin());
     const reasoningCoordinator = new ReasoningCoordinator(runtimePluginSystemManager, sessionManager, eventStore);
     const autonomousPlanner = new AutonomousPlanner(eventStore, sharedMemory, policyEngine, departmentOrchestrator, undefined, reasoningCoordinator);
+    const workspaceExecutionService = new WorkspaceExecutionService(eventStore);
+    const workerExecutionEngine = new WorkerExecutionEngine(workspaceEngine, workspaceExecutionService, reasoningCoordinator, eventStore);
 
     supervisor.startSupervision();
 
@@ -91,6 +95,8 @@ export class Kernel implements IKernel {
     this.container.registerSingleton<RuntimeSessionManager>('RuntimeSessionManager', sessionManager);
     this.container.registerSingleton<RuntimePluginSystemManager>('RuntimePluginSystemManager', runtimePluginSystemManager);
     this.container.registerSingleton<ReasoningCoordinator>('ReasoningCoordinator', reasoningCoordinator);
+    this.container.registerSingleton<WorkspaceExecutionService>('WorkspaceExecutionService', workspaceExecutionService);
+    this.container.registerSingleton<WorkerExecutionEngine>('WorkerExecutionEngine', workerExecutionEngine);
 
     if (fs.existsSync(configPath)) {
       try {
@@ -224,6 +230,14 @@ export class Kernel implements IKernel {
 
   getReasoningCoordinator(): ReasoningCoordinator {
     return this.container.resolve<ReasoningCoordinator>('ReasoningCoordinator');
+  }
+
+  getWorkspaceExecutionService(): WorkspaceExecutionService {
+    return this.container.resolve<WorkspaceExecutionService>('WorkspaceExecutionService');
+  }
+
+  getWorkerExecutionEngine(): WorkerExecutionEngine {
+    return this.container.resolve<WorkerExecutionEngine>('WorkerExecutionEngine');
   }
 
   getTelemetry(): TelemetryService {
