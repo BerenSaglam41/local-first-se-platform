@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v2.0.0-m29-workstream-a] - 2026-07-25
+
+### Added (Milestone 29 — Production Readiness, Workstream A: Process Resilience & Crash Containment)
+See `docs/adr/ADR-0008-process-fault-containment.md` and
+`docs/roadmap/M29-production-readiness.md` §12 for the full implementation report.
+
+- **`ProcessGuardian`**: the process previously had zero fault containment (verified: no
+  `SIGTERM`/`SIGINT`/`uncaughtException`/`unhandledRejection` handler anywhere in `src/v2`). Now
+  installed in `cli/bin.ts` — signals drain via `Kernel.shutdown()` and exit cleanly; unknown
+  fatal errors are logged with full context and trigger the same clean shutdown before exiting
+  non-zero, never silently.
+- **`WorkerLifecyclePolicy`**: real self-healing for crashed workers. A crash was already
+  detected (`WorkerFailed`) but nothing acted on it. Now auto-restarts with bounded exponential
+  backoff, escalating to a new, honest `QUARANTINED` `WorkerProcessState` after too many crashes
+  in a window instead of restart-looping forever.
+- **Fixed a real regression** this milestone's own audit found: `Kernel.shutdown()` was deleting
+  every worker's terminal log on every clean process exit (a conflation with ADR-0007's
+  permanent-removal cleanup) — every graceful exit now preserves history correctly.
+
+---
+
 ## [v2.0.0-m28-audit-4] - 2026-07-24
 
 ### Fixed (Remaining Cheap Fixes — Milestone 28 Audit, Step 4, final)

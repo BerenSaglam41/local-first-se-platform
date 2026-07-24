@@ -644,8 +644,75 @@ start until the current one is green and committed, no exceptions.
 
 ---
 
+## 12. Implementation Reports
+
+A workstream is not considered complete until its implementation is finished, all affected tests
+pass, new tests are added where appropriate, documentation is updated, the work is committed, and
+a short report exists here explaining what changed, why, and what risks remain. Each workstream
+must leave the repository in a releasable state — this section is the durable record that it did.
+
+### Workstream A — Process Resilience & Crash Containment
+
+**Status**: Complete. Commit `ab19b16` (implementation), plus this documentation update.
+
+**What changed**:
+- `src/v2/infrastructure/resilience/process_guardian.ts` (new) — installs real
+  `SIGTERM`/`SIGINT`/`uncaughtException`/`unhandledRejection` handlers. Signals trigger a supplied
+  graceful-shutdown callback and exit 0; fatal errors of unknown origin are logged with full
+  context, trigger the same graceful-shutdown callback, then exit 1. All callbacks and the actual
+  `process.exit()` call are injectable for testing.
+- `src/v2/application/worker/worker_lifecycle_policy.ts` (new) — subscribes to
+  `LocalProcessSupervisor`'s existing `WorkerFailed` event; restarts a crashed worker with
+  exponential backoff (default 1s→30s cap); after more than 5 crashes in a 5-minute window (both
+  configurable), marks the worker `'QUARANTINED'` and stops auto-restarting it until an explicit
+  `clearQuarantine()` call.
+- `src/v2/domain/employees/worker.ts` — added `'QUARANTINED'` to `WorkerProcessState` (additive;
+  confirmed via search that no exhaustive switch over this type exists anywhere in the codebase).
+- `src/v2/kernel/kernel.ts` — constructs and registers `WorkerLifecyclePolicy` in `boot()`, exposes
+  `getWorkerLifecyclePolicy()`; fixed `shutdown()` to call `stopWorker(id, { preserveLog: true })`
+  for every worker instead of deleting their terminal logs on every clean exit.
+- `src/v2/cli/bin.ts` — installs `ProcessGuardian` before `Kernel.boot()` runs, wired to
+  `SeOsCli.shutdown()`.
+- `docs/adr/ADR-0008-process-fault-containment.md` (new).
+- 16 new tests across 3 new files under `tests/v2/reliability/`.
+
+**Why it changed**: M29's current-state audit found the process had no way to shut down cleanly
+on a real signal, no last line of defense against an uncaught error (which previously crashed the
+entire company silently), and no self-healing for a worker whose crash was already correctly
+detected but never acted on. Additionally, the audit surfaced a real regression from ADR-0007:
+clean process shutdown was destroying every worker's terminal history. All three are prerequisites
+for "runs for weeks without manual intervention" — see §2 Goals 1 and 3.
+
+**Validation performed**: `npx tsc --noEmit` clean. `npm run build` clean (confirms `bin.ts`'s new
+import bundles correctly). Full test suite green across 3 consecutive `npm test` runs
+(274 + 7 = 281 tests total, up from 265 before this workstream). New tests exercise real behavior,
+not mocks of the thing under test: real `process.emit()` against real installed handlers, a real
+child process configured to genuinely crash (`node -e 'process.exit(1)'`), a real booted `Kernel`.
+Explicit regression tests confirm intentional `workerStop()`/`killWorker()` never trigger
+auto-restart, and that `Kernel.shutdown()` no longer deletes terminal logs.
+
+**Risks / follow-ups deliberately left open**:
+- What happens to a worker's *in-flight execution* across a crash-restart cycle (recoverable? was
+  it silently dropped?) is explicitly out of scope here — that is Workstream B's (State
+  Persistence & Crash Recovery) responsibility, which depends on this workstream's shutdown/crash
+  semantics being settled first. Today, a crash still loses in-flight task state; only the
+  worker's *liveness* self-heals.
+- `LocalProcessSupervisor.restartWorker()` does not preserve the original `executable`/`args` used
+  to spawn a worker — a restarted worker falls back to the default placeholder process args. This
+  is not a regression from this workstream (pre-existing) and is harmless for real production
+  workers (whose supervised placeholder process is always the same default `setInterval` liveness
+  process regardless — actual AI provider work happens via separate, per-task child processes
+  spawned by the plugins, not the supervised placeholder). Noted here for visibility; not fixed as
+  part of Workstream A since it was outside this workstream's stated scope.
+- Backoff/quarantine thresholds (5 crashes / 5 minutes, 1s–30s backoff) are reasonable defaults,
+  not yet tuned against real load data — Workstream D's load testing is the natural place to
+  revisit them if evidence suggests otherwise.
+
+---
+
 ## Approval
 
 This document proposes the full scope of M29 and, in §11, the operational breakdown of each
-workstream. **Approved.** Implementation proceeds one workstream at a time — Workstream A first —
-each fully complete, tested, documented, and committed before the next begins.
+workstream. **Approved.** Implementation proceeds one workstream at a time — each fully complete,
+tested, documented, and committed, with an implementation report recorded in §12, before the next
+begins.
