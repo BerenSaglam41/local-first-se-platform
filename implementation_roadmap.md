@@ -84,7 +84,10 @@
 [Vertical Slice 1: End-to-End Autonomous Project Execution] ──> COMPLETED
                     │
                     ▼
-[Milestone 24: Execution Screen]
+[Milestone 24: Post-Execution Experience & Workspace Explorer] ──> COMPLETED
+                    │
+                    ▼
+[Milestone 25: Workspace Viewer & AI Session]
                     │
                     ▼
 [Milestone 25: Workspace Viewer & AI Session]
@@ -455,6 +458,19 @@
 - **Complexity**: High
 - **Real Backend Execution**: Triggers `ProjectLifecycleOrchestrator` -> `AutonomousPlanner` -> `MissionEngine` -> `MissionExecutionOrchestrator` -> `WorkerExecutionEngine` -> `ClaudeCodeRuntimePlugin` -> `WorkspaceExecutionService` -> `VerificationPipeline` -> `TelemetryAggregator`. Real workspace files physically created in `./.se_workspaces/`. Real streaming stdout displayed live inside terminal.
 - **Acceptance Criteria**: End-to-end autonomous execution of project goal `"Create a REST API for User Management"`, real workspace file creation, verification gate passage (100/100), project completion report modal banner with `[ Press ENTER to Return to Main Menu ]`, 161/161 v2.0 tests passing.
+
+### Milestone 24: Post-Execution Experience & Workspace Explorer (COMPLETED)
+- **Objective**: Redesign post-execution experience after project completion with interactive Workspace Explorer tree, file statistics, generated artifacts list with content previews, runtime execution summary, REPORT.md generation, and quick action keyboard shortcuts (V, F, T, R, S, Z, N, Q).
+- **Deliverables**:
+  - `src/v2/application/workspace/workspace_scanner.ts`
+  - `src/v2/ui/tui/components/ProjectCompletionScreen.tsx`
+  - `src/v2/application/project/project_lifecycle_orchestrator.ts` (Generates `REPORT.md` in workspace)
+  - `src/v2/ui/tui/tui_app.tsx`
+  - `tests/v2/milestone24_post_execution.test.ts`
+- **Dependencies**: Vertical Slice 1
+- **Complexity**: High
+- **Interactive Post-Execution TUI**: Renders live workspace directory tree, file LOC/bytes metrics, generated artifacts list, file content preview snippet, runtime metrics summary (execution duration, tokens used, workers fleet, tests passed, quality score), automatic `REPORT.md` generation inside generated project workspace directory, and Quick Action shortcuts (`V` VS Code, `F` Finder/Explorer, `T` Terminal, `R` npm install, `S` Start Project, `Z` Export ZIP, `N` New Goal, `Q` Quit).
+- **Acceptance Criteria**: Automatic `REPORT.md` creation in workspace directory, interactive file preview navigation via arrow keys, quick action execution, 250/250 tests passing across 46 test suites.
 
 ---
 

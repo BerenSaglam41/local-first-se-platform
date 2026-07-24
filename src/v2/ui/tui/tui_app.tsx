@@ -8,6 +8,7 @@ import { RuntimeSelector } from './components/RuntimeSelector.js';
 import { MainMenu } from './components/MainMenu.js';
 import { NewProjectPrompt } from './components/NewProjectPrompt.js';
 import { ProjectExecutionScreen } from './components/ProjectExecutionScreen.js';
+import { ProjectCompletionScreen } from './components/ProjectCompletionScreen.js';
 import { Kernel } from '../../kernel/kernel.js';
 
 interface TuiAppProps {
@@ -92,10 +93,21 @@ export const TuiApp: React.FC<TuiAppProps> = ({ telemetryAggregator, kernel, onE
       )}
 
       {currentScreen === 'PROJECT_EXECUTION' && (
-        <ProjectExecutionScreen
-          snapshot={snapshot}
-          onReturnToMainMenu={() => navigate('MAIN_MENU')}
-        />
+        snapshot.projectStatus === 'COMPLETED' ? (
+          <ProjectCompletionScreen
+            snapshot={snapshot}
+            onNewProject={() => navigate('NEW_PROJECT_PROMPT')}
+            onExit={() => {
+              if (onExit) onExit();
+              exit();
+            }}
+          />
+        ) : (
+          <ProjectExecutionScreen
+            snapshot={snapshot}
+            onReturnToMainMenu={() => navigate('MAIN_MENU')}
+          />
+        )
       )}
     </Box>
   );

@@ -7,11 +7,13 @@ import { ICodeSliceEngine } from '../../core/domain/interfaces/icode_slice_engin
 import { ValidationException } from '../../core/domain/errors/exceptions';
 
 export class TypeScriptASTParser implements IASTParser {
-  private parser: Parser;
+  private parser: any;
 
   constructor(private sliceEngine: ICodeSliceEngine) {
-    this.parser = new Parser();
-    this.parser.setLanguage(TypeScript.typescript);
+    const ParserCls = (Parser as any).default || Parser;
+    const TsLang = (TypeScript as any).default || TypeScript;
+    this.parser = new ParserCls();
+    this.parser.setLanguage(TsLang.typescript);
   }
 
   supportsLanguage(language: string): boolean {
@@ -19,10 +21,11 @@ export class TypeScriptASTParser implements IASTParser {
   }
 
   parse(content: string, language: string): CodeSymbol[] {
+    const TsLang = (TypeScript as any).default || TypeScript;
     if (language === 'tsx') {
-      this.parser.setLanguage(TypeScript.tsx);
+      this.parser.setLanguage(TsLang.tsx);
     } else {
-      this.parser.setLanguage(TypeScript.typescript);
+      this.parser.setLanguage(TsLang.typescript);
     }
 
     const tree = this.parser.parse(content || '');
