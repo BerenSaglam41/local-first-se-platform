@@ -155,11 +155,19 @@ export class ReasoningCoordinator extends EventEmitter {
 
       worker?.completeExecution(execRes.success ? 'COMPLETED' : 'FAILED', { durationMs, tokenUsage });
 
-      this.emitEvent('ReasoningCompleted', request.requestId, {
+      this.emitEvent(execRes.success ? 'ReasoningCompleted' : 'ReasoningFailed', request.requestId, {
         durationMs,
         pluginId: plugin.metadata().id,
+        reason: execRes.success ? undefined : response.errors[0],
       });
-      return { success: true, response };
+      // Honest by construction: `success` here must mean the underlying provider genuinely
+      // produced a usable result, matching what worker?.completeExecution() two lines above
+      // already correctly determines — not merely "the request reached a plugin without
+      // throwing." Previously this was unconditionally `true`, so a provider that failed (CLI
+      // unavailable, timed out, non-zero exit) was still reported as a successful reasoning
+      // result to every caller, silently turning a real failure into a fabricated success
+      // further up the stack (see M29.1 Fix #1 / ADR-0009).
+      return { success: execRes.success, response, error: execRes.success ? undefined : response.errors[0] };
     } catch (err: any) {
       const durationMs = Date.now() - startTime;
       this.activeRequests.delete(request.requestId);

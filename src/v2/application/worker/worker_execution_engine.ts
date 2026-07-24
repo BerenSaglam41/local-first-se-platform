@@ -37,6 +37,7 @@ export class WorkerExecutionEngine extends EventEmitter {
     const startTime = Date.now();
     const executionId = request.executionId || `exec-${Date.now()}`;
     let status: ExecutionStatus = 'PREPARING_CONTEXT';
+    let workspacePath: string | undefined;
 
     this.emitEvent('WorkerExecutionStarted', executionId, {
       taskId: request.taskId,
@@ -47,7 +48,7 @@ export class WorkerExecutionEngine extends EventEmitter {
     try {
       // 1. Prepare Workspace
       const workspaceInfo = this.workspaceEngine.createWorkspace(request.taskId);
-      const workspacePath = workspaceInfo.isolatedPath;
+      workspacePath = workspaceInfo.isolatedPath;
 
       // 2. Invoke Reasoning Pipeline
       status = 'REASONING';
@@ -153,6 +154,7 @@ export class WorkerExecutionEngine extends EventEmitter {
         filesCreated: mutationRes.createdFiles,
         filesModified: mutationRes.modifiedFiles,
         reasoningResponse: reasoningRes.response,
+        workspacePath,
       };
 
       this.reports.set(executionId, report);
@@ -185,6 +187,7 @@ export class WorkerExecutionEngine extends EventEmitter {
         durationMs,
         filesCreated: [],
         filesModified: [],
+        workspacePath,
       };
 
       this.reports.set(executionId, report);

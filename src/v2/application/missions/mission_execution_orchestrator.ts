@@ -101,6 +101,7 @@ export class MissionExecutionOrchestrator extends EventEmitter {
           let attempt = 0;
           let taskSuccess = false;
           let lastReport: any;
+          let lastVerification: any;
 
           while (attempt <= policy.maxTaskRetries && !taskSuccess) {
             attempt++;
@@ -108,14 +109,15 @@ export class MissionExecutionOrchestrator extends EventEmitter {
             lastReport = res.report;
 
             if (res.success && res.report?.status === 'COMPLETED') {
-              // Run Verification Pipeline on generated workspace artifacts
-              const workspacePath = res.report.artifacts?.find((a: any) => a.path)?.path || './.se_workspaces';
+              // Run Verification Pipeline on the real workspace this task actually ran in.
+              const workspacePath = res.report.workspacePath || './.se_workspaces';
               const vResult = await this.verificationPipeline.verify({
                 taskId: task.id,
                 missionId,
                 workspacePath,
                 artifacts: res.report.artifacts,
               });
+              lastVerification = vResult;
 
               if (vResult.success) {
                 taskSuccess = true;
@@ -133,7 +135,11 @@ export class MissionExecutionOrchestrator extends EventEmitter {
           }
 
           state.runningTaskIds = state.runningTaskIds.filter((id) => id !== task.id);
-          reports[task.id] = lastReport;
+          // Real verification data is attached alongside the execution report (not folded into
+          // its typed shape) so the final project report can honestly surface what was actually
+          // checked, without widening ExecutionReport's contract for a field only this orchestrator
+          // produces.
+          reports[task.id] = lastReport ? { ...lastReport, verification: lastVerification } : lastReport;
 
           if (taskSuccess) {
             task.status = 'COMPLETED';

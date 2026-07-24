@@ -71,7 +71,9 @@ describe('SE-OS v2.0 Milestone 25 — Multi-Provider AI Team & Workspace Transpa
 
     expect(result.success).toBe(true);
     expect(fs.existsSync(targetPath)).toBe(true);
-    expect(fs.existsSync(path.join(targetPath, 'package.json'))).toBe(true);
+    // Real file actually produced from the fake spawner's `// FILE: index.ts` content, copied
+    // from the task's isolated workspace into the real project directory — not a hardcoded stub.
+    expect(fs.existsSync(path.join(targetPath, 'index.ts'))).toBe(true);
     expect(fs.existsSync(path.join(targetPath, 'REPORT.md'))).toBe(true);
 
     const reportContent = fs.readFileSync(path.join(targetPath, 'REPORT.md'), 'utf8');

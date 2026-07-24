@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v2.0.0-m29.1-fix1] - 2026-07-25
+
+### Fixed (Milestone 29.1 — Product Polish & UAT Critical Fixes, Fix #1: Honest Execution Reporting)
+A real user-acceptance test — the actual built TUI, driven through a real terminal, real
+installed provider CLIs, no mocks, no code inspection — found `REPORT.md`, the final artifact a
+user reads to know whether their project worked, unconditionally fabricated success regardless of
+reality. M29 Workstream B is paused until this and the rest of the UAT's findings are fixed. See
+`docs/adr/ADR-0009-honest-execution-reporting.md` for the full root cause analysis.
+
+- **`ProjectLifecycleOrchestrator`** no longer writes a hardcoded fake scaffold (`server.ts`,
+  `package.json`, a `REPORT.md` claiming `100/100, 6/6 tests passed` and listing files that were
+  never written) unconditionally on success. It now always (success or failure) copies every file
+  a worker's task genuinely created from that task's real isolated workspace into the user's
+  chosen project directory, and generates `REPORT.md` entirely from real execution data.
+- **Four of `VerificationPipeline`'s six steps were pure stubs** (`BuildCheckStep`,
+  `TypeCheckStep`, `TestCheckStep`, `LintCheckStep`) that unconditionally returned `passed: true`
+  without ever executing anything. They now really run `npm run build`/`test`/`lint` when
+  genuinely runnable, and `TypeCheckStep` runs a real dependency-free TypeScript syntax check
+  otherwise — honestly reporting `skipped` (a new field) rather than a fabricated pass when a
+  check genuinely isn't applicable.
+- **`ReasoningCoordinator.requestReasoning()`** unconditionally returned `success: true`
+  regardless of whether the underlying provider execution actually succeeded, silently turning a
+  real provider failure into a fabricated success for every caller up the stack. Now honestly
+  returns the real outcome.
+- New tests: `tests/v2/reliability/honest_verification_and_reporting.test.ts`.
+- Verified against the real built TUI: the same real-provider failure captured in the original
+  UAT (Claude CLI stdin hang) now produces a `REPORT.md` that honestly says `FAILED`, `0/1 tasks
+  completed`, and `(No files were generated.)` — previously it claimed `COMPLETED`, `100/100`,
+  and listed files that never existed.
+
+---
+
 ## [v2.0.0-m29-workstream-a] - 2026-07-25
 
 ### Added (Milestone 29 — Production Readiness, Workstream A: Process Resilience & Crash Containment)

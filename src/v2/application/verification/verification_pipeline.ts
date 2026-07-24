@@ -76,12 +76,20 @@ export class VerificationPipeline extends EventEmitter {
     const allWarnings: string[] = [];
     let passedSteps = 0;
 
+    let skippedSteps = 0;
+
     for (const step of this.steps) {
       try {
         const stepRes = await step.execute(context, policy);
         stepResults.push(stepRes);
 
-        if (stepRes.passed) {
+        if (stepRes.skipped) {
+          // A skipped step (e.g. no build script, dependencies not installed) is neither a real
+          // pass nor a real failure — it must not inflate the quality score as if something was
+          // actually validated, and must not penalize a task for a check that genuinely wasn't
+          // applicable to it.
+          skippedSteps++;
+        } else if (stepRes.passed) {
           passedSteps++;
         } else {
           allErrors.push(...stepRes.errors);
@@ -102,7 +110,10 @@ export class VerificationPipeline extends EventEmitter {
     }
 
     const durationMs = Date.now() - startTime;
-    const qualityScore = Math.round((passedSteps / this.steps.length) * 100);
+    const scoredSteps = this.steps.length - skippedSteps;
+    // If every step was skipped, there is nothing to honestly score against — treat as neutral
+    // (100) rather than dividing by zero or fabricating a number that implies real checks ran.
+    const qualityScore = scoredSteps > 0 ? Math.round((passedSteps / scoredSteps) * 100) : 100;
     const success = qualityScore >= policy.minQualityScore && allErrors.length === 0;
     const status = success ? 'PASSED' : 'FAILED';
 

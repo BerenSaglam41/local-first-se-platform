@@ -43,73 +43,24 @@ export class ProjectLifecycleOrchestrator extends EventEmitter {
       this.activeProjects.delete(projectId);
       this.projectHistory.set(projectId, result);
 
+      const wsPathForState = context?.absolutePath || './.se_workspaces/ws-t-104';
+      result.state.workspacePath = wsPathForState;
+      result.state.conversationHistory = [
+        { turnId: `turn-${Date.now()}`, goal, timestamp: new Date().toISOString(), summary: result.summary },
+      ];
+
       if (result.success) {
         this.emitEvent('ProjectPlanningCompleted', projectId, { plan: result.state.missionPlan });
         this.emitEvent('MissionExecutionStarted', projectId, { plansCount: Object.keys(result.state.executionPlans).length });
         this.emitEvent('MissionExecutionCompleted', projectId, { resultsCount: Object.keys(result.state.executionResults).length });
         this.emitEvent('ProjectExecutionCompleted', projectId, { summary: result.summary });
-
-        const wsPathForState = context?.absolutePath || './.se_workspaces/ws-t-104';
-        result.state.workspacePath = wsPathForState;
-        result.state.conversationHistory = [
-          { turnId: `turn-${Date.now()}`, goal, timestamp: new Date().toISOString(), summary: result.summary },
-        ];
-
-        // Generate REPORT.md in workspace
-        try {
-          const wsPath = context?.absolutePath || './.se_workspaces/ws-t-104';
-          if (!fs.existsSync(wsPath)) {
-            fs.mkdirSync(wsPath, { recursive: true });
-          }
-
-          // Ensure physical sample workspace files exist
-          const srcDir = path.join(wsPath, 'src');
-          if (!fs.existsSync(srcDir)) fs.mkdirSync(srcDir, { recursive: true });
-          fs.writeFileSync(path.join(srcDir, 'server.ts'), '// REST API Server\nconsole.log("Server online");\n', 'utf8');
-          fs.writeFileSync(path.join(wsPath, 'package.json'), JSON.stringify({ name: 'rest-api', version: '1.0.0' }, null, 2), 'utf8');
-          fs.writeFileSync(path.join(wsPath, 'README.md'), `# Generated Project\n\n${goal}\n`, 'utf8');
-          const reportMd = `# SE-OS v2.0 Execution Report
-
-## Executive Summary
-- **Business Goal**: "${goal}"
-- **Project ID**: \`${projectId}\`
-- **Execution Status**: \`COMPLETED\`
-- **Started At**: ${startTime}
-- **Completed At**: ${new Date().toISOString()}
-
-## Mission DAG & Tasks Executed
-- Tasks Executed: ${Object.keys(result.reports).length} / 6
-- Task IDs: ${Object.keys(result.reports).join(', ')}
-
-## Worker Fleet Allocation
-- **Alice (Lead Architect)**: Architecture & System Specification
-- **Bob (Backend Engineer)**: Database Schema, Express REST Endpoints, Auth Middleware
-- **Charlie (QA Engineer)**: Jest Integration & Unit Verification Tests
-
-## Verification Results
-- **Quality Score**: 100 / 100 [PASSED]
-- **Workspace Check**: PASSED
-- **Build Validation**: PASSED (0 errors)
-- **TypeScript Check**: PASSED (0 errors)
-- **Unit Tests**: PASSED (6 / 6 passed)
-- **Lint Check**: PASSED
-
-## Generated Workspace Files
-- \`src/server.ts\`
-- \`src/controllers/user.controller.ts\`
-- \`src/middleware/auth.middleware.ts\`
-- \`tests/user_api.test.ts\`
-- \`package.json\`
-- \`README.md\`
-- \`REPORT.md\`
-`;
-          fs.writeFileSync(path.join(wsPath, 'REPORT.md'), reportMd, 'utf8');
-        } catch (e) {
-          // Non-fatal
-        }
       } else {
         this.emitEvent('ProjectExecutionFailed', projectId, { error: result.error || result.summary });
       }
+
+      // Materialize real output — success or failure — instead of only ever writing anything on
+      // success. A partially-failed run still did real work a user should be able to see.
+      this.materializeProjectOutput(projectId, goal, startTime, wsPathForState, result);
 
       return result;
     } catch (err: any) {
@@ -184,7 +135,13 @@ export class ProjectLifecycleOrchestrator extends EventEmitter {
         conversationHistory: [...priorState.conversationHistory, turn],
       };
 
-      const mergedResult: ProjectExecutionResult = { ...result, state: mergedState };
+      const mergedResult: ProjectExecutionResult = {
+        ...result,
+        state: mergedState,
+        // Honest, cumulative report data across every turn in this conversation — not just the
+        // latest one — so REPORT.md reflects the project's full real history.
+        reports: { ...(priorResult?.reports || {}), ...result.reports },
+      };
       this.projectHistory.set(projectId, mergedResult);
 
       this.emitEvent(
@@ -192,6 +149,8 @@ export class ProjectLifecycleOrchestrator extends EventEmitter {
         projectId,
         { summary: result.summary, continuation: true }
       );
+
+      this.materializeProjectOutput(projectId, followUpGoal, mergedState.startTime, priorState.workspacePath || './.se_workspaces/ws-t-104', mergedResult);
 
       return mergedResult;
     } catch (err: any) {
@@ -227,6 +186,131 @@ export class ProjectLifecycleOrchestrator extends EventEmitter {
 
   getStrategy(): IProjectLifecycleStrategy {
     return this.strategy;
+  }
+
+  /**
+   * Writes the real, final project output: copies every file a worker's task actually created
+   * or modified (from that task's real isolated workspace) into the user's chosen project
+   * directory, then writes a REPORT.md built entirely from real execution data — real task
+   * outcomes, real per-task summaries, real verification results, real generated file list.
+   *
+   * Replaces what used to be an unconditional block of hardcoded fake content (a canned
+   * `server.ts` stub, a fake package.json, and a REPORT.md claiming "100/100, 6/6 tests passed"
+   * regardless of what actually happened) — see M29.1 Fix #1 / ADR-0009. Runs on both success and
+   * failure: a partially-failed run still produced real work a user should be able to see and an
+   * honest account of what didn't happen and why.
+   */
+  private materializeProjectOutput(
+    projectId: string,
+    goal: string,
+    startTime: string,
+    wsPath: string,
+    result: ProjectExecutionResult
+  ): void {
+    try {
+      if (!fs.existsSync(wsPath)) {
+        fs.mkdirSync(wsPath, { recursive: true });
+      }
+
+      const reportEntries = Object.entries(result.reports || {}) as Array<[string, any]>;
+      const copiedFiles: string[] = [];
+      const copyErrors: string[] = [];
+
+      for (const [, report] of reportEntries) {
+        const artifacts: Array<{ type: string; path: string; content: string }> = report?.artifacts || [];
+        const taskWorkspace: string | undefined = report?.workspacePath;
+
+        for (const artifact of artifacts) {
+          if (artifact.type !== 'CREATED_FILE' && artifact.type !== 'MODIFIED_FILE') continue;
+
+          const relativePath = taskWorkspace ? path.relative(taskWorkspace, artifact.path) : path.basename(artifact.path);
+          // Never let a malformed/absolute artifact path escape the project directory.
+          if (!relativePath || relativePath.startsWith('..') || path.isAbsolute(relativePath)) continue;
+
+          const destPath = path.join(wsPath, relativePath);
+          try {
+            fs.mkdirSync(path.dirname(destPath), { recursive: true });
+            fs.writeFileSync(destPath, artifact.content, 'utf8');
+            copiedFiles.push(relativePath);
+          } catch (err: any) {
+            copyErrors.push(`${relativePath}: ${err.message}`);
+          }
+        }
+      }
+
+      const missionResults = Object.values(result.state.executionResults || {}) as any[];
+      const completedTasks = missionResults.reduce((sum, m) => sum + (m.state?.completedTaskIds?.length || 0), 0);
+      const failedTaskIds: string[] = missionResults.flatMap((m) => m.state?.failedTaskIds || []);
+      const totalTasks = reportEntries.length || missionResults.reduce((sum, m) => sum + (m.state?.completedTaskIds?.length || 0) + (m.state?.failedTaskIds?.length || 0), 0);
+
+      const taskLines = reportEntries.map(([taskId, report]) => {
+        const outcome = report?.status === 'COMPLETED' ? 'COMPLETED' : 'FAILED';
+        const verification = report?.verification;
+        const verificationNote = verification
+          ? ` — verification score ${verification.qualityScore}/100${verification.success ? '' : `, ${verification.errors.length} error(s)`}`
+          : '';
+        return `- **${taskId}** [${outcome}] Worker \`${report?.workerId || 'unknown'}\`: ${report?.summary || 'no summary available'}${verificationNote}`;
+      });
+
+      const stepAggregates = new Map<string, { passed: number; failed: number; skipped: number }>();
+      for (const [, report] of reportEntries) {
+        const stepResults = report?.verification?.stepResults;
+        if (!stepResults) continue;
+        for (const step of stepResults) {
+          const agg = stepAggregates.get(step.name) || { passed: 0, failed: 0, skipped: 0 };
+          if (step.skipped) agg.skipped++;
+          else if (step.passed) agg.passed++;
+          else agg.failed++;
+          stepAggregates.set(step.name, agg);
+        }
+      }
+      const verificationLines = Array.from(stepAggregates.entries()).map(([name, agg]) => {
+        const parts: string[] = [];
+        if (agg.passed > 0) parts.push(`${agg.passed} passed`);
+        if (agg.failed > 0) parts.push(`${agg.failed} failed`);
+        if (agg.skipped > 0) parts.push(`${agg.skipped} skipped`);
+        return `- **${name}**: ${parts.join(', ') || 'no data'}`;
+      });
+
+      const realStatus = result.state.status || (result.success ? 'COMPLETED' : 'FAILED');
+
+      const reportMd = [
+        '# SE-OS v2.0 Execution Report',
+        '',
+        '## Executive Summary',
+        `- **Business Goal**: "${goal}"`,
+        `- **Project ID**: \`${projectId}\``,
+        `- **Execution Status**: \`${realStatus}\``,
+        `- **Started At**: ${startTime}`,
+        `- **Completed At**: ${result.state.endTime || new Date().toISOString()}`,
+        result.error ? `- **Error**: ${result.error}` : undefined,
+        '',
+        '## Mission Tasks',
+        `- Tasks Completed: ${completedTasks} / ${totalTasks}`,
+        failedTaskIds.length > 0 ? `- Failed Task IDs: ${failedTaskIds.join(', ')}` : undefined,
+        '',
+        taskLines.length > 0 ? taskLines.join('\n') : '(No tasks were executed.)',
+        '',
+        '## Verification',
+        verificationLines.length > 0 ? verificationLines.join('\n') : '(No verification data available — no task reached the verification stage.)',
+        '',
+        '## Generated Files',
+        // Multiple tasks can legitimately write to the same relative path (a later task revising
+        // an earlier one's file); de-duplicated here to reflect what's actually on disk at the
+        // end, not one list entry per write.
+        copiedFiles.length > 0
+          ? Array.from(new Set(copiedFiles)).map((f) => `- \`${f}\``).join('\n')
+          : '(No files were generated.)',
+        copyErrors.length > 0 ? `\n## File Copy Errors\n${copyErrors.map((e) => `- ${e}`).join('\n')}` : undefined,
+        '',
+      ]
+        .filter((line) => line !== undefined)
+        .join('\n');
+
+      fs.writeFileSync(path.join(wsPath, 'REPORT.md'), reportMd, 'utf8');
+    } catch (e) {
+      // A broken report generator must never crash real project execution itself.
+    }
   }
 
   private emitEvent(eventType: string, aggregateId: string, payload: any): void {

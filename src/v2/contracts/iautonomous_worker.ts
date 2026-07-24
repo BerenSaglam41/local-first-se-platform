@@ -64,6 +64,10 @@ export interface ExecutionReport {
   filesCreated: string[];
   filesModified: string[];
   reasoningResponse?: any;
+  /** The real isolated workspace this task actually ran in — lets downstream consumers (e.g.
+   * ProjectLifecycleOrchestrator materializing final project output) correctly re-root each
+   * artifact's absolute path into a relative one, instead of guessing from string patterns. */
+  workspacePath?: string;
 }
 
 export interface WorkerExecutionResult {

@@ -53,8 +53,12 @@ describe('SE-OS v2.0 Milestone 24 — Post-Execution Experience & Workspace Expl
     const reportContent = fs.readFileSync(reportPath, 'utf8');
     expect(reportContent).toContain('# SE-OS v2.0 Execution Report');
     expect(reportContent).toContain(goal);
-    expect(reportContent).toContain('100 / 100 [PASSED]');
-    expect(reportContent).toContain('Alice (Lead Architect)');
+    expect(reportContent).toContain('**Execution Status**: `COMPLETED`');
+    // Real per-task data, not a fabricated static worker roster — the actual assigned worker id
+    // for at least one real executed task must appear.
+    expect(reportContent).toMatch(/Worker `emp-\w+`/);
+    expect(reportContent).toContain('## Verification');
+    expect(reportContent).toContain('## Generated Files');
 
     await kernel.shutdown();
   });
