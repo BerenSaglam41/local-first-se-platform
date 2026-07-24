@@ -31,6 +31,8 @@ import { WorkspaceExecutionService } from '../application/worker/workspace_execu
 import { WorkerExecutionEngine } from '../application/worker/worker_execution_engine';
 import { MissionDecomposer } from '../application/missions/mission_decomposer';
 import { TaskAssignmentEngine } from '../application/missions/task_assignment_engine';
+import { DefaultWorkerDispatcher } from '../application/missions/worker_dispatcher';
+import { MissionExecutionOrchestrator } from '../application/missions/mission_execution_orchestrator';
 import * as fs from 'fs';
 
 export class Kernel implements IKernel {
@@ -75,6 +77,8 @@ export class Kernel implements IKernel {
     const autonomousPlanner = new AutonomousPlanner(eventStore, sharedMemory, policyEngine, departmentOrchestrator, undefined, reasoningCoordinator);
     const workspaceExecutionService = new WorkspaceExecutionService(eventStore);
     const workerExecutionEngine = new WorkerExecutionEngine(workspaceEngine, workspaceExecutionService, reasoningCoordinator, eventStore);
+    const workerDispatcher = new DefaultWorkerDispatcher(workerExecutionEngine);
+    const missionExecutionOrchestrator = new MissionExecutionOrchestrator(workerDispatcher, eventStore);
 
     supervisor.startSupervision();
 
@@ -103,6 +107,8 @@ export class Kernel implements IKernel {
     this.container.registerSingleton<WorkerExecutionEngine>('WorkerExecutionEngine', workerExecutionEngine);
     this.container.registerSingleton<MissionDecomposer>('MissionDecomposer', missionDecomposer);
     this.container.registerSingleton<TaskAssignmentEngine>('TaskAssignmentEngine', taskAssignmentEngine);
+    this.container.registerSingleton<DefaultWorkerDispatcher>('WorkerDispatcher', workerDispatcher);
+    this.container.registerSingleton<MissionExecutionOrchestrator>('MissionExecutionOrchestrator', missionExecutionOrchestrator);
 
     if (fs.existsSync(configPath)) {
       try {
@@ -252,6 +258,14 @@ export class Kernel implements IKernel {
 
   getTaskAssignmentEngine(): TaskAssignmentEngine {
     return this.container.resolve<TaskAssignmentEngine>('TaskAssignmentEngine');
+  }
+
+  getWorkerDispatcher(): DefaultWorkerDispatcher {
+    return this.container.resolve<DefaultWorkerDispatcher>('WorkerDispatcher');
+  }
+
+  getMissionExecutionOrchestrator(): MissionExecutionOrchestrator {
+    return this.container.resolve<MissionExecutionOrchestrator>('MissionExecutionOrchestrator');
   }
 
   getTelemetry(): TelemetryService {

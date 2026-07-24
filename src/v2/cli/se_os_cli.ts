@@ -646,9 +646,49 @@ export class SeOsCli {
     }
   }
 
+  // ─── Mission Execution Orchestrator CLI ─────────────────────────
+
+  async missionExecute(missionId?: string): Promise<void> {
+    let targetMissionId = missionId;
+    let plan = targetMissionId ? this.kernel.getMissionEngine().getExecutionPlan(targetMissionId) : undefined;
+
+    if (!plan) {
+      console.log(`[No existing plan for mission '${missionId || 'new'}'. Decomposing & planning new mission...]`);
+      const res = await this.kernel.getMissionEngine().decomposeAndPlanMission('REST API User Management', 'Create a REST API for User Management');
+      targetMissionId = res.mission.id;
+      plan = res.plan;
+    }
+
+    console.log(`[Executing Mission Execution Plan for mission '${targetMissionId}']...`);
+    const result = await this.kernel.getMissionExecutionOrchestrator().executeMissionPlan(plan);
+    console.log(`✔ Mission Execution Finished (Success: ${result.success} | Status: ${result.state.status})`);
+    console.log(`  - Completed Tasks (${result.state.completedTaskIds.length}): [${result.state.completedTaskIds.join(', ')}]`);
+    console.log(`  - Failed Tasks (${result.state.failedTaskIds.length}): [${result.state.failedTaskIds.join(', ')}]`);
+  }
+
+  async missionExecutionStatus(missionId: string): Promise<void> {
+    const state = this.kernel.getMissionExecutionOrchestrator().getState(missionId);
+    if (!state) {
+      console.log(`✖ No execution state found for mission '${missionId}'`);
+      return;
+    }
+    console.log(`MISSION EXECUTION STATUS ('${missionId}'):`);
+    console.log(JSON.stringify(state, null, 2));
+  }
+
+  async missionCancel(missionId: string): Promise<void> {
+    const cancelled = this.kernel.getMissionExecutionOrchestrator().cancelExecution(missionId);
+    if (cancelled) {
+      console.log(`✔ Mission execution cancelled for '${missionId}'`);
+    } else {
+      console.log(`✖ Could not cancel mission '${missionId}' (Not actively running)`);
+    }
+  }
+
   async shutdown(): Promise<void> {
     console.log(`[SE-OS Kernel] Initiating workforce shutdown...`);
     await this.kernel.shutdown();
+
 
     console.log(`✔ Company workforce shutdown complete.`);
   }
