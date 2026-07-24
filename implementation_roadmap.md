@@ -28,6 +28,9 @@
                     │
                     ▼
 [Milestone 6: Context Compiler & Workspace Engine] ──> COMPLETED
+                    │
+                    ▼
+[Milestone 7: Git Worktree Isolation & Multi-Workspace Execution] ──> COMPLETED
 ```
 
 ---
@@ -137,6 +140,19 @@
 - **Acceptance Criteria**: AST symbol extraction (functions, classes, interfaces, imports), Context Package generation, token budget enforcement, cache invalidation, isolated workspace creation/destruction.
 
 ---
+
+### Milestone 7: Git Worktree Isolation & Multi-Workspace Execution (COMPLETED)
+- **Objective**: Implement Git Worktree isolation manager, dedicated branch generation (`feature/mission-<id>/<workerId>`), worker filesystem isolation (`.se_worktrees/worker-<id>/`), merge metadata preparation, and CLI worktree/branch commands.
+- **Deliverables**:
+  - `src/v2/contracts/igit_worktree.ts`
+  - `src/v2/infrastructure/workspace/git_worktree_manager.ts`
+  - `tests/v2/milestone7_worktree_isolation.test.ts`
+- **Dependencies**: Milestone 6
+- **Complexity**: High
+- **Acceptance Criteria**: Independent worker branch creation, filesystem isolation, worker attach/detach, merge metadata generation, worktree cleanup, SQLite event persistence.
+
+---
+
 
 
 

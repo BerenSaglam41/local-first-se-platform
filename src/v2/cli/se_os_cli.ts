@@ -79,6 +79,48 @@ export class SeOsCli {
     console.log(`✔ Detached plugin from worker '${workerId}'`);
   }
 
+  async worktreeList(): Promise<void> {
+    const manager = this.kernel.getWorkspaceEngine().getGitWorktreeManager();
+    const list = manager.listWorktrees();
+    console.log(`GIT WORKTREES (${list.length}):`);
+    for (const wt of list) {
+      console.log(`  - [${wt.worktreeId}] Worker: ${wt.workerId} | Branch: ${wt.branchName} | Status: ${wt.status}`);
+    }
+  }
+
+  async worktreeCreate(workerId: string, missionId: string = 'm01'): Promise<void> {
+    const manager = this.kernel.getWorkspaceEngine().getGitWorktreeManager();
+    const wt = manager.createWorktree(workerId, missionId);
+    console.log(`✔ Created Worktree '${wt.worktreeId}' on branch '${wt.branchName}' at ${wt.worktreePath}`);
+  }
+
+  async worktreeDestroy(worktreeId: string): Promise<void> {
+    const manager = this.kernel.getWorkspaceEngine().getGitWorktreeManager();
+    const ok = manager.removeWorktree(worktreeId);
+    console.log(ok ? `✔ Destroyed worktree ${worktreeId}` : `✖ Failed to destroy worktree ${worktreeId}`);
+  }
+
+  async worktreeAttach(worktreeId: string, workerId: string): Promise<void> {
+    const manager = this.kernel.getWorkspaceEngine().getGitWorktreeManager();
+    const ok = manager.attachWorker(worktreeId, workerId);
+    console.log(ok ? `✔ Attached worker ${workerId} to worktree ${worktreeId}` : `✖ Failed to attach worker to ${worktreeId}`);
+  }
+
+  async worktreeDetach(worktreeId: string): Promise<void> {
+    const manager = this.kernel.getWorkspaceEngine().getGitWorktreeManager();
+    const ok = manager.detachWorker(worktreeId);
+    console.log(ok ? `✔ Detached worktree ${worktreeId}` : `✖ Failed to detach worktree ${worktreeId}`);
+  }
+
+  async branches(): Promise<void> {
+    const manager = this.kernel.getWorkspaceEngine().getGitWorktreeManager();
+    const list = manager.listWorktrees();
+    console.log(`ACTIVE WORKFORCE BRANCHES (${list.length}):`);
+    for (const wt of list) {
+      console.log(`  - ${wt.branchName} (Worker: ${wt.workerId})`);
+    }
+  }
+
   async missionCreate(title: string, goal: string): Promise<void> {
     const m = this.kernel.getMissionEngine().createMission(title, goal);
     console.log(`✔ Created Mission '${m.id}': ${m.title}`);
