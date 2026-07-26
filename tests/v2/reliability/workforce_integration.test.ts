@@ -64,6 +64,23 @@ describe('workforce end-to-end invariants', () => {
     expect(recorder.calls[0].cwd).toBe(root);
   });
 
+  it('passes an isolated worker CLI profile without exposing or sharing credentials', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'se-cli-profile-'));
+    tempRoots.push(root);
+    const recorder = createSpawnRecorder();
+    const plugin = createFakeClaudeCodeRuntimePlugin({ recorder });
+    await plugin.initialize();
+
+    await plugin.execute({
+      workerId: 'emp-bob', prompt: 'check profile', workspacePath: root, timeoutMs: 1000,
+      environment: { HOME: path.join(root, 'bob-profile'), CLAUDE_CONFIG_DIR: path.join(root, 'bob-profile', 'claude'), SEOS_WORKER_PROFILE: path.join(root, 'bob-profile') },
+    });
+
+    expect(recorder.calls[0].env?.HOME).toBe(path.join(root, 'bob-profile'));
+    expect(recorder.calls[0].env?.CLAUDE_CONFIG_DIR).toContain('bob-profile/claude');
+    expect(recorder.calls[0].env?.OPENAI_API_KEY).toBeUndefined();
+  });
+
   it('uses one resumable Claude chat per project worker', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'se-cli-session-'));
     tempRoots.push(root);

@@ -10,6 +10,8 @@ export interface ReasoningContext {
    * level continuity across a project's conversation turns, not just prompt-stuffed history. */
   conversationSessionId?: string;
   resumeConversation?: boolean;
+  /** Environment inherited by the provider CLI for this worker's local account/profile. */
+  environment?: Record<string, string>;
 }
 
 export interface ReasoningRequest {

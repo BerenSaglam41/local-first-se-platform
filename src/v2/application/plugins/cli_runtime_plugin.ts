@@ -132,7 +132,7 @@ export class CliRuntimePlugin extends EventEmitter implements IRuntimePlugin {
     try {
       const result = await runCliProcess(this.spawner, executablePath, args, timeoutMs, onOutputChunk, (child) =>
         this.activeChildProcesses.set(workerId, child)
-      , { cwd: taskPayload.workspacePath });
+      , { cwd: taskPayload.workspacePath, env: taskPayload.environment ? { ...process.env, ...taskPayload.environment } : undefined });
       this.activeChildProcesses.delete(workerId);
 
       this.emitEvent(result.success ? 'RuntimeExecutionCompleted' : 'RuntimeExecutionFailed', this.manifest.id, {

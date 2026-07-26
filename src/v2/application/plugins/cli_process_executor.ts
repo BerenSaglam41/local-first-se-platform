@@ -3,6 +3,7 @@ import { ChildProcess, spawn as realSpawn } from 'child_process';
 /** Injectable so callers (and tests) can replace the real OS process spawn with a fake one. */
 export interface CliSpawnOptions {
   cwd?: string;
+  env?: NodeJS.ProcessEnv;
 }
 
 export type CliProcessSpawner = (executable: string, args: string[], options?: CliSpawnOptions) => ChildProcess;
@@ -21,7 +22,7 @@ export const defaultCliProcessSpawner: CliProcessSpawner = (executable, args, op
   // confusing "no stdin data received in 3s, proceeding without it" warning into every real
   // execution's terminal log — noise that looks like a real problem but isn't (see M29.1 Fix #3 /
   // ADR-0012). Closing it outright removes the warning at the source instead of just tolerating it.
-  realSpawn(executable, args, { detached: true, cwd: options?.cwd, stdio: ['ignore', 'pipe', 'pipe'] });
+  realSpawn(executable, args, { detached: true, cwd: options?.cwd, env: options?.env, stdio: ['ignore', 'pipe', 'pipe'] });
 
 /**
  * Kills a real spawned process AND every descendant it forked, not just the single process

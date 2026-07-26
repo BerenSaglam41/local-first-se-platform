@@ -20,6 +20,7 @@ export class TaskScheduler {
       goal: task.description || task.title,
       workspacePath: policy.workspacePath,
       projectId: policy.projectId,
+      cliProfilePath: (policy as any).cliProfilePath,
       contextPackage: policy.contextPackage,
       policy: {
         maxDurationMs: policy.timeoutMs,

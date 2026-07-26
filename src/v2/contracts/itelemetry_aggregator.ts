@@ -26,6 +26,7 @@ export interface TelemetryWorkerInfo {
   name: string;
   role: string;
   skills: string[];
+  cliProfilePath?: string;
   departmentId: string;
   status: 'IDLE' | 'BUSY';
   currentTaskId?: string;

@@ -51,6 +51,7 @@ CEO tek komut verir. 4–5 worker görevleri planlar, uygun AI provider ile çal
 - [x] Execution’a bağlı collaboration/review: task ownership ve QA review request execution başarılarından üretiliyor.
 - [x] Verification shared workspace’te çalışıyor; unavailable provider açık FAILED sebebi veriyor.
 - [x] Project history persistence: `.se_workspaces/project_history.json` ile restart sonrası geçmiş/continuation yükleniyor.
+- [x] Worker başına CLI profil izolasyonu: `cliProfilePath` tanımlandığında CLI child process kendi `HOME`, `CLAUDE_CONFIG_DIR` ve `CODEX_HOME` değerleriyle başlıyor.
 - [ ] Gerçek git worktree + SQLite project repository: sonraki sertleştirme adımı.
 
 ## Kullanım notu
@@ -97,6 +98,30 @@ Bu sistem API key/API tabanlı olmayacak. Her worker, kullanıcının lokal maki
 - Antigravity → kuruluysa kendi CLI komutuyla
 
 CLI process’i ortak project workspace’inde (`cwd`) başlatılır. Böylece üyelik/auth bilgisi lokal CLI’dan gelir; SE-OS API key saklamaz.
+
+### Worker başına ayrı CLI hesabı
+
+Varsayılan davranış geriye dönük uyumluluk için ortak host login’idir. Ayrı hesap kullanmak istediğinde
+`company.json` içindeki ilgili çalışana `cliProfilePath` eklenir:
+
+```json
+{
+  "employees": [
+    {
+      "id": "emp-alice",
+      "name": "Alice",
+      "role": "Lead Architect",
+      "department": "Architecture",
+      "skills": ["architecture"],
+      "cliProfilePath": "/Users/me/.se-os/profiles/alice"
+    }
+  ]
+}
+```
+
+Bu klasörler otomatik login edilmez. Her profil için provider’ın kendi CLI’sı ile bir kez login yapılmalıdır.
+Örneğin Claude için `HOME` ve `CLAUDE_CONFIG_DIR`, Codex için `HOME` ve `CODEX_HOME` bu profile yönlendirilir.
+SE-OS hiçbir token veya şifreyi okumaz/kaydetmez.
 
 SE-OS login ekranı değildir: provider binary’sini ve sürümünü kontrol eder, sonra aynı OS kullanıcısıyla CLI process’i başlatır. Gerçek hesap login’i provider’ın kendi CLI’sında yapılır. Bu nedenle provider ekranındaki “installed” durumu “authenticated” anlamına gelmez; ilk gerçek task provider’ın kendi auth hatasını döndürebilir.
 

@@ -14,6 +14,7 @@ export interface MissionExecutionPolicy {
   workspacePath?: string;
   projectId?: string;
   contextPackage?: Record<string, any>;
+  cliProfilePath?: string;
 }
 
 export interface MissionExecutionState {

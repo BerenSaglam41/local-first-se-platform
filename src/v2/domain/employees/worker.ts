@@ -58,6 +58,8 @@ export class Worker {
   department: DepartmentType;
   /** Explicit capabilities used for assignment; role text is descriptive only. */
   skills: string[];
+  /** Optional isolated local CLI profile. Undefined intentionally means shared host login. */
+  cliProfilePath?: string;
 
   processState: WorkerProcessState = 'STARTING';
   process: WorkerProcessMetrics = {
@@ -74,12 +76,13 @@ export class Worker {
   tokenUsageTotal = 0;
   history: WorkerTaskHistoryEntry[] = [];
 
-  constructor(id: string, name: string, role: string, department: DepartmentType, skills: string[] = []) {
+  constructor(id: string, name: string, role: string, department: DepartmentType, skills: string[] = [], cliProfilePath?: string) {
     this.id = id;
     this.name = name;
     this.role = role;
     this.department = department;
     this.skills = [...new Set(skills.map((skill) => skill.trim().toLowerCase()).filter(Boolean))];
+    this.cliProfilePath = cliProfilePath;
   }
 
   get isBusy(): boolean {

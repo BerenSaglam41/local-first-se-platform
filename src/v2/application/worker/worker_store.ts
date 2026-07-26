@@ -27,8 +27,8 @@ export function normalizeDepartment(input: string): DepartmentType {
 export class WorkerStore {
   private workers = new Map<string, Worker>();
 
-  register(id: string, name: string, role: string, departmentInput: string, skills: string[] = []): Worker {
-    const worker = new Worker(id, name, role, normalizeDepartment(departmentInput), skills);
+  register(id: string, name: string, role: string, departmentInput: string, skills: string[] = [], cliProfilePath?: string): Worker {
+    const worker = new Worker(id, name, role, normalizeDepartment(departmentInput), skills, cliProfilePath);
     this.workers.set(id, worker);
     return worker;
   }
@@ -60,5 +60,12 @@ export class WorkerStore {
 
   has(id: string): boolean {
     return this.workers.has(id);
+  }
+
+  setCliProfilePath(id: string, cliProfilePath?: string): boolean {
+    const worker = this.workers.get(id);
+    if (!worker) return false;
+    worker.cliProfilePath = cliProfilePath;
+    return true;
   }
 }

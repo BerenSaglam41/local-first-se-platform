@@ -84,6 +84,7 @@ export interface FakeClaudeSpawnCall {
   executable: string;
   args: string[];
   cwd?: string;
+  env?: NodeJS.ProcessEnv;
 }
 
 export interface FakeClaudeSpawnRecorder {
@@ -134,7 +135,7 @@ export function createFakeClaudeSpawner(options: {
   const { stdout = DEFAULT_FAKE_CLAUDE_STDOUT, stderr = '', exitCode = 0, recorder } = options;
 
   return (executable: string, args: string[], spawnOptions?: CliSpawnOptions) => {
-    if (recorder) recorder.calls.push({ executable, args, cwd: spawnOptions?.cwd });
+    if (recorder) recorder.calls.push({ executable, args, cwd: spawnOptions?.cwd, env: spawnOptions?.env });
     const child = new FakeChildProcess();
     // Defer so .on()/.stdout.on() listeners registered right after spawn() returns are attached
     // first — mirrors how a real child process emits data asynchronously.

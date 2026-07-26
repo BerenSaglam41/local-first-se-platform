@@ -29,6 +29,8 @@ export interface WorkerExecutionRequest {
   projectId?: string;
   conversationSessionId?: string;
   resumeConversation?: boolean;
+  /** Optional per-worker CLI profile root. When omitted, the host user's normal CLI account is used. */
+  cliProfilePath?: string;
   policy?: ExecutionPolicy;
 }
 

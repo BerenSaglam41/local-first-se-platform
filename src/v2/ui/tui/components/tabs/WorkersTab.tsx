@@ -82,6 +82,7 @@ export const WorkersTab: React.FC<WorkersTabProps> = ({ snapshot, kernel }) => {
             <Text color="white">Role: <Text bold color="cyan">{selectedWorker.role}</Text></Text>
             <Text color="white">Skills: <Text color="cyan">{selectedWorker.skills.join(', ') || '(none configured)'}</Text></Text>
             <Text color="white">Assigned AI Provider: <Text bold color="yellow">{selectedWorker.assignedProvider}</Text></Text>
+            <Text color="white">CLI Account: <Text color={selectedWorker.cliProfilePath ? 'green' : 'gray'}>{selectedWorker.cliProfilePath || 'Shared host login'}</Text></Text>
             <Text color="white">Status: <Text color={selectedWorker.status === 'BUSY' ? 'green' : 'gray'}>[{selectedWorker.status}]</Text></Text>
             <Text color="white">Workspace: <Text bold color="cyan">{selectedWorker.workingDirectory || '(idle — no active workspace)'}</Text></Text>
             <Text color="white">Process: <Text color="gray">{selectedWorker.terminalPane}</Text></Text>

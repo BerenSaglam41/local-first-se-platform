@@ -95,6 +95,7 @@ export class TelemetryAggregator implements ITelemetryAggregator {
         name: w.name,
         role: w.role,
         skills: w.skills,
+        cliProfilePath: w.cliProfilePath,
         departmentId: `dept-${w.department.toLowerCase()}`,
         status: execution ? 'BUSY' : 'IDLE',
         currentTaskId: execution?.taskId,

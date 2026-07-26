@@ -134,6 +134,7 @@ export class ReasoningCoordinator extends EventEmitter {
         timeoutMs,
         conversationSessionId: request.context?.conversationSessionId,
         resumeConversation: request.context?.resumeConversation,
+        environment: request.context?.environment,
         onOutputChunk: (_stream: 'stdout' | 'stderr', chunk: string) =>
           this.terminalLog?.append(request.workerId, chunk),
       });

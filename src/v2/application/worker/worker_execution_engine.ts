@@ -17,6 +17,7 @@ import { createHash } from 'crypto';
 import { CollaborationEngine } from '../collaboration/collaboration_engine';
 import { WorkerStore } from './worker_store';
 import { ISharedMemory } from '../../contracts/ishared_memory';
+import * as path from 'path';
 
 /**
  * Delegates all reasoning to ReasoningCoordinator, which is also where the assigned worker's
@@ -61,6 +62,8 @@ export class WorkerExecutionEngine extends EventEmitter {
       // 2. Invoke Reasoning Pipeline
       status = 'REASONING';
       const memoryScopeId = request.projectId || request.missionId;
+      const worker = this.workerStore?.get(request.workerId);
+      const runtimeEnvironment = this.buildRuntimeEnvironment(worker?.cliProfilePath || request.cliProfilePath);
       const recentMemory = this.sharedMemory
         ? await this.sharedMemory.listMemory('PROJECT', memoryScopeId, 12)
         : [];
@@ -78,6 +81,7 @@ export class WorkerExecutionEngine extends EventEmitter {
           resumeConversation: request.resumeConversation ?? this.hasSession(request),
           conversationSessionId: request.conversationSessionId || this.getSessionId(request),
           constraints: [`Execute strictly within workspace '${workspacePath}'`],
+          environment: runtimeEnvironment,
         },
         // Wires the caller's real configured timeout (see MissionExecutionPolicy.timeoutMs via
         // TaskScheduler) through to the actual reasoning call instead of silently discarding it
@@ -120,6 +124,7 @@ export class WorkerExecutionEngine extends EventEmitter {
               resumeConversation: this.hasSession({ ...request, workerId: recipient.id }),
               conversationSessionId: this.getSessionId({ ...request, workerId: recipient.id }),
               constraints: [`Read the shared workspace at '${workspacePath}' if needed. Return a concise technical answer.`],
+              environment: this.buildRuntimeEnvironment(recipient.cliProfilePath),
             },
             timeoutMs: request.policy?.maxDurationMs,
           });
@@ -148,6 +153,7 @@ export class WorkerExecutionEngine extends EventEmitter {
               resumeConversation: true,
               conversationSessionId: this.getSessionId(request),
               constraints: [`Execute strictly within workspace '${workspacePath}'`],
+              environment: runtimeEnvironment,
             },
             timeoutMs: request.policy?.maxDurationMs,
           });
@@ -328,6 +334,17 @@ export class WorkerExecutionEngine extends EventEmitter {
       questions.push({ id: `q-${Date.now()}-${questions.length}`, senderWorkerId, capability, question });
     }
     return questions;
+  }
+
+  private buildRuntimeEnvironment(profilePath?: string): Record<string, string> | undefined {
+    if (!profilePath) return undefined;
+    const root = path.resolve(profilePath);
+    return {
+      SEOS_WORKER_PROFILE: root,
+      HOME: root,
+      CLAUDE_CONFIG_DIR: path.join(root, 'claude'),
+      CODEX_HOME: path.join(root, 'codex'),
+    };
   }
 
   private getSessionId(request: WorkerExecutionRequest): string {
