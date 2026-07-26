@@ -33,7 +33,15 @@ export class WorkerAwareRuntimeSelectionStrategy implements IRuntimeSelectionStr
     const assignedPluginId = this.workerStore.get(request.workerId)?.assignedProviderId;
 
     if (assignedPluginId) {
-      return this.pluginSystemManager.getPlugin(assignedPluginId);
+      const plugin = this.pluginSystemManager.getPlugin(assignedPluginId);
+      if (!plugin) {
+        // Explicit assignment to an unregistered plugin ID fails honestly per M28 spec
+        return undefined;
+      }
+      const isCliAvailable = (plugin as any).getDetectionResult?.()?.available ?? true;
+      if (isCliAvailable) {
+        return plugin;
+      }
     }
 
     const defaultPlugin = this.pluginSystemManager.getPlugin(this.defaultPluginId);

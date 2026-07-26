@@ -47,25 +47,32 @@ export const TuiApp: React.FC<TuiAppProps> = ({ telemetryAggregator, kernel, onE
   useInput((input: string, key: any) => {
     const char = input.toLowerCase();
 
-    if (currentScreen === 'PROJECT_EXECUTION' && activeTab !== 'CHAT') {
-      if (char === '1') setActiveTab('DASHBOARD');
-      else if (char === '2') setActiveTab('WORKERS');
-      else if (char === '3') setActiveTab('WORKSPACE');
-      else if (char === '4') setActiveTab('TERMINALS');
-      else if (char === '5') setActiveTab('CHAT');
-      else if (char === '6') setActiveTab('VERIFICATION');
-      else if (char === '7') setActiveTab('LOGS');
-      else if (key.tab) {
-        const order: SeOsTabType[] = ['DASHBOARD', 'WORKERS', 'WORKSPACE', 'TERMINALS', 'CHAT', 'VERIFICATION', 'LOGS'];
-        const idx = order.indexOf(activeTab);
-        setActiveTab(order[(idx + 1) % order.length]);
-      } else if (char === 'v') {
-        const wsPath = snapshot.verification?.workspacePath || './.se_workspaces/ws-t-104';
-        exec(`code "${wsPath}"`, () => {});
-      } else if (char === 'f') {
-        const wsPath = snapshot.verification?.workspacePath || './.se_workspaces/ws-t-104';
-        const cmd = process.platform === 'darwin' ? `open "${wsPath}"` : `explorer "${wsPath}"`;
-        exec(cmd, () => {});
+    if (currentScreen === 'PROJECT_EXECUTION') {
+      if (key.escape) {
+        setActiveTab('DASHBOARD');
+        return;
+      }
+
+      if (activeTab !== 'CHAT') {
+        if (char === '1') setActiveTab('DASHBOARD');
+        else if (char === '2') setActiveTab('WORKERS');
+        else if (char === '3') setActiveTab('WORKSPACE');
+        else if (char === '4') setActiveTab('TERMINALS');
+        else if (char === '5') setActiveTab('CHAT');
+        else if (char === '6') setActiveTab('VERIFICATION');
+        else if (char === '7') setActiveTab('LOGS');
+        else if (key.tab) {
+          const order: SeOsTabType[] = ['DASHBOARD', 'WORKERS', 'WORKSPACE', 'TERMINALS', 'CHAT', 'VERIFICATION', 'LOGS'];
+          const idx = order.indexOf(activeTab);
+          setActiveTab(order[(idx + 1) % order.length]);
+        } else if (char === 'v') {
+          const wsPath = snapshot.verification?.workspacePath || './.se_workspaces/ws-t-104';
+          exec(`code "${wsPath}"`, () => {});
+        } else if (char === 'f') {
+          const wsPath = snapshot.verification?.workspacePath || './.se_workspaces/ws-t-104';
+          const cmd = process.platform === 'darwin' ? `open "${wsPath}"` : `explorer "${wsPath}"`;
+          exec(cmd, () => {});
+        }
       }
     }
 

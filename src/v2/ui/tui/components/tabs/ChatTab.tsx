@@ -85,7 +85,7 @@ export const ChatTab: React.FC<ChatTabProps> = ({ snapshot, onSubmitChatGoal }) 
         <TextInput value={inputVal} onChange={setInputVal} onSubmit={handleSend} placeholder="e.g. Add JWT Authentication middleware..." />
       </Box>
       <Box marginTop={0}>
-        <Text color="gray">* Project continues evolving in the same workspace. Never restarts from scratch.</Text>
+        <Text color="gray">* Press [ESC] to exit Chat and return to Dashboard tabs | Press [ENTER] to send prompt.</Text>
       </Box>
     </Box>
   );
