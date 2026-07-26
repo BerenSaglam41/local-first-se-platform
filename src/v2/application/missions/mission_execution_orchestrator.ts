@@ -20,6 +20,8 @@ export class MissionExecutionOrchestrator extends EventEmitter {
   private verificationPipeline: VerificationPipeline;
   private plans = new Map<string, MissionExecutionPlan>();
   private reportsByMission = new Map<string, Record<string, any>>();
+  private reviewRepairAttempts = new Map<string, number>();
+  private readonly maxReviewRepairAttempts = 3;
   private defaultPolicy: MissionExecutionPolicy = {
     maxParallelWorkers: 3,
     maxTaskRetries: 2,
@@ -326,6 +328,21 @@ export class MissionExecutionOrchestrator extends EventEmitter {
     const state = this.states.get(missionId);
     if (!plan || !task || !state) return;
 
+    const repairKey = `${missionId}:${taskId}`;
+    const attempts = (this.reviewRepairAttempts.get(repairKey) || 0) + 1;
+    this.reviewRepairAttempts.set(repairKey, attempts);
+    if (attempts > this.maxReviewRepairAttempts) {
+      task.status = 'FAILED';
+      if (!state.failedTaskIds.includes(taskId)) state.failedTaskIds.push(taskId);
+      this.emitEvent('TaskAutoRepairBlocked', taskId, {
+        missionId,
+        reviewerId,
+        attempts: attempts - 1,
+        reason: `Maximum review repair attempts (${this.maxReviewRepairAttempts}) reached`,
+      });
+      return;
+    }
+
     const scheduler = new TaskScheduler(this.dispatcher);
     const result = await scheduler.scheduleTask(task, missionId, {
       ...this.defaultPolicy,
@@ -349,7 +366,7 @@ export class MissionExecutionOrchestrator extends EventEmitter {
       if (!state.completedTaskIds.includes(taskId)) state.completedTaskIds.push(taskId);
       state.failedTaskIds = state.failedTaskIds.filter((id) => id !== taskId);
       await this.collaborationEngine?.approveReview(taskId, reviewerId, missionId, 'Auto-repair passed verification.');
-      this.emitEvent('TaskAutoRepaired', taskId, { missionId, reviewerId, feedback });
+      this.emitEvent('TaskAutoRepaired', taskId, { missionId, reviewerId, feedback, attempt: attempts });
     } else {
       task.status = 'FAILED';
       await this.persistTask(task, missionId, plan.projectId, 'FAILED');
