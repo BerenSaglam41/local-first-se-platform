@@ -12,6 +12,7 @@
     "tui": "node dist/v2/cli/bin.js",
     "se-os": "node dist/v2/cli/bin.js",
     "test": "jest --runInBand && jest --config jest.vfs.config.cjs",
+    "test:live": "node scripts/live_provider_smoke.mjs",
     "test:coverage": "jest --coverage --runInBand && jest --config jest.vfs.config.cjs --coverage"
   },
   "keywords": [],
