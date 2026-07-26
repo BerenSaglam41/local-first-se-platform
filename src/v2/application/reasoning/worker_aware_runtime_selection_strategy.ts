@@ -42,4 +42,16 @@ export class WorkerAwareRuntimeSelectionStrategy implements IRuntimeSelectionStr
     const available = this.pluginSystemManager.getPluginsByCapability(capability);
     return available[0];
   }
+
+  /** Real effect for the TUI's "Select Active Runtime Provider" screen (see M29.1 Fix #11 /
+   * ADR-0011): changes which plugin unassigned/virtual callers (e.g. AutonomousPlanner's
+   * 'emp-planner', or any future worker created with no explicit provider) fall back to. Never
+   * overrides a real worker's own per-role assignment — that stays worker-owned, per ADR-0005. */
+  setDefaultPluginId(pluginId: string): void {
+    this.defaultPluginId = pluginId;
+  }
+
+  getDefaultPluginId(): string {
+    return this.defaultPluginId;
+  }
 }

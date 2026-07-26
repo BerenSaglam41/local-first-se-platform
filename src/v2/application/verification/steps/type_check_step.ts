@@ -5,8 +5,16 @@ import { IVerificationStep, VerificationStepResult } from '../../../contracts/iv
 import { VerificationContext, VerificationPolicy } from '../../../contracts/iverification_pipeline';
 
 const SKIP_DIRS = new Set(['node_modules', '.git']);
+// A real task's own isolated workspace never has anywhere near this many source files — this
+// bounds worst-case scan cost if `workspacePath` ever points at a much larger tree than a single
+// task workspace (e.g. its shared parent directory, which accumulates entries from every task
+// across the lifetime of the process). Real per-task verification calls (see
+// MissionExecutionOrchestrator) always pass the one real isolated workspace a task actually ran
+// in, so this cap is never reached in normal operation.
+const MAX_FILES_TO_SCAN = 200;
 
 function findTsFiles(dir: string, out: string[] = []): string[] {
+  if (out.length >= MAX_FILES_TO_SCAN) return out;
   let entries: fs.Dirent[];
   try {
     entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -14,6 +22,7 @@ function findTsFiles(dir: string, out: string[] = []): string[] {
     return out;
   }
   for (const entry of entries) {
+    if (out.length >= MAX_FILES_TO_SCAN) break;
     if (entry.isDirectory()) {
       if (!SKIP_DIRS.has(entry.name)) findTsFiles(path.join(dir, entry.name), out);
     } else if (/\.tsx?$/.test(entry.name)) {

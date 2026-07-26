@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v2.0.0-m29.1-fix11] - 2026-07-26
+
+### Fixed (Milestone 29.1, Fix #11: Real Effect for the Runtime Selection Screen)
+Discovered while discussing a future feature idea: the TUI's startup "Select Active Runtime
+Provider" screen only ever updated a telemetry display field — selecting Mock, Claude, Codex, or
+Gemini there had zero effect on real task routing. See
+`docs/adr/ADR-0011-real-effect-runtime-selection-screen.md`.
+
+- `WorkerAwareRuntimeSelectionStrategy`'s fallback default (used by any reasoning call whose
+  worker has no explicit assignment, e.g. `AutonomousPlanner`'s planning-level reasoning) is now
+  mutable via `setDefaultPluginId()`.
+- New `Kernel.setDefaultRuntimeProvider()` updates both real routing and the telemetry display in
+  one call; the TUI now calls it. No real worker's own per-role assignment is affected (ADR-0005
+  preserved).
+- New tests: `tests/v2/reliability/runtime_selection_real_effect.test.ts`.
+- Verified against the real built TUI: selecting "Mock" with a deliberately ambiguous goal (to
+  force the planner's real AI-fallback path) produced a real, fresh log entry showing the
+  planning call genuinely routed through Mock, while a real worker's own task in the same run
+  correctly kept using her real assigned Claude plugin.
+
+### Fixed (bonus: intermittent full-suite flake in `TypeCheckStep`, self-inflicted by Fix #1)
+Bounded `TypeCheckStep`'s recursive `.ts` file scan (`MAX_FILES_TO_SCAN`) after a full-suite
+`npm test` run flaked once. Root cause: `TypeCheckStep` (Fix #1) had no bound on how many files
+it would recursively scan, and one existing test passes `workspacePath: './.se_workspaces'` —
+the real, shared parent directory that accumulates entries from every task across the process's
+lifetime (10,000+ real files by the time of this fix). Under full-suite CPU contention this
+occasionally took long enough to exceed Jest's default per-test timeout. A real task's own
+isolated workspace (what this step is actually meant to check) never has anywhere near that many
+files, so the bound has no effect on real usage. Verified with 5/5 clean consecutive full-suite
+runs after the fix, versus an observed failure within 3 runs before it.
+
+---
+
 ## [v2.0.0-m29.1-fix2] - 2026-07-25
 
 ### Fixed (Milestone 29.1, Fix #2: Real Process-Group Cancellation on Interrupt)

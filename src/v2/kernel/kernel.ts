@@ -131,6 +131,7 @@ export class Kernel implements IKernel {
     this.container.registerSingleton<AutonomousPlanner>('AutonomousPlanner', autonomousPlanner);
     this.container.registerSingleton<RuntimePluginSystemManager>('RuntimePluginSystemManager', runtimePluginSystemManager);
     this.container.registerSingleton<ReasoningCoordinator>('ReasoningCoordinator', reasoningCoordinator);
+    this.container.registerSingleton<WorkerAwareRuntimeSelectionStrategy>('WorkerAwareRuntimeSelectionStrategy', selectionStrategy);
     this.container.registerSingleton<WorkerTerminalLog>('WorkerTerminalLog', workerTerminalLog);
     this.container.registerSingleton<TmuxIntegration>('TmuxIntegration', tmuxIntegration);
     this.container.registerSingleton<WorkspaceExecutionService>('WorkspaceExecutionService', workspaceExecutionService);
@@ -302,6 +303,18 @@ export class Kernel implements IKernel {
 
   getReasoningCoordinator(): ReasoningCoordinator {
     return this.container.resolve<ReasoningCoordinator>('ReasoningCoordinator');
+  }
+
+  /**
+   * The one real effect of the TUI's "Select Active Runtime Provider" screen (see M29.1 Fix #11 /
+   * ADR-0011): changes which plugin unassigned/virtual reasoning callers fall back to, and
+   * updates the telemetry display to match. Deliberately does NOT touch any real worker's own
+   * per-role provider assignment — that remains worker-owned (see ADR-0005); this only changes
+   * the fallback for callers with no assignment of their own.
+   */
+  setDefaultRuntimeProvider(providerId: string): void {
+    this.container.resolve<WorkerAwareRuntimeSelectionStrategy>('WorkerAwareRuntimeSelectionStrategy').setDefaultPluginId(providerId);
+    this.container.resolve<TelemetryAggregator>('TelemetryAggregator').setActiveRuntimeProvider(providerId);
   }
 
   getWorkerTerminalLog(): WorkerTerminalLog {

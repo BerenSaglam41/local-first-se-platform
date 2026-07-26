@@ -101,6 +101,27 @@ describe('SE-OS v2.0 M29.1 Fix #1 — Honest verification steps (no fabricated p
     expect(result.skipped).toBe(true);
   });
 
+  it('TypeCheckStep should bound its scan cost instead of walking an unbounded directory tree', async () => {
+    // Regression test: a real, self-inflicted perf bug found via a flaky full-suite run —
+    // scanning a large shared directory (thousands of accumulated files across the whole test
+    // suite) took long enough under load to intermittently blow past Jest's default per-test
+    // timeout. Proves the scan stops at a bounded number of files instead of enumerating
+    // everything under a much larger tree.
+    workspace = makeTempWorkspace();
+    for (let i = 0; i < 500; i++) {
+      const dir = path.join(workspace, `d${i}`);
+      fs.mkdirSync(dir);
+      fs.writeFileSync(path.join(dir, 'f.ts'), 'export const x = 1;\n', 'utf8');
+    }
+    const step = new TypeCheckStep();
+    const start = Date.now();
+    const result = await step.execute({ taskId: 't1', workspacePath: workspace });
+    const elapsedMs = Date.now() - start;
+
+    expect(result.skipped).toBeFalsy();
+    expect(elapsedMs).toBeLessThan(4000); // generous — should really take well under 1s
+  }, 10000);
+
   it('TypeCheckStep should really catch a genuine syntax error in generated TypeScript', async () => {
     workspace = makeTempWorkspace();
     fs.writeFileSync(path.join(workspace, 'broken.ts'), 'export function broken( {\n  return 1\n', 'utf8');

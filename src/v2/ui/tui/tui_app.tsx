@@ -117,7 +117,14 @@ export const TuiApp: React.FC<TuiAppProps> = ({ telemetryAggregator, kernel, onE
         <RuntimeSelector
           snapshot={snapshot}
           onSelectRuntime={(providerId: string) => {
-            telemetryAggregator.setActiveRuntimeProvider(providerId);
+            // Real effect (see M29.1 Fix #11 / ADR-0011): this used to only update the display —
+            // it now genuinely changes which provider unassigned/planning-level reasoning calls
+            // fall back to, via the kernel, not just the telemetry snapshot's "active" label.
+            if (kernel) {
+              kernel.setDefaultRuntimeProvider(providerId);
+            } else {
+              telemetryAggregator.setActiveRuntimeProvider(providerId);
+            }
             navigate('MAIN_MENU');
           }}
         />
