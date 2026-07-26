@@ -115,7 +115,7 @@ export const ChatTab: React.FC<ChatTabProps> = ({ snapshot, onSubmitChatGoal, ke
         <TextInput value={inputVal} onChange={setInputVal} onSubmit={handleSend} placeholder={submitting ? 'Current project is running...' : 'e.g. Add JWT Authentication middleware...'} />
       </Box>
       <Box marginTop={0}>
-        <Text color="gray">Enter sends the command  ·  Esc returns to Overview  {submitting ? '·  The team is working…' : ''}</Text>
+        <Text color="gray">Enter = send goal  ·  1 = overview  ·  2 = team  ·  4 = terminals  ·  6 = checks  {submitting ? '·  The team is working…' : ''}</Text>
       </Box>
     </Box>
   );
