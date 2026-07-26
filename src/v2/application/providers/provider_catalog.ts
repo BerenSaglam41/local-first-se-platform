@@ -20,34 +20,49 @@ export const PROVIDER_CATALOG: CliRuntimePluginConfig[] = [
     name: 'Codex CLI',
     command: 'codex',
     envVarName: 'CODEX_PATH',
-    buildArgs: (prompt) => ['exec', prompt],
+    buildArgs: (prompt) => {
+      const flags = process.env.CODEX_FLAGS ? process.env.CODEX_FLAGS.trim().split(/\s+/) : ['exec'];
+      return [...flags, prompt];
+    },
   },
   {
     id: 'plugin-gemini-cli',
     name: 'Gemini CLI',
     command: 'gemini',
     envVarName: 'GEMINI_PATH',
-    buildArgs: (prompt) => ['-p', prompt],
+    buildArgs: (prompt) => {
+      const flags = process.env.GEMINI_FLAGS ? process.env.GEMINI_FLAGS.trim().split(/\s+/) : ['-p'];
+      return [...flags, prompt];
+    },
   },
   {
     id: 'plugin-antigravity',
     name: 'Antigravity AI Engine',
     command: 'antigravity',
     envVarName: 'ANTIGRAVITY_PATH',
-    buildArgs: (prompt) => ['-p', prompt], // unverified convention
+    buildArgs: (prompt) => {
+      const flags = process.env.ANTIGRAVITY_FLAGS ? process.env.ANTIGRAVITY_FLAGS.trim().split(/\s+/) : ['-p'];
+      return [...flags, prompt];
+    },
   },
   {
     id: 'plugin-openai-cli',
     name: 'OpenAI CLI',
     command: 'openai',
     envVarName: 'OPENAI_CLI_PATH',
-    buildArgs: (prompt) => ['-p', prompt], // unverified convention
+    buildArgs: (prompt) => {
+      const flags = process.env.OPENAI_FLAGS ? process.env.OPENAI_FLAGS.trim().split(/\s+/) : ['-p'];
+      return [...flags, prompt];
+    },
   },
   {
     id: 'plugin-ollama',
     name: 'Ollama Local Runtime',
     command: 'ollama',
     envVarName: 'OLLAMA_PATH',
-    buildArgs: (prompt) => ['run', process.env.OLLAMA_MODEL || 'llama3', prompt],
+    buildArgs: (prompt) => {
+      const flags = process.env.OLLAMA_FLAGS ? process.env.OLLAMA_FLAGS.trim().split(/\s+/) : ['run', process.env.OLLAMA_MODEL || 'llama3'];
+      return [...flags, prompt];
+    },
   },
 ];

@@ -41,11 +41,11 @@ export class ClaudeProvider implements IProvider {
     this.activeHandle = undefined;
 
     return {
-      success: result.exitCode === 0,
+      success: result?.exitCode === 0,
       output: output.trim(),
       error: errorOutput ? errorOutput.trim() : undefined,
-      exitCode: result.exitCode,
-      durationMs: result.metrics.durationMs || 0,
+      exitCode: result?.exitCode ?? -1,
+      durationMs: result?.metrics?.durationMs || 0,
     };
   }
 

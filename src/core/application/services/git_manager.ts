@@ -31,7 +31,7 @@ export class GitManager {
     });
     const result = await handle.wait();
     return {
-      exitCode: result.exitCode ?? -1,
+      exitCode: result?.exitCode ?? -1,
       stdout: stdout.trim(),
       stderr: stderr.trim(),
     };

@@ -5,6 +5,14 @@ All notable changes to the Local-First AI Software Engineering Operating System 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v2.0.0-m29.1-fix12] - 2026-07-26
+
+### Added & Enhanced (Multi-Provider Execution Verification & Dynamic CLI Flags)
+- Verified end-to-end multi-provider workforce execution for `plugin-codex-cli` (Bob) and `plugin-antigravity` (Diana).
+- Enhanced `provider_catalog.ts` to support dynamic CLI flag overrides via environment variables (`CODEX_FLAGS`, `ANTIGRAVITY_FLAGS`, `GEMINI_FLAGS`, `OPENAI_FLAGS`, `OLLAMA_FLAGS`).
+- Added end-to-end multi-provider verification test suite: `tests/v2/test_codex_antigravity_execution.test.ts`.
+- Preserved null-safety guards across `git_manager.ts`, `verification_runner.ts`, `claude_provider.ts`, and `mock_provider.ts`.
+
 ---
 
 ## [v2.0.0-m29.1-fix3] - 2026-07-26

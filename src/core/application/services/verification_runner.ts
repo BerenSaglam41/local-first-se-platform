@@ -71,15 +71,15 @@ export class VerificationRunner {
       });
 
       const result = await handle.wait();
-      const stepSuccess = result.exitCode === 0;
+      const stepSuccess = result?.exitCode === 0;
 
       steps.push({
         command: cmd,
         success: stepSuccess,
-        exitCode: result.exitCode,
+        exitCode: result?.exitCode ?? -1,
         stdout: stdout.trim(),
         stderr: stderr.trim(),
-        durationMs: result.metrics.durationMs || 0,
+        durationMs: result?.metrics?.durationMs || 0,
       });
 
       if (cmd.includes('build')) {
