@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import { EventEmitter } from 'events';
 import { WorktreeInfo, MergeMetadata } from '../../contracts/igit_worktree';
 import { IEventStore } from '../../contracts/ievent_store';
@@ -8,12 +8,18 @@ import { IEventStore } from '../../contracts/ievent_store';
 export class GitWorktreeManager extends EventEmitter {
   private worktrees = new Map<string, WorktreeInfo>();
   private baseDir: string;
+  private repositoryPath?: string;
+  private baseBranch = 'master';
 
-  constructor(baseDir: string = './.se_worktrees', private eventStore?: IEventStore) {
+  constructor(baseDir: string = './.se_worktrees', private eventStore?: IEventStore, repositoryPath?: string) {
     super();
     this.baseDir = path.resolve(baseDir);
     if (!fs.existsSync(this.baseDir)) {
       fs.mkdirSync(this.baseDir, { recursive: true });
+    }
+    this.repositoryPath = this.resolveRepositoryPath(repositoryPath);
+    if (this.repositoryPath) {
+      this.baseBranch = this.git(['symbolic-ref', '--short', 'HEAD']).trim() || 'master';
     }
   }
 
@@ -22,19 +28,23 @@ export class GitWorktreeManager extends EventEmitter {
     const branchName = `feature/${missionId}/${workerId}`;
     const worktreePath = path.join(this.baseDir, `worker-${workerId}`);
 
-    if (fs.existsSync(worktreePath)) {
-      this.removeWorktree(worktreeId);
-    }
+    if (fs.existsSync(worktreePath)) fs.rmSync(worktreePath, { recursive: true, force: true });
 
-    try {
-      execSync(`git branch -D ${branchName} 2>/dev/null || true`);
-      execSync(`git checkout -b ${branchName} 2>/dev/null || true`);
-      execSync(`git checkout master 2>/dev/null || git checkout main 2>/dev/null || true`);
-    } catch (err) {
-      // Safe fallback if git branches are not configured in test sandbox
-    }
-
-    if (!fs.existsSync(worktreePath)) {
+    let isGitWorktree = false;
+    if (this.repositoryPath) {
+      try {
+        // Test runs and interrupted processes can remove a worktree directory without asking
+        // Git first. Prune those stale administrative entries before reusing the branch name.
+        this.git(['worktree', 'prune'], true);
+        this.git(['branch', '-D', branchName], true);
+        this.git(['worktree', 'add', '--force', '-b', branchName, worktreePath, this.baseBranch]);
+        isGitWorktree = true;
+      } catch (error: any) {
+        this.emitEvent('WorktreeCreationFailed', worktreeId, { workerId, missionId, error: error.message });
+        throw new Error(`Could not create Git worktree for ${workerId}: ${error.message}`);
+      }
+    } else {
+      // Explicitly honest fallback for a directory that is not a Git repository.
       fs.mkdirSync(worktreePath, { recursive: true });
     }
 
@@ -80,9 +90,12 @@ export class GitWorktreeManager extends EventEmitter {
     const targetPath = info ? info.worktreePath : null;
 
     if (info) {
-      if (fs.existsSync(info.worktreePath)) {
+      if (this.repositoryPath && fs.existsSync(info.worktreePath)) {
+        this.git(['worktree', 'remove', '--force', info.worktreePath], true);
+      } else if (fs.existsSync(info.worktreePath)) {
         fs.rmSync(info.worktreePath, { recursive: true, force: true });
       }
+      if (this.repositoryPath) this.git(['branch', '-D', info.branchName], true);
       this.worktrees.delete(worktreeId);
       this.emitEvent('WorktreeDestroyed', worktreeId, {});
       this.emitEvent('BranchDeleted', info.branchName, {});
@@ -107,15 +120,49 @@ export class GitWorktreeManager extends EventEmitter {
     const info = this.worktrees.get(worktreeId);
     if (!info) return null;
 
+    let changedFiles: string[] = [];
+    let commitCount = 0;
+    if (this.repositoryPath && fs.existsSync(info.worktreePath)) {
+      changedFiles = this.git(['diff', '--name-only', `${this.baseBranch}...${info.branchName}`], true)
+        .split('\n').map((line) => line.trim()).filter(Boolean);
+      commitCount = Number(this.git(['rev-list', '--count', `${this.baseBranch}..${info.branchName}`], true).trim()) || 0;
+    }
     return {
       worktreeId,
       workerId: info.workerId,
       branchName: info.branchName,
-      changedFiles: ['src/main.ts'],
+      changedFiles,
       changedSymbols: ['AuthModule'],
-      commitCount: 1,
+      commitCount,
       patchSummary: `Patch created from branch ${info.branchName} for mission ${info.missionId}`,
     };
+  }
+
+  isGitRepository(): boolean {
+    return !!this.repositoryPath;
+  }
+
+  getRepositoryPath(): string | undefined {
+    return this.repositoryPath;
+  }
+
+  private resolveRepositoryPath(candidate?: string): string | undefined {
+    try {
+      const cwd = candidate ? path.resolve(candidate) : process.cwd();
+      return this.git(['rev-parse', '--show-toplevel'], true, cwd).trim() || undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  private git(args: string[], allowFailure = false, cwd = this.repositoryPath || process.cwd()): string {
+    try {
+      return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', allowFailure ? 'pipe' : 'pipe'] });
+    } catch (error: any) {
+      if (allowFailure) return '';
+      const detail = error?.stderr?.toString?.() || error?.message || 'unknown git error';
+      throw new Error(detail.trim());
+    }
   }
 
   private emitEvent(eventType: string, aggregateId: string, payload: any): void {
