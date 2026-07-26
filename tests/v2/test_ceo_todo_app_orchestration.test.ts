@@ -48,10 +48,10 @@ describe('SE-OS v2.0 — Human CEO Project Execution: Todo List Web Application'
         new FakeCliDetector({ available: true, executablePath: '/fake/bin/gemini', version: 'gemini 1.0.0' })
       ),
       new CliRuntimePlugin(
-        { id: 'plugin-antigravity', name: 'Antigravity AI Engine', command: 'antigravity', buildArgs: (p) => ['-p', p] },
+        { id: 'plugin-antigravity', name: 'Antigravity CLI', command: 'agy', buildArgs: (p) => ['-p', p] },
         kernel.getEventStore(),
         createFakeClaudeSpawner({ recorder: antigravityRecorder }),
-        new FakeCliDetector({ available: true, executablePath: '/fake/bin/antigravity', version: 'antigravity 2.0.0' })
+        new FakeCliDetector({ available: true, executablePath: '/fake/bin/agy', version: 'agy 1.1.3' })
       ),
     ]);
 

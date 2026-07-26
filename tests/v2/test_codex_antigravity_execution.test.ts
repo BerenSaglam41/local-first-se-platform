@@ -36,10 +36,10 @@ describe('SE-OS v2.0 — Codex & Antigravity Provider Workforce Execution Test',
         new FakeCliDetector({ available: true, executablePath: '/fake/bin/codex', version: 'codex 1.0.0' })
       ),
       new CliRuntimePlugin(
-        { id: 'plugin-antigravity', name: 'Antigravity AI Engine', command: 'antigravity', buildArgs: (p) => ['-p', p] },
+        { id: 'plugin-antigravity', name: 'Antigravity CLI', command: 'agy', buildArgs: (p) => ['-p', p] },
         kernel.getEventStore(),
         createFakeClaudeSpawner({ recorder: antigravityRecorder }),
-        new FakeCliDetector({ available: true, executablePath: '/fake/bin/antigravity', version: 'antigravity 2.1.0' })
+        new FakeCliDetector({ available: true, executablePath: '/fake/bin/agy', version: 'agy 1.1.3' })
       ),
       new CliRuntimePlugin(
         { id: 'plugin-claude-code', name: 'Claude Code CLI', command: 'claude', buildArgs: (p) => ['-p', p] },
@@ -87,7 +87,7 @@ describe('SE-OS v2.0 — Codex & Antigravity Provider Workforce Execution Test',
 
     // Verify actual arguments passed to Antigravity CLI
     const antigravityCall = antigravityRecorder.calls[0];
-    expect(antigravityCall.executable).toBe('/fake/bin/antigravity');
+    expect(antigravityCall.executable).toBe('/fake/bin/agy');
     expect(antigravityCall.args[0]).toBe('-p');
 
     console.log(`✔ Codex CLI spawned calls: ${codexRecorder.calls.length}`);

@@ -29,7 +29,9 @@ const DEFAULT_ROLE_PROVIDER_MAP: Array<{ match: RegExp; pluginId: string }> = [
   { match: /frontend/i, pluginId: 'plugin-claude-code' },
   { match: /qa|quality/i, pluginId: 'plugin-gemini-cli' },
   { match: /doc/i, pluginId: 'plugin-antigravity' },
-  { match: /research/i, pluginId: 'plugin-openai-cli' },
+  // There is no separate OpenAI CLI: Codex is OpenAI's supported terminal surface. Research
+  // therefore uses Claude unless the CEO explicitly assigns another installed provider.
+  { match: /research/i, pluginId: 'plugin-claude-code' },
 ];
 const DEFAULT_FALLBACK_PROVIDER_ID = 'plugin-claude-code';
 

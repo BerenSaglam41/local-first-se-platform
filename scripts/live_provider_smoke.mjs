@@ -4,9 +4,7 @@ const providers = [
   { id: 'claude', version: ['--version'], auth: ['auth', 'status'] },
   { id: 'codex', version: ['--version'], auth: ['login', 'status'] },
   { id: 'gemini', version: ['--version'] },
-  { id: 'antigravity', version: ['--version'] },
-  { id: 'openai', version: ['--version'] },
-  { id: 'ollama', version: ['--version'] },
+  { id: 'agy', version: ['--version'] },
 ];
 
 function run(command, args) {

@@ -56,7 +56,7 @@ describe('SE-OS v2.0 Milestone 28 — Multi-Provider Workforce Suite', () => {
     expect(workerStore.get('emp-bob')?.assignedProviderId).toBe('plugin-codex-cli');
     expect(workerStore.get('emp-charlie')?.assignedProviderId).toBe('plugin-gemini-cli');
     expect(workerStore.get('emp-diana')?.assignedProviderId).toBe('plugin-antigravity');
-    expect(workerStore.get('emp-eve')?.assignedProviderId).toBe('plugin-openai-cli');
+    expect(workerStore.get('emp-eve')?.assignedProviderId).toBe('plugin-claude-code');
 
     // Different workers must not resolve to the same shared plugin instance path.
     expect(workerStore.get('emp-bob')?.assignedProviderId).not.toBe(workerStore.get('emp-charlie')?.assignedProviderId);
