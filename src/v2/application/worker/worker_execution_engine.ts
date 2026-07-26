@@ -12,6 +12,7 @@ import { WorkspaceEngine } from '../workspace/workspace_engine';
 import { WorkspaceExecutionService } from './workspace_execution_service';
 import { ReasoningCoordinator } from '../reasoning/reasoning_coordinator';
 import { ExecutionResponseParser } from './execution_response_parser';
+import { JsonWorkerMessageProtocol } from './worker_message_protocol';
 import { IEventStore } from '../../contracts/ievent_store';
 import { createHash } from 'crypto';
 import { CollaborationEngine } from '../collaboration/collaboration_engine';
@@ -27,6 +28,7 @@ import * as path from 'path';
 export class WorkerExecutionEngine extends EventEmitter {
   private reports = new Map<string, ExecutionReport>();
   private responseParser: ExecutionResponseParser;
+  private messageProtocol = new JsonWorkerMessageProtocol();
   private providerSessions = new Map<string, string>();
 
   constructor(
@@ -320,18 +322,21 @@ export class WorkerExecutionEngine extends EventEmitter {
       '(use the comment syntax appropriate to the file type, e.g. "# FILE: path" for YAML/shell, "<!-- FILE: path -->" for Markdown/HTML).',
       'Paths must be relative to the workspace root — never absolute, never containing "..".',
       'If you need another team member, add a comment line in your response exactly as: // QUESTION_FOR: capability | your concise question. Continue with the best safe implementation while waiting for the answer.',
+      'For machine-readable coordination, you may instead emit a fenced ```json block such as {"type":"QUESTION","capability":"backend","question":"..."}.',
     ].join('\n');
   }
 
   private extractQuestions(responseText: string, senderWorkerId: string): WorkerQuestion[] {
-    const questions: WorkerQuestion[] = [];
+    const questions: WorkerQuestion[] = this.messageProtocol.parseQuestions(responseText, senderWorkerId);
     const pattern = /(?:\/\/|#|<!--)\s*QUESTION_FOR:\s*([^|\r\n]+?)\s*\|\s*([^\r\n]+?)(?:\s*-->)?\s*$/gim;
     let match: RegExpExecArray | null;
     while ((match = pattern.exec(responseText)) !== null) {
       const capability = match[1].trim();
       const question = match[2].trim();
       if (!capability || !question) continue;
-      questions.push({ id: `q-${Date.now()}-${questions.length}`, senderWorkerId, capability, question });
+      if (!questions.some((existing) => existing.capability === capability && existing.question === question)) {
+        questions.push({ id: `q-${Date.now()}-${questions.length}`, senderWorkerId, capability, question });
+      }
     }
     return questions;
   }

@@ -174,6 +174,32 @@ describe('workforce end-to-end invariants', () => {
     expect(calls[2].goal).toContain('PostgreSQL with migrations.');
   });
 
+  it('routes JSON worker question envelopes in addition to legacy comment syntax', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'se-worker-json-'));
+    tempRoots.push(root);
+    const store = new WorkerStore();
+    store.register('emp-alice', 'Alice', 'Lead Architect', 'Architecture', ['architecture']);
+    store.register('emp-bob', 'Bob', 'Backend Engineer', 'Backend', ['backend']);
+    const collaboration = new CollaborationEngine();
+    const calls: string[] = [];
+    const coordinator = {
+      requestReasoning: async (request: any) => {
+        calls.push(request.workerId);
+        if (request.workerId === 'emp-alice' && calls.length === 1) {
+          return { success: true, response: { responseText: '```json\n{"type":"QUESTION","capability":"backend","question":"Which database should we use?"}\n```' } };
+        }
+        if (request.workerId === 'emp-bob') return { success: true, response: { responseText: 'Use PostgreSQL.' } };
+        return { success: true, response: { responseText: '```ts\n// FILE: answer.txt\nPostgreSQL\n```' } };
+      },
+    };
+    const engine = new WorkerExecutionEngine(new WorkspaceEngine(path.join(root, 'staging')), new WorkspaceExecutionService(), coordinator as any, undefined, undefined, collaboration, store);
+    const result = await engine.executeTask({ executionId: 'exec-json', taskId: 'task-json', missionId: 'mission-json', workerId: 'emp-alice', goal: 'Choose a database', workspacePath: root });
+
+    expect(result.success).toBe(true);
+    expect(calls).toEqual(['emp-alice', 'emp-bob', 'emp-alice']);
+    expect(collaboration.getInbox('emp-bob')[0]?.messageType).toBe('QUESTION');
+  });
+
   it('persists project memory across shared-memory reopen', async () => {
     const dbPath = path.join(os.tmpdir(), `se-memory-${Date.now()}.db`);
     const first = new SqliteSharedMemory(dbPath);

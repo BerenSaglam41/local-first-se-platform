@@ -101,4 +101,25 @@ describe('SE-OS v2.0 M29.1 Fix #3 — realistic reasoning timeouts (no premature
 
     expect(dispatchedRequests[0].policy.maxDurationMs).toBe(defaultTimeoutMs);
   });
+
+  it('serializes requests for one worker while allowing other workers to run independently', async () => {
+    const active = new Set<string>();
+    let overlap = false;
+    const engine = {
+      executeTask: async (request: any) => {
+        if (active.has(request.workerId)) overlap = true;
+        active.add(request.workerId);
+        await new Promise((resolve) => setTimeout(resolve, request.delay));
+        active.delete(request.workerId);
+        return { success: true, report: { status: 'COMPLETED' } };
+      },
+    };
+    const dispatcher = new DefaultWorkerDispatcher(engine as any);
+    await Promise.all([
+      dispatcher.dispatchWorkerTask({ workerId: 'alice', delay: 20 } as any),
+      dispatcher.dispatchWorkerTask({ workerId: 'alice', delay: 1 } as any),
+      dispatcher.dispatchWorkerTask({ workerId: 'bob', delay: 1 } as any),
+    ]);
+    expect(overlap).toBe(false);
+  });
 });
