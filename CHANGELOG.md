@@ -13,6 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added end-to-end multi-provider verification test suite: `tests/v2/test_codex_antigravity_execution.test.ts`.
 - Preserved null-safety guards across `git_manager.ts`, `verification_runner.ts`, `claude_provider.ts`, and `mock_provider.ts`.
 
+## [v2.0.0-m29.1-fix14] - 2026-07-26
+
+### Added & Fixed (Provider Selection UI Clarity & Auth Setup Guide)
+- **Runtime Selector UI:** Replaced confusing `(Active: YES/NO)` labels with explicit `[PRIMARY SELECTED RUNTIME]` vs `[Press ENTER to set as Primary]` indicators.
+- **Provider Auth Guidance:** Added inline setup guide in `RuntimeSelector.tsx` and `StartupScreen.tsx` explaining how to authenticate Google Gemini CLI (via `GEMINI_API_KEY` or `gcloud`/`gemini auth login`), Claude (`ANTHROPIC_API_KEY`), Codex (`OPENAI_API_KEY`), and Antigravity.
+
 ---
 
 ## [v2.0.0-m29.1-fix3] - 2026-07-26

@@ -34,7 +34,7 @@ export const StartupScreen: React.FC<StartupScreenProps> = ({ snapshot, onContin
             {provider.installed ? (
               <Text color="green">[✓] {provider.name} ({provider.version}) - Ready</Text>
             ) : (
-              <Text color="gray">[✗] {provider.name} - Not Found</Text>
+              <Text color="gray">[✗] {provider.name} - Not Found (Add binary to PATH or set API Key in .env)</Text>
             )}
           </Box>
         ))}
