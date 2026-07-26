@@ -61,6 +61,14 @@ export class Kernel implements IKernel {
     await sharedMemory.connect();
     const workforceRepository = new SqliteWorkforceRepository(dbPath);
     await workforceRepository.connect();
+    // A process restart cannot safely resume a live provider call, so mark stale executing
+    // projects as recoverable instead of leaving the database claiming they are still running.
+    // The project history remains available and the next CEO command can continue that project.
+    for (const project of await workforceRepository.listProjects()) {
+      if (project.status === 'PLANNING' || project.status === 'EXECUTING') {
+        await workforceRepository.upsertProject({ ...project, status: 'INTERRUPTED', updatedAt: new Date().toISOString() });
+      }
+    }
 
     const companyBus = new InMemoryCompanyBus();
     const scheduler = new SchedulerSkeleton();

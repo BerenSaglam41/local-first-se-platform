@@ -10,9 +10,10 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onSelectOption }) => {
   const items = [
     { label: '1. New Project (Autonomous Business Goal Execution)', value: 'NEW_PROJECT' },
     { label: '2. Resume Active Project', value: 'RESUME' },
-    { label: '3. Open Workspace Explorer', value: 'WORKSPACE' },
-    { label: '4. Settings & Execution Policy', value: 'SETTINGS' },
-    { label: '5. Exit SE-OS', value: 'EXIT' },
+    { label: '3. Switch Project', value: 'SELECT_PROJECT' },
+    { label: '4. Open Workspace Explorer', value: 'WORKSPACE' },
+    { label: '5. Settings & Execution Policy', value: 'SETTINGS' },
+    { label: '6. Exit SE-OS', value: 'EXIT' },
   ];
 
   return (

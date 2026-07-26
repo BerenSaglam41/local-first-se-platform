@@ -132,7 +132,8 @@ export class GitWorktreeManager extends EventEmitter {
       workerId: info.workerId,
       branchName: info.branchName,
       changedFiles,
-      changedSymbols: ['AuthModule'],
+      // Symbol-level analysis belongs to a language-service layer; do not fabricate a name here.
+      changedSymbols: [],
       commitCount,
       patchSummary: `Patch created from branch ${info.branchName} for mission ${info.missionId}`,
     };

@@ -52,6 +52,20 @@ export class SqliteWorkforceRepository implements WorkforceRepository {
       [record.taskId, record.projectId, record.missionId, record.workerId, record.status, record.title, record.updatedAt]);
   }
 
+  async listProjects(): Promise<WorkforceProjectRecord[]> {
+    const db = await this.database();
+    const rows = await db.all<any[]>('SELECT * FROM workforce_projects_v2 ORDER BY updated_at DESC');
+    return rows.map((row) => ({ projectId: row.project_id, goal: row.goal, status: row.status, workspacePath: row.workspace_path, updatedAt: row.updated_at }));
+  }
+
+  async listTasks(projectId?: string): Promise<WorkforceTaskRecord[]> {
+    const db = await this.database();
+    const rows = projectId
+      ? await db.all<any[]>('SELECT * FROM workforce_tasks_v2 WHERE project_id = ? ORDER BY updated_at DESC', [projectId])
+      : await db.all<any[]>('SELECT * FROM workforce_tasks_v2 ORDER BY updated_at DESC');
+    return rows.map((row) => ({ taskId: row.task_id, projectId: row.project_id, missionId: row.mission_id, workerId: row.worker_id, status: row.status, title: row.title, updatedAt: row.updated_at }));
+  }
+
   async recordMessage(message: CollaborationMessage): Promise<void> {
     const db = await this.database();
     await db.run(`INSERT OR REPLACE INTO workforce_messages_v2

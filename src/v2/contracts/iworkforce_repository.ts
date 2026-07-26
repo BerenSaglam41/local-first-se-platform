@@ -21,6 +21,8 @@ export interface WorkforceTaskRecord {
 export interface WorkforceRepository {
   upsertProject(record: WorkforceProjectRecord): Promise<void>;
   upsertTask(record: WorkforceTaskRecord): Promise<void>;
+  listProjects(): Promise<WorkforceProjectRecord[]>;
+  listTasks(projectId?: string): Promise<WorkforceTaskRecord[]>;
   recordMessage(message: CollaborationMessage): Promise<void>;
   listMessages(recipientId?: string, limit?: number): Promise<CollaborationMessage[]>;
   close(): Promise<void>;

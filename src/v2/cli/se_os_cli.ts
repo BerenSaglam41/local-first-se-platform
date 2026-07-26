@@ -792,7 +792,7 @@ export class SeOsCli {
     console.log(`[SE-OS Mission Control Dashboard]`);
     console.log(`  - Single-Screen HUD: ./dashboard/index.html`);
     console.log(`  - Tech Stack: React 18 + Vite + TypeScript + TailwindCSS`);
-    console.log(`  - Status: Telemetry Service Connected (100% Operational)`);
+    console.log(`  - Status: Telemetry Service Connected (runtime status shown in TUI)`);
   }
 
   async shutdown(): Promise<void> {
@@ -803,7 +803,6 @@ export class SeOsCli {
     console.log(`✔ Company workforce shutdown complete.`);
   }
 }
-
 
 
 

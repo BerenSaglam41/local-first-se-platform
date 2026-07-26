@@ -17,8 +17,9 @@ import { ChatTab } from './components/tabs/ChatTab.js';
 import { VerificationTab } from './components/tabs/VerificationTab.js';
 import { LogsTab } from './components/tabs/LogsTab.js';
 import { ProjectWizard } from './components/ProjectWizard.js';
+import { ProjectSelector } from './components/ProjectSelector.js';
 import { Kernel } from '../../kernel/kernel.js';
-import { exec } from 'child_process';
+import { openPath } from './safe_process.js';
 
 interface TuiAppProps {
   telemetryAggregator: TelemetryAggregator;
@@ -66,12 +67,14 @@ export const TuiApp: React.FC<TuiAppProps> = ({ telemetryAggregator, kernel, onE
           const idx = order.indexOf(activeTab);
           setActiveTab(order[(idx + 1) % order.length]);
         } else if (char === 'v') {
-          const wsPath = snapshot.verification?.workspacePath || './.se_workspaces/ws-t-104';
-          exec(`code "${wsPath}"`, () => {});
+          const wsPath = snapshot.verification?.workspacePath;
+          if (!wsPath) return;
+          openPath('code', wsPath);
         } else if (char === 'f') {
-          const wsPath = snapshot.verification?.workspacePath || './.se_workspaces/ws-t-104';
+          const wsPath = snapshot.verification?.workspacePath;
+          if (!wsPath) return;
           const cmd = process.platform === 'darwin' ? `open "${wsPath}"` : `explorer "${wsPath}"`;
-          exec(cmd, () => {});
+          process.platform === 'darwin' ? openPath('open', wsPath) : openPath('explorer', wsPath);
         }
       }
     }
@@ -151,6 +154,8 @@ export const TuiApp: React.FC<TuiAppProps> = ({ telemetryAggregator, kernel, onE
           onSelectOption={(option: string) => {
             if (option === 'NEW_PROJECT') {
               navigate('NEW_PROJECT_PROMPT');
+            } else if (option === 'SELECT_PROJECT') {
+              navigate('PROJECT_SELECTOR');
             } else if (option === 'RESUME' || option === 'WORKSPACE') {
               navigate('PROJECT_EXECUTION');
             } else if (option === 'EXIT') {
@@ -178,6 +183,17 @@ export const TuiApp: React.FC<TuiAppProps> = ({ telemetryAggregator, kernel, onE
                 telemetryAggregator.logMessage('ERROR', `Execution error: ${err.message}`);
               });
             }
+            navigate('PROJECT_EXECUTION');
+          }}
+        />
+      )}
+
+      {currentScreen === 'PROJECT_SELECTOR' && kernel && (
+        <ProjectSelector
+          projects={kernel.getProjectLifecycleOrchestrator().listProjects()}
+          onBack={() => navigate('MAIN_MENU')}
+          onSelect={(projectId) => {
+            setActiveProjectId(projectId);
             navigate('PROJECT_EXECUTION');
           }}
         />

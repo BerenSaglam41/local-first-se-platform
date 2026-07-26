@@ -169,6 +169,7 @@ export class WorkerExecutionEngine extends EventEmitter {
       status = 'PLANNING_MUTATIONS';
       const reasoningText = reasoningRes.response.responseText;
       const parsed = this.responseParser.parse(reasoningText);
+      const structuredOutputMissing = !parsed.hasStructuredOutput;
 
       const plan: ExecutionPlan = parsed.hasStructuredOutput
         ? {
@@ -202,6 +203,13 @@ export class WorkerExecutionEngine extends EventEmitter {
 
       if (!mutationRes.success) {
         throw new Error(mutationRes.error || 'WorkspaceExecutionService failed to apply execution plan');
+      }
+
+      // A prose response is useful evidence, but it is not an implementation. Keep the raw
+      // response in the isolated workspace for diagnosis and fail the task so verification and
+      // Git merge cannot promote an empty/non-code result as a successful delivery.
+      if (structuredOutputMissing) {
+        throw new Error(`Provider returned no structured file blocks for task '${request.taskId}'. Raw response was saved to RESPONSE.md.`);
       }
 
       // 5. Harvest Artifacts

@@ -231,10 +231,14 @@ describe('workforce end-to-end invariants', () => {
 
     const reopened = new SqliteWorkforceRepository(dbPath);
     const messages = await reopened.listMessages('emp-alice');
+    const projects = await reopened.listProjects();
+    const tasks = await reopened.listTasks('project-1');
     await reopened.close();
     fs.rmSync(dbPath, { force: true });
 
     expect(messages).toHaveLength(1);
     expect(messages[0].summary).toBe('API implementation is ready.');
+    expect(projects[0]?.status).toBe('EXECUTING');
+    expect(tasks[0]?.title).toBe('Implement API');
   });
 });

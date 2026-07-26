@@ -1,23 +1,28 @@
 import { IWorkerDispatcher } from '../../contracts/iworker_dispatcher';
 import { WorkerExecutionRequest, WorkerExecutionResult } from '../../contracts/iautonomous_worker';
 import { WorkerExecutionEngine } from '../worker/worker_execution_engine';
+import { WorkerRuntime } from '../worker/worker_runtime';
 
 export class DefaultWorkerDispatcher implements IWorkerDispatcher {
-  /** One resumable CLI conversation must never receive two prompts at once. */
-  private workerTails = new Map<string, Promise<WorkerExecutionResult>>();
+  private runtimes = new Map<string, WorkerRuntime>();
 
   constructor(private workerExecutionEngine: WorkerExecutionEngine) {}
 
   async dispatchWorkerTask(request: WorkerExecutionRequest): Promise<WorkerExecutionResult> {
-    const previous = this.workerTails.get(request.workerId) || Promise.resolve();
-    const current = previous
-      .catch(() => undefined)
-      .then(() => this.workerExecutionEngine.executeTask(request));
-    this.workerTails.set(request.workerId, current);
-    try {
-      return await current;
-    } finally {
-      if (this.workerTails.get(request.workerId) === current) this.workerTails.delete(request.workerId);
+    const runtime = this.getRuntime(request.workerId);
+    return runtime.enqueue(request);
+  }
+
+  getRuntime(workerId: string): WorkerRuntime {
+    let runtime = this.runtimes.get(workerId);
+    if (!runtime) {
+      runtime = new WorkerRuntime(workerId, (request) => this.workerExecutionEngine.executeTask(request));
+      this.runtimes.set(workerId, runtime);
     }
+    return runtime;
+  }
+
+  listRuntimes(): WorkerRuntime[] {
+    return Array.from(this.runtimes.values());
   }
 }

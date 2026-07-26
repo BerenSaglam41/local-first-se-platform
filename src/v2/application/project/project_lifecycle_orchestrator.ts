@@ -180,7 +180,7 @@ export class ProjectLifecycleOrchestrator extends EventEmitter {
         { summary: result.summary, continuation: true }
       );
 
-      this.materializeProjectOutput(projectId, followUpGoal, mergedState.startTime, priorState.workspacePath || './.se_workspaces/ws-t-104', mergedResult);
+      this.materializeProjectOutput(projectId, followUpGoal, mergedState.startTime, priorState.workspacePath || path.resolve('./.se_workspaces'), mergedResult);
       if (priorState.executionWorkspacePath && priorState.workspacePath) {
         this.workspaceEngine?.syncProjectWorkspace(priorState.executionWorkspacePath, priorState.workspacePath);
       }
@@ -220,6 +220,12 @@ export class ProjectLifecycleOrchestrator extends EventEmitter {
 
   getResult(projectId: string): ProjectExecutionResult | undefined {
     return this.projectHistory.get(projectId);
+  }
+
+  listProjects(): ProjectExecutionResult[] {
+    return Array.from(this.projectHistory.values()).sort((a, b) =>
+      (b.state.endTime || b.state.startTime).localeCompare(a.state.endTime || a.state.startTime)
+    );
   }
 
   setStrategy(strategy: IProjectLifecycleStrategy): void {

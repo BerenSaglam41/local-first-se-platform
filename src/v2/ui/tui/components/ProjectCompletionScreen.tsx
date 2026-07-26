@@ -2,8 +2,8 @@ import React, { useState, useMemo } from 'react';
 import { Box, Text, useInput, useApp } from 'ink';
 import { TelemetrySnapshot } from '../../../contracts/itelemetry_aggregator';
 import { WorkspaceScanner, WorkspaceScanResult } from '../../../application/workspace/workspace_scanner';
-import { exec } from 'child_process';
 import * as fs from 'fs';
+import { spawnDetached, openPath } from '../safe_process.js';
 
 interface ProjectCompletionScreenProps {
   snapshot: TelemetrySnapshot;
@@ -20,10 +20,11 @@ export const ProjectCompletionScreen: React.FC<ProjectCompletionScreenProps> = (
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [actionFeedback, setActionFeedback] = useState<string>('');
 
-  const workspacePath = snapshot.verification?.workspacePath || './.se_workspaces/ws-t-104';
+  const workspacePath = snapshot.verification?.workspacePath || process.cwd();
+  const scanPath = workspacePath || process.cwd();
 
   const scanResult: WorkspaceScanResult = useMemo(() => {
-    return WorkspaceScanner.scan(workspacePath);
+    return WorkspaceScanner.scan(scanPath);
   }, [workspacePath]);
 
   const selectedFile = scanResult.files[selectedIndex] || scanResult.files[0];
@@ -37,30 +38,30 @@ export const ProjectCompletionScreen: React.FC<ProjectCompletionScreenProps> = (
       setSelectedIndex((prev) => (prev < scanResult.files.length - 1 ? prev + 1 : 0));
     } else if (char === 'v') {
       // V -> Open in VS Code
-      exec(`code "${workspacePath}"`, () => {});
+      openPath('code', workspacePath);
       setActionFeedback(`✔ Opened in VS Code: code "${workspacePath}"`);
     } else if (char === 'f') {
       // F -> Reveal Folder in Finder / Explorer
-      const cmd = process.platform === 'darwin' ? `open "${workspacePath}"` : `explorer "${workspacePath}"`;
-      exec(cmd, () => {});
-      setActionFeedback(`✔ Revealed folder: ${cmd}`);
+      const command = process.platform === 'darwin' ? 'open' : 'explorer';
+      openPath(command, workspacePath);
+      setActionFeedback(`✔ Revealed folder: ${workspacePath}`);
     } else if (char === 't') {
       // T -> Open Terminal in workspace
-      const cmd = process.platform === 'darwin' ? `open -a Terminal "${workspacePath}"` : `cmd /c start cd "${workspacePath}"`;
-      exec(cmd, () => {});
+      if (process.platform === 'darwin') spawnDetached('open', ['-a', 'Terminal', workspacePath]);
+      else spawnDetached('cmd', ['/c', 'start', '', workspacePath]);
       setActionFeedback(`✔ Terminal launched in workspace.`);
     } else if (char === 'r') {
       // R -> Run npm install
-      exec(`cd "${workspacePath}" && npm install`, () => {});
+      spawnDetached('npm', ['install'], workspacePath);
       setActionFeedback(`✔ Running npm install in ${workspacePath}...`);
     } else if (char === 's') {
       // S -> Start Project
-      exec(`cd "${workspacePath}" && npm start`, () => {});
+      spawnDetached('npm', ['start'], workspacePath);
       setActionFeedback(`✔ Started project: npm start in ${workspacePath}`);
     } else if (char === 'z') {
       // Z -> Export ZIP archive
       const zipPath = `${workspacePath}.zip`;
-      exec(`zip -r "${zipPath}" "${workspacePath}"`, () => {});
+      spawnDetached('zip', ['-r', zipPath, workspacePath]);
       setActionFeedback(`✔ Exported workspace ZIP: ${zipPath}`);
     } else if (char === 'n') {
       // N -> New Project
@@ -80,9 +81,9 @@ export const ProjectCompletionScreen: React.FC<ProjectCompletionScreenProps> = (
           SE-OS v2.0 — PROJECT EXECUTION COMPLETED
         </Text>
         <Box gap={1}>
-          <Text color="cyan">Score: {snapshot.verification?.qualityScore || 100}/100</Text>
+          <Text color="cyan">Score: {snapshot.verification ? `${snapshot.verification.qualityScore}/100` : 'not available'}</Text>
           <Text color="gray">|</Text>
-          <Text color="yellow">Duration: {snapshot.verification?.durationMs || 5240}ms</Text>
+          <Text color="yellow">Duration: {snapshot.verification ? `${snapshot.verification.durationMs}ms` : 'not available'}</Text>
         </Box>
       </Box>
 
@@ -93,7 +94,7 @@ export const ProjectCompletionScreen: React.FC<ProjectCompletionScreenProps> = (
         </Text>
         <Box justifyContent="space-between" marginTop={0}>
           <Text color="yellow">
-            Workspace: {workspacePath} ({scanResult.fileCount} files, {scanResult.totalLines} LOC, {(scanResult.totalBytes / 1024).toFixed(1)} KB)
+            Workspace: {snapshot.verification?.workspacePath || 'not available'} ({scanResult.fileCount} files, {scanResult.totalLines} LOC, {(scanResult.totalBytes / 1024).toFixed(1)} KB)
           </Text>
         </Box>
       </Box>
@@ -106,7 +107,7 @@ export const ProjectCompletionScreen: React.FC<ProjectCompletionScreenProps> = (
             WORKSPACE EXPLORER TREE:
           </Text>
           <Box marginTop={1}>
-            <Text color="white">{scanResult.treeAscii || 'ws-t-104/\n├── src/\n│   ├── server.ts\n│   └── middleware/\n├── tests/\n└── package.json'}</Text>
+            <Text color="white">{scanResult.treeAscii || 'No workspace files available.'}</Text>
           </Box>
         </Box>
 
@@ -117,7 +118,7 @@ export const ProjectCompletionScreen: React.FC<ProjectCompletionScreenProps> = (
             RUNTIME EXECUTION SUMMARY:
           </Text>
           <Box flexDirection="column" marginTop={0}>
-            <Text color="white">Execution Time:  {snapshot.verification?.durationMs || 5240} ms</Text>
+            <Text color="white">Execution Time:  {snapshot.verification ? `${snapshot.verification.durationMs} ms` : 'not available'}</Text>
             <Text color="white">Tokens Used:     4,580</Text>
             <Text color="white">Active Workers:  3 (Alice, Bob, Charlie)</Text>
             <Text color="white">Files Generated: {scanResult.fileCount || 6}</Text>

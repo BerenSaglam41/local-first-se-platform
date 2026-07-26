@@ -13,7 +13,7 @@ export const VerificationTab: React.FC<VerificationTabProps> = ({ snapshot }) =>
     <Box flexDirection="column" padding={1} width="100%">
       <Box borderStyle="single" borderColor="green" padding={1} flexDirection="column">
         <Text bold color="green">PHYSICAL VERIFICATION PIPELINE RESULTS</Text>
-        <Text color="cyan">Workspace Path: {ver?.workspacePath || './.se_workspaces/ws-t-104'}</Text>
+        <Text color="cyan">Workspace Path: {ver?.workspacePath || 'not available'}</Text>
         <Text color="yellow">Quality Score: {ver?.qualityScore || 100} / 100 [PASSED]</Text>
       </Box>
 
