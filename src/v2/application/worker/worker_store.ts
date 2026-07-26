@@ -27,8 +27,8 @@ export function normalizeDepartment(input: string): DepartmentType {
 export class WorkerStore {
   private workers = new Map<string, Worker>();
 
-  register(id: string, name: string, role: string, departmentInput: string): Worker {
-    const worker = new Worker(id, name, role, normalizeDepartment(departmentInput));
+  register(id: string, name: string, role: string, departmentInput: string, skills: string[] = []): Worker {
+    const worker = new Worker(id, name, role, normalizeDepartment(departmentInput), skills);
     this.workers.set(id, worker);
     return worker;
   }
@@ -43,6 +43,14 @@ export class WorkerStore {
 
   listByDepartment(department: DepartmentType): Worker[] {
     return this.list().filter((w) => w.department === department);
+  }
+
+  findBySkill(capability: string, excludeIds: Set<string> = new Set()): Worker | undefined {
+    const wanted = capability.toLowerCase();
+    return this.list()
+      .filter((worker) => !excludeIds.has(worker.id))
+      .filter((worker) => worker.skills.some((skill) => skill === wanted || skill.includes(wanted) || wanted.includes(skill)))
+      .sort((a, b) => Number(a.isBusy) - Number(b.isBusy))[0];
   }
 
   /** The one cleanup call a removed worker requires — no other store to forget to update. */

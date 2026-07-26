@@ -18,6 +18,9 @@ export class TaskScheduler {
       workerId: task.assignedWorkerId || 'emp-bob',
       departmentId: task.assignedDepartmentId || 'dept-backend',
       goal: task.description || task.title,
+      workspacePath: policy.workspacePath,
+      projectId: policy.projectId,
+      contextPackage: policy.contextPackage,
       policy: {
         maxDurationMs: policy.timeoutMs,
       },

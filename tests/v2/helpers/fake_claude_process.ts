@@ -8,6 +8,7 @@ import {
 import { CliDetector, CliDetectionResult } from '../../../src/v2/application/plugins/cli_detector';
 import { SeOsCliProviderOverrides } from '../../../src/v2/cli/se_os_cli';
 import { IEventStore } from '../../../src/v2/contracts/ievent_store';
+import { CliSpawnOptions } from '../../../src/v2/application/plugins/cli_process_executor';
 
 /**
  * Multiple real AI provider CLIs (not just claude) may genuinely be installed on the machine
@@ -82,6 +83,7 @@ class FakeChildProcess extends EventEmitter {
 export interface FakeClaudeSpawnCall {
   executable: string;
   args: string[];
+  cwd?: string;
 }
 
 export interface FakeClaudeSpawnRecorder {
@@ -131,8 +133,8 @@ export function createFakeClaudeSpawner(options: {
 } = {}): ClaudeProcessSpawner {
   const { stdout = DEFAULT_FAKE_CLAUDE_STDOUT, stderr = '', exitCode = 0, recorder } = options;
 
-  return (executable: string, args: string[]) => {
-    if (recorder) recorder.calls.push({ executable, args });
+  return (executable: string, args: string[], spawnOptions?: CliSpawnOptions) => {
+    if (recorder) recorder.calls.push({ executable, args, cwd: spawnOptions?.cwd });
     const child = new FakeChildProcess();
     // Defer so .on()/.stdout.on() listeners registered right after spawn() returns are attached
     // first — mirrors how a real child process emits data asynchronously.

@@ -46,4 +46,7 @@ export interface MissionExecutionPlan {
   departmentAssignments: Record<string, string[]>; // departmentId -> taskIds
   workerAssignments: Record<string, string[]>; // workerId -> taskIds
   totalEstimatedComplexity: number;
+  /** Shared workspace for every task in this mission. */
+  workspacePath?: string;
+  projectId?: string;
 }

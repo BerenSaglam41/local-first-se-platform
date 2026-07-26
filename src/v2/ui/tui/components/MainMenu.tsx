@@ -18,8 +18,9 @@ export const MainMenu: React.FC<MainMenuProps> = ({ onSelectOption }) => {
   return (
     <Box flexDirection="column" padding={1} borderStyle="single" borderColor="cyan">
       <Text bold color="cyan" underline>
-        SE-OS Main Menu:
+        SE-OS  /  What do you want to do?
       </Text>
+      <Text color="gray">You are the project owner. Start with a goal; the team handles the technical plan.</Text>
       <Box marginTop={1}>
         <SelectInput
           items={items}

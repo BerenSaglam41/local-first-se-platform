@@ -40,7 +40,9 @@ export class TaskAssignmentEngine extends EventEmitter {
         if (!task) continue;
 
         const targetDeptId = departmentForCapability(task.requiredCapability);
+        const skillMatch = this.departmentOrchestrator.selectWorkerForCapability(task.requiredCapability, usedInThisBatch);
         const selection =
+          skillMatch ||
           this.departmentOrchestrator.selectWorkerForTask(targetDeptId, usedInThisBatch) ||
           this.departmentOrchestrator.selectWorkerForTask(targetDeptId);
 

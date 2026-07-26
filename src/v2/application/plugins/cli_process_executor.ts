@@ -1,7 +1,11 @@
 import { ChildProcess, spawn as realSpawn } from 'child_process';
 
 /** Injectable so callers (and tests) can replace the real OS process spawn with a fake one. */
-export type CliProcessSpawner = (executable: string, args: string[]) => ChildProcess;
+export interface CliSpawnOptions {
+  cwd?: string;
+}
+
+export type CliProcessSpawner = (executable: string, args: string[], options?: CliSpawnOptions) => ChildProcess;
 
 /**
  * The real default spawner every plugin uses. `detached: true` makes the child the leader of its
@@ -11,13 +15,13 @@ export type CliProcessSpawner = (executable: string, args: string[]) => ChildPro
  * script that spawns the real native binary as its child) — killing only the direct child left
  * that grandchild running, invisible to SE-OS, for as long as the real UAT observed it (minutes).
  */
-export const defaultCliProcessSpawner: CliProcessSpawner = (executable, args) =>
+export const defaultCliProcessSpawner: CliProcessSpawner = (executable, args, options) =>
   // stdin explicitly closed ('ignore'): SE-OS never pipes anything to a spawned CLI's stdin, but
   // leaving it open (Node's default) makes some CLIs (verified: the real `claude` CLI) print a
   // confusing "no stdin data received in 3s, proceeding without it" warning into every real
   // execution's terminal log — noise that looks like a real problem but isn't (see M29.1 Fix #3 /
   // ADR-0012). Closing it outright removes the warning at the source instead of just tolerating it.
-  realSpawn(executable, args, { detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+  realSpawn(executable, args, { detached: true, cwd: options?.cwd, stdio: ['ignore', 'pipe', 'pipe'] });
 
 /**
  * Kills a real spawned process AND every descendant it forked, not just the single process
@@ -67,14 +71,15 @@ export function runCliProcess(
   /** Fired synchronously right after spawn with the real child handle, so a caller (e.g. a
    * plugin's cancel()) can later kill this exact in-flight process — not just a session-level
    * abstraction that never touches the real OS process. */
-  onSpawn?: (child: ChildProcess) => void
+  onSpawn?: (child: ChildProcess) => void,
+  options?: CliSpawnOptions
 ): Promise<CliProcessResult> {
   return new Promise((resolve, reject) => {
     const startTime = Date.now();
 
     let child: ChildProcess;
     try {
-      child = spawner(executable, args);
+      child = spawner(executable, args, options);
       onSpawn?.(child);
     } catch (err) {
       reject(err);

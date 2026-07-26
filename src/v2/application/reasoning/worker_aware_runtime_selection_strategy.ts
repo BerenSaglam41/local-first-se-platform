@@ -42,6 +42,9 @@ export class WorkerAwareRuntimeSelectionStrategy implements IRuntimeSelectionStr
       if (isCliAvailable) {
         return plugin;
       }
+      // A worker's explicit provider is a hard assignment. Do not silently make Bob
+      // execute with Claude just because Bob was assigned Codex and Codex is missing.
+      return undefined;
     }
 
     const defaultPlugin = this.pluginSystemManager.getPlugin(this.defaultPluginId);

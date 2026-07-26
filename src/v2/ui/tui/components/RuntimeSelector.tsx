@@ -11,17 +11,18 @@ interface RuntimeSelectorProps {
 export const RuntimeSelector: React.FC<RuntimeSelectorProps> = ({ snapshot, onSelectRuntime }) => {
   const items = snapshot.runtimeProviders
     .filter((p: any) => p.installed)
+    .sort((a: any, b: any) => Number(b.active) - Number(a.active))
     .map((p: any) => ({
       label: p.active
-        ? `⭐️ ${p.name}  [PRIMARY SELECTED RUNTIME]`
-        : `   ${p.name}  [Press ENTER to set as Primary]`,
+        ? `⭐️ ${p.name}  [PRIMARY / ${p.authentication || 'UNKNOWN'}]`
+        : `   ${p.name}  [${p.authentication || 'UNKNOWN'}]`,
       value: p.id,
     }));
 
   return (
     <Box flexDirection="column" padding={1} borderStyle="round" borderColor="cyan">
       <Text bold color="cyan">
-        Select Active Primary Runtime Provider for Autonomous Workers:
+          Select Active Primary CLI Provider for Autonomous Workers:
       </Text>
       <Box marginTop={1}>
         <SelectInput
@@ -31,19 +32,19 @@ export const RuntimeSelector: React.FC<RuntimeSelectorProps> = ({ snapshot, onSe
       </Box>
       <Box marginTop={1} flexDirection="column" borderStyle="single" borderColor="gray" paddingX={1}>
         <Text bold color="yellow">
-          🔑 Provider Authentication & Setup Guide:
+          🔑 Local CLI Authentication Guide:
         </Text>
         <Text color="gray">
-          • Google Gemini CLI: Set GEMINI_API_KEY in .env or authenticate via Google OAuth (gcloud / gemini auth login).
+          • Gemini CLI: install it and login locally with the provider's CLI login flow.
         </Text>
         <Text color="gray">
-          • Claude Code CLI: Set ANTHROPIC_API_KEY in .env or run 'claude login'.
+          • Claude Code CLI: run 'claude login' once in your terminal.
         </Text>
         <Text color="gray">
-          • Codex / OpenAI CLI: Set OPENAI_API_KEY in .env.
+          • Codex CLI: login with the local Codex CLI account/session.
         </Text>
         <Text color="gray">
-          • Antigravity AI Engine: Set ANTIGRAVITY_API_KEY in .env.
+          • Antigravity: install its CLI and login locally before assigning it to a worker.
         </Text>
       </Box>
     </Box>

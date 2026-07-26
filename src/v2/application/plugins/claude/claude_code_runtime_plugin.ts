@@ -1,5 +1,6 @@
 import { EventEmitter } from 'events';
 import { ChildProcess } from 'child_process';
+import { spawnSync } from 'child_process';
 import {
   IRuntimePlugin,
   RuntimePluginManifest,
@@ -7,6 +8,7 @@ import {
   RuntimeValidationResult,
   RuntimePluginHealth,
   RuntimeConfiguration,
+  RuntimeAuthenticationStatus,
 } from '../../../contracts/iruntime_plugin_system';
 import { IEventStore } from '../../../contracts/ievent_store';
 import { ClaudeCliDetector, ClaudeCliDetectionResult } from './claude_cli_detector';
@@ -34,6 +36,7 @@ export class ClaudeCodeRuntimePlugin extends EventEmitter implements IRuntimePlu
   private detectionResult: ClaudeCliDetectionResult = { available: false };
   private isInitialized = false;
   private spawner: ClaudeProcessSpawner;
+  private authenticationCache?: { status: RuntimeAuthenticationStatus; detail?: string; checkedAt: number };
 
   private manifest: RuntimePluginManifest = {
     id: 'plugin-claude-code',
@@ -120,7 +123,7 @@ export class ClaudeCodeRuntimePlugin extends EventEmitter implements IRuntimePlu
     try {
       const result = await runCliProcess(this.spawner, executablePath, args, timeoutMs, onOutputChunk, (child) =>
         this.activeChildProcesses.set(workerId, child)
-      );
+      , { cwd: taskPayload.workspacePath });
       this.activeChildProcesses.delete(workerId);
 
       this.emitEvent(result.success ? 'RuntimeExecutionCompleted' : 'RuntimeExecutionFailed', this.manifest.id, {
@@ -199,6 +202,28 @@ export class ClaudeCodeRuntimePlugin extends EventEmitter implements IRuntimePlu
 
   getDetectionResult(): ClaudeCliDetectionResult {
     return this.detectionResult;
+  }
+
+  authenticationStatus(): { status: RuntimeAuthenticationStatus; detail?: string } {
+    if (!this.detectionResult.available) return { status: 'NOT_AUTHENTICATED', detail: 'CLI not installed' };
+    const now = Date.now();
+    if (this.authenticationCache && now - this.authenticationCache.checkedAt < 10000) return this.authenticationCache;
+    try {
+      const result = spawnSync(this.detectionResult.executablePath || 'claude', ['auth', 'status'], {
+        encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      const output = `${result.stdout || ''}\n${result.stderr || ''}`;
+      let loggedIn = false;
+      try { loggedIn = !!JSON.parse(result.stdout || '{}').loggedIn; } catch { loggedIn = /logged\s*in|authenticated|signed\s*in/i.test(output); }
+      this.authenticationCache = {
+        status: result.error ? 'UNKNOWN' : loggedIn ? 'AUTHENTICATED' : 'NOT_AUTHENTICATED',
+        detail: output.trim().split('\n')[0]?.slice(0, 160), checkedAt: now,
+      };
+      return this.authenticationCache;
+    } catch (error: any) {
+      this.authenticationCache = { status: 'UNKNOWN', detail: error?.message || 'Could not inspect Claude login state', checkedAt: now };
+      return this.authenticationCache;
+    }
   }
 
   private emitEvent(eventType: string, aggregateId: string, payload: any): void {

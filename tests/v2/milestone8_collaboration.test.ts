@@ -47,6 +47,17 @@ describe('SE-OS v2.0 Milestone 8 — Multi-Agent Collaboration Engine Suite', ()
     expect(outboxAlice.length).toBe(1);
   });
 
+  it('should deliver explicit worker questions and answers with correlation ids', async () => {
+    await kernel.boot('./non_existent_config.json');
+    const engine = kernel.getCollaborationEngine();
+
+    await engine.askQuestion('q-1', 'emp-bob', 'emp-alice', 'mission-01', 'Should this endpoint be versioned?', 'task-api');
+    await engine.answerQuestion('q-1', 'emp-alice', 'emp-bob', 'mission-01', 'Yes, use /v1 and document the migration.', 'task-api');
+
+    expect(engine.getInbox('emp-alice').find((message) => message.messageType === 'QUESTION')?.payload?.questionId).toBe('q-1');
+    expect(engine.getInbox('emp-bob').find((message) => message.messageType === 'ANSWER')?.payload?.questionId).toBe('q-1');
+  });
+
   it('should manage task ownership and delegation', async () => {
     await kernel.boot('./non_existent_config.json');
     const engine = kernel.getCollaborationEngine();

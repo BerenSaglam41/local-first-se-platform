@@ -24,7 +24,21 @@ export interface WorkerExecutionRequest {
   departmentId?: string;
   goal: string;
   contextPackage?: Record<string, any>;
+  /** Shared project workspace. All tasks in one project use the same path. */
+  workspacePath?: string;
+  projectId?: string;
+  conversationSessionId?: string;
+  resumeConversation?: boolean;
   policy?: ExecutionPolicy;
+}
+
+export interface WorkerQuestion {
+  id: string;
+  senderWorkerId: string;
+  capability: string;
+  question: string;
+  recipientWorkerId?: string;
+  answer?: string;
 }
 
 export interface FileMutationSpec {
@@ -74,4 +88,5 @@ export interface WorkerExecutionResult {
   success: boolean;
   report?: ExecutionReport;
   error?: string;
+  questions?: WorkerQuestion[];
 }

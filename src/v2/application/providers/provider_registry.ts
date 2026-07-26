@@ -1,5 +1,5 @@
 import { RuntimePluginSystemManager } from '../plugins/runtime_plugin_system_manager';
-import { RuntimePluginHealthState } from '../../contracts/iruntime_plugin_system';
+import { RuntimePluginHealthState, RuntimeAuthenticationStatus } from '../../contracts/iruntime_plugin_system';
 
 export interface ProviderInfo {
   id: string;
@@ -9,6 +9,8 @@ export interface ProviderInfo {
   version?: string;
   executablePath?: string;
   health: RuntimePluginHealthState;
+  authentication: RuntimeAuthenticationStatus;
+  authenticationDetail?: string;
 }
 
 /**
@@ -30,6 +32,9 @@ export class ProviderRegistry {
         const plugin: any = record.plugin;
         const detection =
           typeof plugin.getDetectionResult === 'function' ? plugin.getDetectionResult() : undefined;
+        const authentication = typeof plugin.authenticationStatus === 'function'
+          ? plugin.authenticationStatus()
+          : { status: 'UNKNOWN' as RuntimeAuthenticationStatus };
 
         return {
           id: record.manifest.id,
@@ -41,6 +46,8 @@ export class ProviderRegistry {
           version: detection?.version,
           executablePath: detection?.executablePath,
           health: record.health.status,
+          authentication: authentication.status,
+          authenticationDetail: authentication.detail,
         };
       });
   }

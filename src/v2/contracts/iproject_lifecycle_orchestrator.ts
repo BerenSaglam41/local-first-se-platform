@@ -31,6 +31,10 @@ export interface ProjectExecutionState {
   /** Persists across continueProject() calls — the ongoing engineering workspace this
    * conversation is building, never a fresh one per turn. */
   workspacePath?: string;
+  /** Internal shared staging path used by all workers for this project. */
+  executionWorkspacePath?: string;
+  /** Provider session IDs keyed by worker, persisted for project continuity. */
+  providerSessionIds?: Record<string, string>;
   /** Every turn this project has had, oldest first. A project that has only ever been created
    * once (never continued) still has exactly one entry here. */
   conversationHistory: ProjectConversationTurn[];

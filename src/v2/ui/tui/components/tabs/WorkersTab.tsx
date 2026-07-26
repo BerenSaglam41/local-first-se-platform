@@ -42,13 +42,24 @@ export const WorkersTab: React.FC<WorkersTabProps> = ({ snapshot, kernel }) => {
     } else if (char === 'u') {
       const ok = kernel.getSupervisor().resumeWorker(selectedWorker.id);
       setActionStatus(ok ? `Resumed ${selectedWorker.name}.` : `Failed to resume ${selectedWorker.name}.`);
+    } else if (char === 'c') {
+      const providers = kernel.getProviderRegistry().listProviders().filter((p) => p.installed && p.enabled);
+      if (providers.length === 0) {
+        setActionStatus('Kurulu provider yok. Ayarlar/provider kurulumu gerekli.');
+      } else {
+        const workerEntity = kernel.getWorkerStore().get(selectedWorker.id);
+        const current = providers.findIndex((p) => p.id === workerEntity?.assignedProviderId);
+        const next = providers[(current + 1 + providers.length) % providers.length];
+        if (workerEntity) workerEntity.assignedProviderId = next.id;
+        setActionStatus(`${selectedWorker.name} → ${next.name}.`);
+      }
     }
   });
 
   return (
     <Box flexDirection="column" padding={1} width="100%">
       <Text bold color="yellow" underline>
-        AI WORKER FLEET TEAM (↑/↓ select · I interrupt · R restart · P pause · U resume):
+        TEAM  /  ↑↓ select · C change AI · I stop · R restart · P pause · U resume
       </Text>
 
       <Box marginTop={1} gap={1}>
@@ -67,11 +78,12 @@ export const WorkersTab: React.FC<WorkersTabProps> = ({ snapshot, kernel }) => {
         {/* Right Column: Detailed Worker Inspector */}
         {selectedWorker && (
           <Box flexDirection="column" width="60%" borderStyle="single" borderColor="green" padding={1}>
-            <Text bold color="green" underline>WORKER INSPECTOR: {selectedWorker.name}</Text>
+            <Text bold color="green" underline>TEAM MEMBER: {selectedWorker.name}</Text>
             <Text color="white">Role: <Text bold color="cyan">{selectedWorker.role}</Text></Text>
+            <Text color="white">Skills: <Text color="cyan">{selectedWorker.skills.join(', ') || '(none configured)'}</Text></Text>
             <Text color="white">Assigned AI Provider: <Text bold color="yellow">{selectedWorker.assignedProvider}</Text></Text>
             <Text color="white">Status: <Text color={selectedWorker.status === 'BUSY' ? 'green' : 'gray'}>[{selectedWorker.status}]</Text></Text>
-            <Text color="white">Working Directory (pwd): <Text bold color="cyan">{selectedWorker.workingDirectory || '(idle — no active workspace)'}</Text></Text>
+            <Text color="white">Workspace: <Text bold color="cyan">{selectedWorker.workingDirectory || '(idle — no active workspace)'}</Text></Text>
             <Text color="white">Process: <Text color="gray">{selectedWorker.terminalPane}</Text></Text>
             <Text color="white">Git Branch: <Text color="gray">{selectedWorker.gitBranch}</Text></Text>
             <Text color="white">Current Command: <Text bold color="yellow">{selectedWorker.currentCommand}</Text></Text>

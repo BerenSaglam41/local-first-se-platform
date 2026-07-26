@@ -129,6 +129,7 @@ export class ReasoningCoordinator extends EventEmitter {
         title: request.goal,
         prompt: request.goal,
         context: request.context,
+        workspacePath: request.context?.workspacePath,
         workerId: request.workerId,
         timeoutMs,
         conversationSessionId: request.context?.conversationSessionId,

@@ -17,12 +17,15 @@ export interface TelemetryRuntimeProviderInfo {
   version: string;
   installed: boolean;
   active: boolean;
+  authentication?: 'AUTHENTICATED' | 'NOT_AUTHENTICATED' | 'UNKNOWN';
+  authenticationDetail?: string;
 }
 
 export interface TelemetryWorkerInfo {
   id: string;
   name: string;
   role: string;
+  skills: string[];
   departmentId: string;
   status: 'IDLE' | 'BUSY';
   currentTaskId?: string;

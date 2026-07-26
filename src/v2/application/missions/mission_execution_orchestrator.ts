@@ -10,11 +10,14 @@ import { ReadyTaskQueue } from './ready_task_queue';
 import { TaskScheduler } from './task_scheduler';
 import { IEventStore } from '../../contracts/ievent_store';
 import { VerificationPipeline } from '../verification/verification_pipeline';
+import { CollaborationEngine } from '../collaboration/collaboration_engine';
 
 export class MissionExecutionOrchestrator extends EventEmitter {
   private states = new Map<string, MissionExecutionState>();
   private activeExecutions = new Set<string>();
   private verificationPipeline: VerificationPipeline;
+  private plans = new Map<string, MissionExecutionPlan>();
+  private reportsByMission = new Map<string, Record<string, any>>();
   private defaultPolicy: MissionExecutionPolicy = {
     maxParallelWorkers: 3,
     maxTaskRetries: 2,
@@ -29,7 +32,8 @@ export class MissionExecutionOrchestrator extends EventEmitter {
   constructor(
     private dispatcher: IWorkerDispatcher,
     private eventStore?: IEventStore,
-    verificationPipeline?: VerificationPipeline
+    verificationPipeline?: VerificationPipeline,
+    private collaborationEngine?: CollaborationEngine
   ) {
     super();
     this.verificationPipeline = verificationPipeline || new VerificationPipeline(eventStore);
@@ -40,6 +44,8 @@ export class MissionExecutionOrchestrator extends EventEmitter {
     policyConfig?: Partial<MissionExecutionPolicy>
   ): Promise<MissionExecutionResult> {
     const policy: MissionExecutionPolicy = { ...this.defaultPolicy, ...policyConfig };
+    policy.workspacePath = plan.workspacePath || policy.workspacePath;
+    policy.projectId = plan.projectId || policy.projectId;
     const missionId = plan.missionId;
 
     const state: MissionExecutionState = {
@@ -54,6 +60,7 @@ export class MissionExecutionOrchestrator extends EventEmitter {
     };
 
     this.states.set(missionId, state);
+    this.plans.set(missionId, plan);
     this.activeExecutions.add(missionId);
 
     this.emitEvent('MissionExecutionStarted', missionId, {
@@ -68,6 +75,7 @@ export class MissionExecutionOrchestrator extends EventEmitter {
     const scheduler = new TaskScheduler(this.dispatcher);
     const completedSet = new Set<string>();
     const reports: Record<string, any> = {};
+    this.reportsByMission.set(missionId, reports);
 
     try {
       // Topological batch / ready queue iteration
@@ -101,6 +109,9 @@ export class MissionExecutionOrchestrator extends EventEmitter {
             missionId,
             workerId: task.assignedWorkerId,
           });
+          if (task.assignedWorkerId && this.collaborationEngine) {
+            this.collaborationEngine.getOwnershipManager().assignOwner(task.id, task.assignedWorkerId);
+          }
 
           let attempt = 0;
           let taskSuccess = false;
@@ -109,7 +120,30 @@ export class MissionExecutionOrchestrator extends EventEmitter {
 
           while (attempt <= policy.maxTaskRetries && !taskSuccess) {
             attempt++;
-            const res = await scheduler.scheduleTask(task, missionId, policy);
+            const handoff: Record<string, any> = {};
+            for (const dependencyId of task.dependencies) {
+              const dependencyReport = reports[dependencyId];
+              if (dependencyReport) {
+                handoff[dependencyId] = {
+                  workerId: dependencyReport.workerId,
+                  summary: dependencyReport.summary,
+                  filesCreated: dependencyReport.filesCreated,
+                  filesModified: dependencyReport.filesModified,
+                };
+              }
+            }
+            if (lastVerification && !lastVerification.success) {
+              handoff.verificationFailure = {
+                qualityScore: lastVerification.qualityScore,
+                errors: lastVerification.errors,
+                warnings: lastVerification.warnings,
+                instruction: 'Repair the verification failures before repeating the task. Inspect the existing files first; do not overwrite working code blindly.',
+              };
+            }
+            const res = await scheduler.scheduleTask(task, missionId, {
+              ...policy,
+              contextPackage: Object.keys(handoff).length > 0 ? handoff : undefined,
+            });
             lastReport = res.report;
 
             if (res.success && res.report?.status === 'COMPLETED') {
@@ -154,6 +188,32 @@ export class MissionExecutionOrchestrator extends EventEmitter {
               missionId,
               workerId: task.assignedWorkerId,
             });
+
+            // Make hand-off visible to the team. Review requests are recorded, but verification
+            // remains the execution gate; a future human/AI reviewer can approve or reject it.
+            const reviewer = plan.tasks.find(
+              (candidate) => candidate.requiredCapability === 'QA' && candidate.assignedWorkerId && candidate.assignedWorkerId !== task.assignedWorkerId
+            );
+            if (this.collaborationEngine && task.assignedWorkerId && reviewer?.assignedWorkerId) {
+              await this.collaborationEngine.requestReview(task.id, task.assignedWorkerId, reviewer.assignedWorkerId, missionId);
+            }
+            if (this.collaborationEngine && task.assignedWorkerId) {
+              for (const downstream of plan.tasks.filter((candidate) => candidate.dependencies.includes(task.id))) {
+                if (!downstream.assignedWorkerId || downstream.assignedWorkerId === task.assignedWorkerId) continue;
+                await this.collaborationEngine.sendMessage({
+                  id: `msg-done-${task.id}-${downstream.id}`,
+                  senderId: task.assignedWorkerId,
+                  senderRole: 'Engineer',
+                  recipientId: downstream.assignedWorkerId,
+                  messageType: 'TASK_COMPLETION',
+                  missionId,
+                  taskId: task.id,
+                  summary: `Task ${task.id} completed; output is available in the shared workspace for ${downstream.id}.`,
+                  payload: { filesCreated: lastReport?.filesCreated || [], filesModified: lastReport?.filesModified || [] },
+                  timestamp: new Date().toISOString(),
+                });
+              }
+            }
 
             // Unlock downstream ready tasks
             readyQueue.unlockReadyTasks(plan, completedSet);
@@ -233,6 +293,43 @@ export class MissionExecutionOrchestrator extends EventEmitter {
 
   getDispatcher(): IWorkerDispatcher {
     return this.dispatcher;
+  }
+
+  /** Reopens a rejected review as a real worker execution, then runs verification again. */
+  async retryTaskAfterReview(taskId: string, reviewerId: string, missionId: string, feedback: string): Promise<void> {
+    const plan = this.plans.get(missionId);
+    const task = plan?.tasks.find((candidate) => candidate.id === taskId);
+    const state = this.states.get(missionId);
+    if (!plan || !task || !state) return;
+
+    const scheduler = new TaskScheduler(this.dispatcher);
+    const result = await scheduler.scheduleTask(task, missionId, {
+      ...this.defaultPolicy,
+      workspacePath: plan.workspacePath,
+      projectId: plan.projectId,
+      contextPackage: {
+        reviewFeedback: feedback,
+        reviewerId,
+        instruction: 'Apply the reviewer feedback, preserve correct existing work, and return the repaired implementation.',
+      },
+    });
+    const report = result.report;
+    const verification = report?.workspacePath
+      ? await this.verificationPipeline.verify({ taskId, missionId, workspacePath: report.workspacePath, artifacts: report.artifacts })
+      : undefined;
+    this.reportsByMission.get(missionId)![taskId] = report ? { ...report, verification } : report;
+
+    if (result.success && report?.status === 'COMPLETED' && verification?.success) {
+      task.status = 'COMPLETED';
+      if (!state.completedTaskIds.includes(taskId)) state.completedTaskIds.push(taskId);
+      state.failedTaskIds = state.failedTaskIds.filter((id) => id !== taskId);
+      await this.collaborationEngine?.approveReview(taskId, reviewerId, missionId, 'Auto-repair passed verification.');
+      this.emitEvent('TaskAutoRepaired', taskId, { missionId, reviewerId, feedback });
+    } else {
+      task.status = 'FAILED';
+      if (!state.failedTaskIds.includes(taskId)) state.failedTaskIds.push(taskId);
+      this.emitEvent('TaskAutoRepairFailed', taskId, { missionId, reviewerId, errors: verification?.errors || [result.error || 'worker execution failed'] });
+    }
   }
 
   private emitEvent(eventType: string, aggregateId: string, payload: any): void {

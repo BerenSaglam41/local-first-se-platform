@@ -91,12 +91,24 @@ export class Kernel implements IKernel {
     const reasoningCoordinator = new ReasoningCoordinator(runtimePluginSystemManager, workerStore, eventStore, selectionStrategy, workerTerminalLog);
     const autonomousPlanner = new AutonomousPlanner(eventStore, sharedMemory, policyEngine, departmentOrchestrator, undefined, reasoningCoordinator);
     const workspaceExecutionService = new WorkspaceExecutionService(eventStore);
-    const workerExecutionEngine = new WorkerExecutionEngine(workspaceEngine, workspaceExecutionService, reasoningCoordinator, eventStore);
+    const workerExecutionEngine = new WorkerExecutionEngine(
+      workspaceEngine,
+      workspaceExecutionService,
+      reasoningCoordinator,
+      eventStore,
+      undefined,
+      collaborationEngine,
+      workerStore,
+      sharedMemory
+    );
     const verificationPipeline = new VerificationPipeline(eventStore);
     const workerDispatcher = new DefaultWorkerDispatcher(workerExecutionEngine);
-    const missionExecutionOrchestrator = new MissionExecutionOrchestrator(workerDispatcher, eventStore, verificationPipeline);
+    const missionExecutionOrchestrator = new MissionExecutionOrchestrator(workerDispatcher, eventStore, verificationPipeline, collaborationEngine);
+    collaborationEngine.setReviewRejectionHandler((taskId, reviewerId, missionId, feedback) =>
+      missionExecutionOrchestrator.retryTaskAfterReview(taskId, reviewerId, missionId, feedback)
+    );
     const projectLifecycleStrategy = new DefaultProjectLifecycleStrategy(autonomousPlanner, missionEngine, missionExecutionOrchestrator);
-    const projectLifecycleOrchestrator = new ProjectLifecycleOrchestrator(projectLifecycleStrategy, eventStore);
+    const projectLifecycleOrchestrator = new ProjectLifecycleOrchestrator(projectLifecycleStrategy, eventStore, workspaceEngine);
     const telemetryAggregator = new TelemetryAggregator(
       eventStore,
       projectLifecycleOrchestrator,
@@ -157,6 +169,7 @@ export class Kernel implements IKernel {
               name: emp.name,
               role: emp.role,
               department: emp.department || 'Engineering',
+              skills: emp.skills || [],
               executable: process.execPath,
               args: ['-e', 'setInterval(() => {}, 1000)'],
               tmuxPaneIndex: emp.tmuxPaneIndex || 1,
@@ -174,11 +187,11 @@ export class Kernel implements IKernel {
   }
 
   private loadDefaultWorkforce(supervisor: LocalProcessSupervisor): void {
-    supervisor.spawnWorker({ id: 'emp-alice', name: 'Alice', role: 'Lead Architect', department: 'Architecture', executable: process.execPath, args: ['-e', 'setInterval(() => {}, 1000)'], tmuxPaneIndex: 1 });
-    supervisor.spawnWorker({ id: 'emp-bob', name: 'Bob', role: 'Backend Engineer', department: 'Backend', executable: process.execPath, args: ['-e', 'setInterval(() => {}, 1000)'], tmuxPaneIndex: 2 });
-    supervisor.spawnWorker({ id: 'emp-charlie', name: 'Charlie', role: 'QA Engineer', department: 'QA', executable: process.execPath, args: ['-e', 'setInterval(() => {}, 1000)'], tmuxPaneIndex: 3 });
-    supervisor.spawnWorker({ id: 'emp-diana', name: 'Diana', role: 'Documentation Engineer', department: 'Documentation', executable: process.execPath, args: ['-e', 'setInterval(() => {}, 1000)'], tmuxPaneIndex: 4 });
-    supervisor.spawnWorker({ id: 'emp-eve', name: 'Eve', role: 'Research Engineer', department: 'Research', executable: process.execPath, args: ['-e', 'setInterval(() => {}, 1000)'], tmuxPaneIndex: 5 });
+    supervisor.spawnWorker({ id: 'emp-alice', name: 'Alice', role: 'Lead Architect', department: 'Architecture', skills: ['architecture', 'system design', 'technical leadership', 'code review'], executable: process.execPath, args: ['-e', 'setInterval(() => {}, 1000)'], tmuxPaneIndex: 1 });
+    supervisor.spawnWorker({ id: 'emp-bob', name: 'Bob', role: 'Backend Engineer', department: 'Backend', skills: ['backend', 'database', 'api', 'code generation'], executable: process.execPath, args: ['-e', 'setInterval(() => {}, 1000)'], tmuxPaneIndex: 2 });
+    supervisor.spawnWorker({ id: 'emp-charlie', name: 'Charlie', role: 'QA Engineer', department: 'QA', skills: ['qa', 'testing', 'security', 'code review'], executable: process.execPath, args: ['-e', 'setInterval(() => {}, 1000)'], tmuxPaneIndex: 3 });
+    supervisor.spawnWorker({ id: 'emp-diana', name: 'Diana', role: 'Documentation Engineer', department: 'Documentation', skills: ['frontend', 'ux', 'documentation', 'openapi'], executable: process.execPath, args: ['-e', 'setInterval(() => {}, 1000)'], tmuxPaneIndex: 4 });
+    supervisor.spawnWorker({ id: 'emp-eve', name: 'Eve', role: 'Research Engineer', department: 'Research', skills: ['devops', 'research', 'documentation', 'dependency analysis'], executable: process.execPath, args: ['-e', 'setInterval(() => {}, 1000)'], tmuxPaneIndex: 5 });
   }
 
   /**

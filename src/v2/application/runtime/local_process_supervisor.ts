@@ -11,6 +11,7 @@ export interface WorkerMetadata {
   name: string;
   role: string;
   department: string;
+  skills?: string[];
   executable?: string;
   args?: string[];
   tmuxPaneIndex?: number;
@@ -48,7 +49,7 @@ export class LocalProcessSupervisor extends EventEmitter {
   }
 
   spawnWorker(metadata: WorkerMetadata): Worker {
-    const worker = this.workerStore.register(metadata.id, metadata.name, metadata.role, metadata.department);
+    const worker = this.workerStore.register(metadata.id, metadata.name, metadata.role, metadata.department, metadata.skills);
 
     const executable = metadata.executable || process.execPath;
     const args = metadata.args || ['-e', 'setInterval(() => {}, 1000)'];
@@ -127,7 +128,7 @@ export class LocalProcessSupervisor extends EventEmitter {
 
     const oldRestartCount = worker.process.restartCount + 1;
     const oldCrashCount = worker.process.crashCount;
-    const metadata: WorkerMetadata = { id: worker.id, name: worker.name, role: worker.role, department: worker.department };
+    const metadata: WorkerMetadata = { id: worker.id, name: worker.name, role: worker.role, department: worker.department, skills: worker.skills };
     const preservedProviderId = worker.assignedProviderId;
     const preservedHistory = worker.history;
     const preservedTokenUsage = worker.tokenUsageTotal;

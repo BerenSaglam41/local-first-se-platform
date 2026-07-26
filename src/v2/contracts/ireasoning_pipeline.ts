@@ -1,4 +1,6 @@
 export interface ReasoningContext {
+  /** Working directory passed to a CLI-backed provider. */
+  workspacePath?: string;
   filePaths?: string[];
   symbolDefinitions?: string[];
   previousADRs?: string[];

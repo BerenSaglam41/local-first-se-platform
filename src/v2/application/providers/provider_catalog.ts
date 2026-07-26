@@ -20,6 +20,7 @@ export const PROVIDER_CATALOG: CliRuntimePluginConfig[] = [
     name: 'Codex CLI',
     command: 'codex',
     envVarName: 'CODEX_PATH',
+    authStatusArgs: ['login', 'status'],
     buildArgs: (prompt) => {
       const flags = process.env.CODEX_FLAGS ? process.env.CODEX_FLAGS.trim().split(/\s+/) : ['exec'];
       return [...flags, prompt];

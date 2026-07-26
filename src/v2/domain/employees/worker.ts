@@ -56,6 +56,8 @@ export class Worker {
   name: string;
   role: string;
   department: DepartmentType;
+  /** Explicit capabilities used for assignment; role text is descriptive only. */
+  skills: string[];
 
   processState: WorkerProcessState = 'STARTING';
   process: WorkerProcessMetrics = {
@@ -72,11 +74,12 @@ export class Worker {
   tokenUsageTotal = 0;
   history: WorkerTaskHistoryEntry[] = [];
 
-  constructor(id: string, name: string, role: string, department: DepartmentType) {
+  constructor(id: string, name: string, role: string, department: DepartmentType, skills: string[] = []) {
     this.id = id;
     this.name = name;
     this.role = role;
     this.department = department;
+    this.skills = [...new Set(skills.map((skill) => skill.trim().toLowerCase()).filter(Boolean))];
   }
 
   get isBusy(): boolean {

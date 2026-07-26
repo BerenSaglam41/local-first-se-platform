@@ -77,6 +77,8 @@ export class TelemetryAggregator implements ITelemetryAggregator {
           version: p.version || 'unknown',
           installed: p.installed,
           active: p.id === this.activeRuntimeProviderId,
+          authentication: p.authentication,
+          authenticationDetail: p.authenticationDetail,
         }))
       : [];
 
@@ -92,6 +94,7 @@ export class TelemetryAggregator implements ITelemetryAggregator {
         id: w.id,
         name: w.name,
         role: w.role,
+        skills: w.skills,
         departmentId: `dept-${w.department.toLowerCase()}`,
         status: execution ? 'BUSY' : 'IDLE',
         currentTaskId: execution?.taskId,
@@ -158,9 +161,16 @@ export class TelemetryAggregator implements ITelemetryAggregator {
       )
       .slice(-20);
 
-    const activeProjectState = (this.projectOrchestrator as any)?.projectHistory
-      ? (Array.from((this.projectOrchestrator as any).projectHistory.values()).slice(-1)[0] as any)
+    // activeProjects stores ProjectExecutionState directly; projectHistory stores
+    // ProjectExecutionResult ({ state, reports, ... }). Normalize both shapes before reading
+    // telemetry. The old code treated an active state as a result, causing the dashboard to say
+    // "No active project" while a real CLI subprocess was busy.
+    const activeState = (this.projectOrchestrator as any)
+      ? (Array.from((this.projectOrchestrator as any).activeProjects?.values?.() || []).slice(-1)[0] as any)
       : undefined;
+    const activeProjectState = activeState
+      ? { state: activeState }
+      : ((Array.from((this.projectOrchestrator as any)?.projectHistory?.values?.() || []).slice(-1)[0] as any) || undefined);
 
     const projectStatus = activeProjectState?.state?.status;
     const firstPlan = activeProjectState?.state?.executionPlans

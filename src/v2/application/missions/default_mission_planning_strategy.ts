@@ -260,6 +260,8 @@ export class DefaultMissionPlanningStrategy implements IMissionPlanningStrategy 
       departmentAssignments: {},
       workerAssignments: {},
       totalEstimatedComplexity,
+      workspacePath: context?.executionWorkspacePath || context?.workspacePath,
+      projectId: context?.projectId,
     };
   }
 }

@@ -32,9 +32,11 @@ export const StartupScreen: React.FC<StartupScreenProps> = ({ snapshot, onContin
         {snapshot.runtimeProviders.map((provider: any) => (
           <Box key={provider.id} gap={1}>
             {provider.installed ? (
-              <Text color="green">[✓] {provider.name} ({provider.version}) - Ready</Text>
+              <Text color={provider.authentication === 'AUTHENTICATED' ? 'green' : 'yellow'}>
+                [✓] {provider.name} ({provider.version}) - CLI installed / auth: {provider.authentication || 'UNKNOWN'}
+              </Text>
             ) : (
-              <Text color="gray">[✗] {provider.name} - Not Found (Add binary to PATH or set API Key in .env)</Text>
+              <Text color="gray">[✗] {provider.name} - Not Found (install the CLI and login locally)</Text>
             )}
           </Box>
         ))}

@@ -95,8 +95,17 @@ export const TuiApp: React.FC<TuiAppProps> = ({ telemetryAggregator, kernel, onE
 
     try {
       const orchestrator = kernel.getProjectLifecycleOrchestrator();
-      const result = activeProjectId
-        ? await orchestrator.continueProject(activeProjectId, chatPrompt)
+      const projectId = activeProjectId || orchestrator.getLatestProjectId();
+      const currentState = projectId ? orchestrator.getState(projectId) : undefined;
+      if (currentState?.status === 'PLANNING' || currentState?.status === 'EXECUTING_MISSIONS') {
+        return {
+          success: false,
+          summary: `Mevcut proje hâlâ çalışıyor. Bu proje tamamlandıktan sonra yeni komut gönderebilirsin. (${projectId})`,
+        };
+      }
+
+      const result = projectId
+        ? await orchestrator.continueProject(projectId, chatPrompt)
         : await orchestrator.runProject(chatPrompt);
 
       if (!activeProjectId) setActiveProjectId(result.state.projectId);
@@ -158,7 +167,11 @@ export const TuiApp: React.FC<TuiAppProps> = ({ telemetryAggregator, kernel, onE
             const goal = `Create ${projectName}`;
             telemetryAggregator.logMessage('INFO', `Triggering autonomous project execution at ${absolutePath}`);
             if (kernel) {
-              kernel.getProjectLifecycleOrchestrator().runProject(goal, { absolutePath }).then((result) => {
+              const orchestrator = kernel.getProjectLifecycleOrchestrator();
+              const execution = orchestrator.runProject(goal, { absolutePath });
+              const projectId = orchestrator.getLatestProjectId();
+              if (projectId) setActiveProjectId(projectId);
+              execution.then((result) => {
                 setActiveProjectId(result.state.projectId);
                 telemetryAggregator.logMessage('SUCCESS', `Autonomous execution completed at ${absolutePath}`);
               }).catch((err: any) => {
@@ -177,7 +190,7 @@ export const TuiApp: React.FC<TuiAppProps> = ({ telemetryAggregator, kernel, onE
           {activeTab === 'WORKERS' && <WorkersTab snapshot={snapshot} kernel={kernel} />}
           {activeTab === 'WORKSPACE' && <WorkspaceTab snapshot={snapshot} />}
           {activeTab === 'TERMINALS' && <TerminalsTab snapshot={snapshot} />}
-          {activeTab === 'CHAT' && <ChatTab snapshot={snapshot} onSubmitChatGoal={handleChatGoal} />}
+          {activeTab === 'CHAT' && <ChatTab snapshot={snapshot} kernel={kernel} onSubmitChatGoal={handleChatGoal} />}
           {activeTab === 'VERIFICATION' && <VerificationTab snapshot={snapshot} />}
           {activeTab === 'LOGS' && <LogsTab snapshot={snapshot} />}
         </Box>

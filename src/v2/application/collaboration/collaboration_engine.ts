@@ -13,6 +13,7 @@ export class CollaborationEngine extends EventEmitter {
   private conflictDetector = new ConflictDetector();
   private inboxMap = new Map<string, CollaborationMessage[]>();
   private outboxMap = new Map<string, CollaborationMessage[]>();
+  private reviewRejectionHandler?: (taskId: string, reviewerId: string, missionId: string, feedback: string) => Promise<void>;
 
   constructor(
     private companyBus?: ICompanyBus,
@@ -55,6 +56,14 @@ export class CollaborationEngine extends EventEmitter {
     if (msg.recipientId) {
       this.emitEvent('WorkerMessageReceived', msg.id, { recipientId: msg.recipientId });
     }
+  }
+
+  async askQuestion(questionId: string, senderId: string, recipientId: string, missionId: string, question: string, taskId?: string): Promise<void> {
+    await this.sendMessage({ id: `msg-q-${questionId}`, senderId, senderRole: 'Engineer', recipientId, messageType: 'QUESTION', missionId, taskId, summary: question, payload: { questionId, question }, timestamp: new Date().toISOString() });
+  }
+
+  async answerQuestion(questionId: string, senderId: string, recipientId: string, missionId: string, answer: string, taskId?: string): Promise<void> {
+    await this.sendMessage({ id: `msg-a-${questionId}`, senderId, senderRole: 'Engineer', recipientId, messageType: 'ANSWER', missionId, taskId, summary: answer, payload: { questionId, answer }, timestamp: new Date().toISOString() });
   }
 
   async delegateTask(taskId: string, currentOwnerId: string, newOwnerId: string, missionId: string): Promise<void> {
@@ -134,7 +143,14 @@ export class CollaborationEngine extends EventEmitter {
       };
       await this.sendMessage(msg);
       this.emitEvent('ReviewRejected', taskId, { reviewerId, developerId: record.developerId, feedback });
+      if (this.reviewRejectionHandler) {
+        await this.reviewRejectionHandler(taskId, reviewerId, missionId, feedback);
+      }
     }
+  }
+
+  setReviewRejectionHandler(handler: (taskId: string, reviewerId: string, missionId: string, feedback: string) => Promise<void>): void {
+    this.reviewRejectionHandler = handler;
   }
 
   async shareKnowledge(authorId: string, title: string, content: string): Promise<void> {

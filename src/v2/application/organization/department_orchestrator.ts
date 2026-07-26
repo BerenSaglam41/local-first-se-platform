@@ -66,6 +66,11 @@ export class DepartmentOrchestrator extends EventEmitter {
     return { workerId: chosen.id, name: chosen.name };
   }
 
+  selectWorkerForCapability(capability: string, excludeWorkerIds: Set<string> = new Set()): { workerId: string; name: string } | null {
+    const worker = this.workerStore.findBySkill(capability, excludeWorkerIds);
+    return worker ? { workerId: worker.id, name: worker.name } : null;
+  }
+
   getDepartmentMetrics(deptId: string): DepartmentMetrics {
     const type = ALL_DEPARTMENT_TYPES.find((t) => this.deptId(t) === deptId);
     const members = type ? this.workerStore.listByDepartment(type) : [];

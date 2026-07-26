@@ -6,12 +6,17 @@ import {
   ExecutionPlan,
   ExecutionArtifact,
   ExecutionStatus,
+  WorkerQuestion,
 } from '../../contracts/iautonomous_worker';
 import { WorkspaceEngine } from '../workspace/workspace_engine';
 import { WorkspaceExecutionService } from './workspace_execution_service';
 import { ReasoningCoordinator } from '../reasoning/reasoning_coordinator';
 import { ExecutionResponseParser } from './execution_response_parser';
 import { IEventStore } from '../../contracts/ievent_store';
+import { createHash } from 'crypto';
+import { CollaborationEngine } from '../collaboration/collaboration_engine';
+import { WorkerStore } from './worker_store';
+import { ISharedMemory } from '../../contracts/ishared_memory';
 
 /**
  * Delegates all reasoning to ReasoningCoordinator, which is also where the assigned worker's
@@ -21,13 +26,17 @@ import { IEventStore } from '../../contracts/ievent_store';
 export class WorkerExecutionEngine extends EventEmitter {
   private reports = new Map<string, ExecutionReport>();
   private responseParser: ExecutionResponseParser;
+  private providerSessions = new Map<string, string>();
 
   constructor(
     private workspaceEngine: WorkspaceEngine,
     private workspaceExecutionService: WorkspaceExecutionService,
     private reasoningCoordinator: ReasoningCoordinator,
     private eventStore?: IEventStore,
-    responseParser?: ExecutionResponseParser
+    responseParser?: ExecutionResponseParser,
+    private collaborationEngine?: CollaborationEngine,
+    private workerStore?: WorkerStore,
+    private sharedMemory?: ISharedMemory
   ) {
     super();
     this.responseParser = responseParser || new ExecutionResponseParser();
@@ -47,18 +56,27 @@ export class WorkerExecutionEngine extends EventEmitter {
 
     try {
       // 1. Prepare Workspace
-      const workspaceInfo = this.workspaceEngine.createWorkspace(request.taskId);
-      workspacePath = workspaceInfo.isolatedPath;
+      workspacePath = request.workspacePath || this.workspaceEngine.createWorkspace(request.taskId).isolatedPath;
 
       // 2. Invoke Reasoning Pipeline
       status = 'REASONING';
-      const reasoningRes = await this.reasoningCoordinator.requestReasoning({
+      const memoryScopeId = request.projectId || request.missionId;
+      const recentMemory = this.sharedMemory
+        ? await this.sharedMemory.listMemory('PROJECT', memoryScopeId, 12)
+        : [];
+      let reasoningRes = await this.reasoningCoordinator.requestReasoning({
         requestId: `req-${executionId}`,
         taskId: request.taskId,
         missionId: request.missionId,
         workerId: request.workerId,
-        goal: this.buildCodeGenerationPrompt(request.goal, workspacePath),
+        goal: this.buildCodeGenerationPrompt(request.goal, workspacePath, {
+          ...(request.contextPackage || {}),
+          persistentMemory: recentMemory.map((memory) => ({ kind: memory.kind, author: memory.author, content: memory.content })),
+        }),
         context: {
+          workspacePath,
+          resumeConversation: request.resumeConversation ?? this.hasSession(request),
+          conversationSessionId: request.conversationSessionId || this.getSessionId(request),
           constraints: [`Execute strictly within workspace '${workspacePath}'`],
         },
         // Wires the caller's real configured timeout (see MissionExecutionPolicy.timeoutMs via
@@ -72,6 +90,71 @@ export class WorkerExecutionEngine extends EventEmitter {
 
       if (!reasoningRes.success || !reasoningRes.response) {
         throw new Error(reasoningRes.error || 'Reasoning pipeline failed to generate execution response');
+      }
+
+      // Workers may request specialist input using the explicit protocol in the prompt. The
+      // request is routed to a real available worker, whose assigned CLI answers it; the answer
+      // is then sent back to the original worker in the same provider conversation.
+      const questions = this.extractQuestions(reasoningRes.response.responseText, request.workerId);
+      if (questions.length > 0 && this.collaborationEngine && this.workerStore) {
+        const answers: string[] = [];
+        for (const question of questions.slice(0, 3)) {
+          const recipient = this.workerStore.findBySkill(question.capability, new Set([request.workerId]));
+          if (!recipient) continue;
+          question.recipientWorkerId = recipient.id;
+          await this.collaborationEngine.askQuestion(question.id, request.workerId, recipient.id, request.missionId, question.question, request.taskId);
+          await this.sharedMemory?.writeMemory({
+            id: `memory-${question.id}`,
+            scope: 'PROJECT', scopeId: memoryScopeId, author: request.workerId, kind: 'QUESTION',
+            content: `${recipient.name}: ${question.question}`, timestamp: new Date().toISOString(),
+          });
+
+          const answerResult = await this.reasoningCoordinator.requestReasoning({
+            requestId: `req-${executionId}-${question.id}-answer`,
+            taskId: `${request.taskId}-question-${question.id}`,
+            missionId: request.missionId,
+            workerId: recipient.id,
+            goal: `Answer this question from worker ${request.workerId} using your ${recipient.skills.join(', ')} expertise. Do not edit files.\n\nQUESTION: ${question.question}`,
+            context: {
+              workspacePath,
+              resumeConversation: this.hasSession({ ...request, workerId: recipient.id }),
+              conversationSessionId: this.getSessionId({ ...request, workerId: recipient.id }),
+              constraints: [`Read the shared workspace at '${workspacePath}' if needed. Return a concise technical answer.`],
+            },
+            timeoutMs: request.policy?.maxDurationMs,
+          });
+          const answer = answerResult.success && answerResult.response?.responseText
+            ? answerResult.response.responseText.trim()
+            : `No answer available: ${answerResult.error || 'specialist execution failed'}`;
+          question.answer = answer;
+          answers.push(`${recipient.name} (${recipient.role}) answered: ${answer}`);
+          await this.collaborationEngine.answerQuestion(question.id, recipient.id, request.workerId, request.missionId, answer, request.taskId);
+          await this.sharedMemory?.writeMemory({
+            id: `memory-${question.id}-answer`,
+            scope: 'PROJECT', scopeId: memoryScopeId, author: recipient.id, kind: 'ANSWER',
+            content: answer, timestamp: new Date().toISOString(),
+          });
+        }
+
+        if (answers.length > 0) {
+          reasoningRes = await this.reasoningCoordinator.requestReasoning({
+            requestId: `req-${executionId}-with-team-answers`,
+            taskId: request.taskId,
+            missionId: request.missionId,
+            workerId: request.workerId,
+            goal: `${this.buildCodeGenerationPrompt(request.goal, workspacePath, request.contextPackage)}\n\nTEAM ANSWERS TO YOUR QUESTIONS:\n${answers.join('\n\n')}\n\nContinue the implementation using these answers.`,
+            context: {
+              workspacePath,
+              resumeConversation: true,
+              conversationSessionId: this.getSessionId(request),
+              constraints: [`Execute strictly within workspace '${workspacePath}'`],
+            },
+            timeoutMs: request.policy?.maxDurationMs,
+          });
+          if (!reasoningRes.success || !reasoningRes.response) {
+            throw new Error(reasoningRes.error || 'Worker could not continue after specialist answers');
+          }
+        }
       }
 
       // 3. Generate ExecutionPlan from the provider's actual response (zero direct file writes)
@@ -165,6 +248,12 @@ export class WorkerExecutionEngine extends EventEmitter {
       };
 
       this.reports.set(executionId, report);
+      await this.sharedMemory?.writeMemory({
+        id: `memory-task-${executionId}`,
+        scope: 'PROJECT', scopeId: memoryScopeId, author: request.workerId, kind: 'SUMMARY',
+        content: `${request.taskId}: ${report.summary}. Files: ${[...report.filesCreated, ...report.filesModified].join(', ') || 'none'}`,
+        timestamp: new Date().toISOString(),
+      });
       this.emitEvent('WorkerExecutionCompleted', executionId, {
         taskId: request.taskId,
         workerId: request.workerId,
@@ -172,7 +261,7 @@ export class WorkerExecutionEngine extends EventEmitter {
         filesCreatedCount: mutationRes.createdFiles.length,
       });
 
-      return { success: true, report };
+      return { success: true, report, questions: this.extractQuestions(reasoningRes.response?.responseText || '', request.workerId) };
     } catch (err: any) {
       status = 'FAILED';
       const durationMs = Date.now() - startTime;
@@ -210,9 +299,13 @@ export class WorkerExecutionEngine extends EventEmitter {
     return Array.from(this.reports.values());
   }
 
-  private buildCodeGenerationPrompt(goal: string, workspacePath: string): string {
+  private buildCodeGenerationPrompt(goal: string, workspacePath: string, contextPackage?: Record<string, any>): string {
+    const handoff = contextPackage && Object.keys(contextPackage).length > 0
+      ? `\n\nTEAM HANDOFF CONTEXT:\n${JSON.stringify(contextPackage, null, 2)}\nUse this as prior worker output. Do not discard existing work.\n`
+      : '';
     return [
       goal,
+      handoff,
       '',
       `You are generating source files inside the isolated workspace directory '${workspacePath}'.`,
       'Respond with one or more fenced code blocks and no prose outside of them.',
@@ -220,7 +313,37 @@ export class WorkerExecutionEngine extends EventEmitter {
       '// FILE: relative/path/to/file.ext',
       '(use the comment syntax appropriate to the file type, e.g. "# FILE: path" for YAML/shell, "<!-- FILE: path -->" for Markdown/HTML).',
       'Paths must be relative to the workspace root — never absolute, never containing "..".',
+      'If you need another team member, add a comment line in your response exactly as: // QUESTION_FOR: capability | your concise question. Continue with the best safe implementation while waiting for the answer.',
     ].join('\n');
+  }
+
+  private extractQuestions(responseText: string, senderWorkerId: string): WorkerQuestion[] {
+    const questions: WorkerQuestion[] = [];
+    const pattern = /(?:\/\/|#|<!--)\s*QUESTION_FOR:\s*([^|\r\n]+?)\s*\|\s*([^\r\n]+?)(?:\s*-->)?\s*$/gim;
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(responseText)) !== null) {
+      const capability = match[1].trim();
+      const question = match[2].trim();
+      if (!capability || !question) continue;
+      questions.push({ id: `q-${Date.now()}-${questions.length}`, senderWorkerId, capability, question });
+    }
+    return questions;
+  }
+
+  private getSessionId(request: WorkerExecutionRequest): string {
+    const key = `${request.projectId || request.missionId}:${request.workerId}`;
+    const existing = this.providerSessions.get(key);
+    if (existing) return existing;
+    // Deterministic UUID-shaped ID means a restarted SE-OS process can resume the same
+    // provider chat for the same project/worker without persisting provider secrets.
+    const hex = createHash('sha256').update(key).digest('hex').slice(0, 32);
+    const sessionId = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+    this.providerSessions.set(key, sessionId);
+    return sessionId;
+  }
+
+  private hasSession(request: WorkerExecutionRequest): boolean {
+    return this.providerSessions.has(`${request.projectId || request.missionId}:${request.workerId}`);
   }
 
   private emitEvent(eventType: string, aggregateId: string, payload: any): void {

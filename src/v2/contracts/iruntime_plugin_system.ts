@@ -1,6 +1,7 @@
 export type RuntimeCapability = 'Reasoning' | 'Cancellation' | 'ToolExecution' | 'FileAccess';
 
 export type RuntimePluginHealthState = 'Healthy' | 'Degraded' | 'Unavailable' | 'Restarting';
+export type RuntimeAuthenticationStatus = 'AUTHENTICATED' | 'NOT_AUTHENTICATED' | 'UNKNOWN';
 
 export interface RuntimePluginHealth {
   status: RuntimePluginHealthState;
@@ -52,4 +53,6 @@ export interface IRuntimePlugin {
   shutdown(): Promise<void>;
   capabilities(): RuntimeCapability[];
   metadata(): RuntimePluginManifest;
+  /** Read-only local CLI account check. Plugins must never perform login automatically. */
+  authenticationStatus?(): { status: RuntimeAuthenticationStatus; detail?: string };
 }

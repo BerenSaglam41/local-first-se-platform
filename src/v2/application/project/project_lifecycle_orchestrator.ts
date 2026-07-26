@@ -8,16 +8,20 @@ import {
 } from '../../contracts/iproject_lifecycle_orchestrator';
 import { IProjectLifecycleStrategy } from '../../contracts/iproject_lifecycle_strategy';
 import { IEventStore } from '../../contracts/ievent_store';
+import { WorkspaceEngine } from '../workspace/workspace_engine';
 
 export class ProjectLifecycleOrchestrator extends EventEmitter {
   private activeProjects = new Map<string, ProjectExecutionState>();
   private projectHistory = new Map<string, ProjectExecutionResult>();
+  private readonly stateFile = path.resolve('./.se_workspaces/project_history.json');
 
   constructor(
     private strategy: IProjectLifecycleStrategy,
-    private eventStore?: IEventStore
+    private eventStore?: IEventStore,
+    private workspaceEngine?: WorkspaceEngine
   ) {
     super();
+    this.loadHistory();
   }
 
   async runProject(goal: string, context?: Record<string, any>): Promise<ProjectExecutionResult> {
@@ -34,17 +38,29 @@ export class ProjectLifecycleOrchestrator extends EventEmitter {
       conversationHistory: [],
     };
 
+    const targetPath = context?.absolutePath ? path.resolve(context.absolutePath) : undefined;
+    const executionWorkspace = this.workspaceEngine?.createProjectWorkspace(projectId, targetPath).isolatedPath;
+    const lifecycleContext = {
+      ...(context || {}),
+      projectId,
+      ...(executionWorkspace ? { executionWorkspacePath: executionWorkspace } : {}),
+    };
+    initialState.workspacePath = targetPath || './.se_workspaces';
+    initialState.executionWorkspacePath = executionWorkspace;
+
     this.activeProjects.set(projectId, initialState);
 
     this.emitEvent('ProjectExecutionStarted', projectId, { goal });
 
     try {
-      const result = await this.strategy.executeProjectLifecycle(projectId, goal, context);
+      const result = await this.strategy.executeProjectLifecycle(projectId, goal, lifecycleContext);
       this.activeProjects.delete(projectId);
       this.projectHistory.set(projectId, result);
+      this.persistHistory();
 
-      const wsPathForState = context?.absolutePath || './.se_workspaces/ws-t-104';
+      const wsPathForState = targetPath || './.se_workspaces';
       result.state.workspacePath = wsPathForState;
+      result.state.executionWorkspacePath = executionWorkspace || result.state.executionWorkspacePath;
       result.state.conversationHistory = [
         { turnId: `turn-${Date.now()}`, goal, timestamp: new Date().toISOString(), summary: result.summary },
       ];
@@ -61,6 +77,7 @@ export class ProjectLifecycleOrchestrator extends EventEmitter {
       // Materialize real output — success or failure — instead of only ever writing anything on
       // success. A partially-failed run still did real work a user should be able to see.
       this.materializeProjectOutput(projectId, goal, startTime, wsPathForState, result);
+      if (executionWorkspace && targetPath) this.workspaceEngine?.syncProjectWorkspace(executionWorkspace, targetPath);
 
       return result;
     } catch (err: any) {
@@ -77,6 +94,7 @@ export class ProjectLifecycleOrchestrator extends EventEmitter {
       };
 
       this.projectHistory.set(projectId, failedResult);
+      this.persistHistory();
       this.emitEvent('ProjectExecutionFailed', projectId, { error: err.message });
       return failedResult;
     }
@@ -113,6 +131,8 @@ export class ProjectLifecycleOrchestrator extends EventEmitter {
     try {
       const result = await this.strategy.executeProjectLifecycle(projectId, followUpGoal, {
         absolutePath: priorState.workspacePath,
+        executionWorkspacePath: priorState.executionWorkspacePath,
+        projectId,
         isFollowUp: true,
         conversationHistory: priorState.conversationHistory,
       });
@@ -132,6 +152,7 @@ export class ProjectLifecycleOrchestrator extends EventEmitter {
         executionResults: { ...priorState.executionResults, ...result.state.executionResults },
         endTime: result.state.endTime,
         workspacePath: priorState.workspacePath,
+        executionWorkspacePath: priorState.executionWorkspacePath,
         conversationHistory: [...priorState.conversationHistory, turn],
       };
 
@@ -143,6 +164,7 @@ export class ProjectLifecycleOrchestrator extends EventEmitter {
         reports: { ...(priorResult?.reports || {}), ...result.reports },
       };
       this.projectHistory.set(projectId, mergedResult);
+      this.persistHistory();
 
       this.emitEvent(
         result.success ? 'ProjectExecutionCompleted' : 'ProjectExecutionFailed',
@@ -151,6 +173,9 @@ export class ProjectLifecycleOrchestrator extends EventEmitter {
       );
 
       this.materializeProjectOutput(projectId, followUpGoal, mergedState.startTime, priorState.workspacePath || './.se_workspaces/ws-t-104', mergedResult);
+      if (priorState.executionWorkspacePath && priorState.workspacePath) {
+        this.workspaceEngine?.syncProjectWorkspace(priorState.executionWorkspacePath, priorState.workspacePath);
+      }
 
       return mergedResult;
     } catch (err: any) {
@@ -167,6 +192,7 @@ export class ProjectLifecycleOrchestrator extends EventEmitter {
         error: err.message,
       };
       this.projectHistory.set(projectId, failedResult);
+      this.persistHistory();
       this.emitEvent('ProjectExecutionFailed', projectId, { error: err.message, continuation: true });
       return failedResult;
     }
@@ -174,6 +200,13 @@ export class ProjectLifecycleOrchestrator extends EventEmitter {
 
   getState(projectId: string): ProjectExecutionState | undefined {
     return this.activeProjects.get(projectId) || this.projectHistory.get(projectId)?.state;
+  }
+
+  /** Returns the most recently created project, including one that is still running. */
+  getLatestProjectId(): string | undefined {
+    const active = Array.from(this.activeProjects.keys()).at(-1);
+    if (active) return active;
+    return Array.from(this.projectHistory.keys()).at(-1);
   }
 
   getResult(projectId: string): ProjectExecutionResult | undefined {
@@ -186,6 +219,27 @@ export class ProjectLifecycleOrchestrator extends EventEmitter {
 
   getStrategy(): IProjectLifecycleStrategy {
     return this.strategy;
+  }
+
+  private loadHistory(): void {
+    try {
+      if (!fs.existsSync(this.stateFile)) return;
+      const parsed = JSON.parse(fs.readFileSync(this.stateFile, 'utf8')) as Array<[string, ProjectExecutionResult]>;
+      for (const [id, result] of parsed) {
+        if (result?.state?.projectId) this.projectHistory.set(id, result);
+      }
+    } catch {
+      // Corrupt history must not prevent the terminal from booting.
+    }
+  }
+
+  private persistHistory(): void {
+    try {
+      fs.mkdirSync(path.dirname(this.stateFile), { recursive: true });
+      fs.writeFileSync(this.stateFile, JSON.stringify(Array.from(this.projectHistory.entries()), null, 2), 'utf8');
+    } catch {
+      // Persistence is best-effort; execution result remains available in memory.
+    }
   }
 
   /**

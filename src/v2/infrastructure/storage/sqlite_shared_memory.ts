@@ -1,6 +1,6 @@
 import { open, Database } from 'sqlite';
 import * as sqlite3 from 'sqlite3';
-import { ADRRecord, GitState, ISharedMemory, TaskBoardState } from '../../contracts/ishared_memory';
+import { ADRRecord, GitState, ISharedMemory, MemoryRecord, TaskBoardState } from '../../contracts/ishared_memory';
 
 export class SqliteSharedMemory implements ISharedMemory {
   private db: Database | null = null;
@@ -47,6 +47,17 @@ export class SqliteSharedMemory implements ISharedMemory {
         checkpoint_hash TEXT NOT NULL,
         timestamp TEXT NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS memory_v2 (
+        id TEXT PRIMARY KEY,
+        scope TEXT NOT NULL,
+        scope_id TEXT NOT NULL,
+        author TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        content TEXT NOT NULL,
+        timestamp TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_memory_scope ON memory_v2(scope, scope_id, timestamp);
     `);
 
     return this.db;
@@ -127,6 +138,28 @@ export class SqliteSharedMemory implements ISharedMemory {
       [subTaskId, hash, new Date().toISOString()]
     );
     return hash;
+  }
+
+  async writeMemory(record: MemoryRecord): Promise<void> {
+    const db = await this.connect();
+    await db.run(
+      `INSERT INTO memory_v2 (id, scope, scope_id, author, kind, content, timestamp)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET content=excluded.content, timestamp=excluded.timestamp`,
+      [record.id, record.scope, record.scopeId, record.author, record.kind, record.content, record.timestamp]
+    );
+  }
+
+  async listMemory(scope: MemoryRecord['scope'], scopeId: string, limit = 12): Promise<MemoryRecord[]> {
+    const db = await this.connect();
+    const rows = await db.all<any[]>(
+      `SELECT * FROM memory_v2 WHERE scope = ? AND scope_id = ? ORDER BY timestamp DESC LIMIT ?`,
+      [scope, scopeId, limit]
+    );
+    return rows.map((row) => ({
+      id: row.id, scope: row.scope, scopeId: row.scope_id, author: row.author,
+      kind: row.kind, content: row.content, timestamp: row.timestamp,
+    }));
   }
 
   async close(): Promise<void> {

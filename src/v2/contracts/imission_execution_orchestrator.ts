@@ -11,6 +11,9 @@ export interface MissionExecutionPolicy {
   maxTaskRetries: number;
   timeoutMs: number;
   autoRetryOnFailure: boolean;
+  workspacePath?: string;
+  projectId?: string;
+  contextPackage?: Record<string, any>;
 }
 
 export interface MissionExecutionState {
