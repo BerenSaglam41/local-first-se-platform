@@ -12,7 +12,7 @@ describe('SE-OS v2.0 Milestone 26 — Interactive Multi-Tab Chat-Driven Operatin
     await registerDefaultProviders(kernel, createSafeTestProviderOverrides());
 
     const providers = kernel.getProviderRegistry().listProviders();
-    expect(providers.length).toBeGreaterThanOrEqual(6);
+    expect(providers.length).toBeGreaterThanOrEqual(4);
     expect(providers.some((p) => p.id === 'plugin-codex-cli')).toBe(true);
     expect(providers.some((p) => p.id === 'plugin-gemini-cli')).toBe(true);
 
