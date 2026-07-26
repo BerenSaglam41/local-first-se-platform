@@ -5,10 +5,12 @@ import { WorkspaceInfo } from '../../contracts/icontext_package';
 import { IEventStore } from '../../contracts/ievent_store';
 import { GitWorktreeManager } from '../../infrastructure/workspace/git_worktree_manager';
 import { WorktreeInfo } from '../../contracts/igit_worktree';
+import { execFileSync } from 'child_process';
 
 export class WorkspaceEngine extends EventEmitter {
   private activeWorkspaces = new Map<string, WorkspaceInfo>();
   private gitWorktreeManager: GitWorktreeManager;
+  private projectGitManagers = new Map<string, GitWorktreeManager>();
   private baseDir: string;
 
   constructor(baseDir: string = './.se_workspaces', private eventStore?: IEventStore) {
@@ -45,6 +47,7 @@ export class WorkspaceEngine extends EventEmitter {
     if (targetPath && fs.existsSync(targetPath)) {
       this.copyTree(targetPath, isolatedPath, true);
     }
+    this.ensureGitRepository(isolatedPath);
     const info: WorkspaceInfo = {
       workspaceId,
       taskId: projectId,
@@ -56,6 +59,31 @@ export class WorkspaceEngine extends EventEmitter {
     return info;
   }
 
+  createTaskWorktree(projectWorkspacePath: string, workerId: string, missionId: string): WorktreeInfo | undefined {
+    if (!this.isGitRepository(projectWorkspacePath)) return undefined;
+    return this.getProjectGitManager(projectWorkspacePath).createWorktree(workerId, missionId);
+  }
+
+  commitAndMergeTaskWorktree(projectWorkspacePath: string, worktreeId: string, message: string): { success: boolean; error?: string } {
+    return this.getProjectGitManager(projectWorkspacePath).commitAndMerge(worktreeId, message);
+  }
+
+  removeTaskWorktree(projectWorkspacePath: string, worktreeId: string): boolean {
+    return this.getProjectGitManager(projectWorkspacePath).removeWorktree(worktreeId);
+  }
+
+  isGitRepository(repositoryPath: string): boolean {
+    try {
+      // Do not accept a parent repository. Project staging must own its own Git metadata;
+      // otherwise worktrees could accidentally be created from the SE-OS source checkout.
+      if (!fs.existsSync(path.join(repositoryPath, '.git'))) return false;
+      const root = execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd: repositoryPath, encoding: 'utf8' }).trim();
+      return path.resolve(root) === path.resolve(repositoryPath);
+    } catch {
+      return false;
+    }
+  }
+
   /** Copy generated/modified project files back without deleting unrelated target files. */
   syncProjectWorkspace(workspacePath: string, targetPath: string): void {
     fs.mkdirSync(targetPath, { recursive: true });
@@ -65,7 +93,7 @@ export class WorkspaceEngine extends EventEmitter {
   private copyTree(source: string, destination: string, skipProjectMetadata: boolean): void {
     if (!fs.existsSync(source)) return;
     for (const entry of fs.readdirSync(source, { withFileTypes: true })) {
-      if (['.git', 'node_modules', '.se_workspaces', 'dist', 'se_company.db', 'se_company.db-shm', 'se_company.db-wal'].includes(entry.name)) continue;
+      if (['.git', 'node_modules', '.se_workspaces', '.se-worktrees', 'dist', 'se_company.db', 'se_company.db-shm', 'se_company.db-wal'].includes(entry.name)) continue;
       const sourcePath = path.join(source, entry.name);
       const destinationPath = path.join(destination, entry.name);
       if (entry.isDirectory()) {
@@ -76,6 +104,27 @@ export class WorkspaceEngine extends EventEmitter {
         fs.copyFileSync(sourcePath, destinationPath);
       }
     }
+  }
+
+  private ensureGitRepository(repositoryPath: string): void {
+    if (this.isGitRepository(repositoryPath)) return;
+    try {
+      execFileSync('git', ['init', '-q'], { cwd: repositoryPath, stdio: 'ignore' });
+      execFileSync('git', ['config', 'user.name', 'SE-OS Project'], { cwd: repositoryPath, stdio: 'ignore' });
+      execFileSync('git', ['config', 'user.email', 'se-os@localhost'], { cwd: repositoryPath, stdio: 'ignore' });
+      execFileSync('git', ['add', '-A'], { cwd: repositoryPath, stdio: 'ignore' });
+      execFileSync('git', ['commit', '--allow-empty', '-m', 'SE-OS project baseline'], { cwd: repositoryPath, stdio: 'ignore' });
+    } catch (error: any) {
+      throw new Error(`Could not initialize project Git repository: ${error.message}`);
+    }
+  }
+
+  private getProjectGitManager(projectWorkspacePath: string): GitWorktreeManager {
+    const existing = this.projectGitManagers.get(projectWorkspacePath);
+    if (existing) return existing;
+    const manager = new GitWorktreeManager(path.join(projectWorkspacePath, '.se-worktrees'), this.eventStore, projectWorkspacePath);
+    this.projectGitManagers.set(projectWorkspacePath, manager);
+    return manager;
   }
 
   destroyWorkspace(workspaceId: string): boolean {

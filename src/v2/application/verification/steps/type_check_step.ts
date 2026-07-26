@@ -96,11 +96,17 @@ export class TypeCheckStep implements IVerificationStep {
         compilerOptions.jsx = ts.JsxEmit.React;
       }
 
-      const result = ts.transpileModule(content, {
-        compilerOptions,
-        fileName: filePath,
-        reportDiagnostics: true,
-      });
+      let result: ts.TranspileOutput;
+      try {
+        result = ts.transpileModule(content, {
+          compilerOptions,
+          fileName: filePath,
+          reportDiagnostics: true,
+        });
+      } catch (error: any) {
+        errors.push(`${filePath}: compiler failed (${error?.message || error})`);
+        continue;
+      }
 
       for (const diagnostic of result.diagnostics || []) {
         const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n');

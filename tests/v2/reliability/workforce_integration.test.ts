@@ -12,6 +12,7 @@ import { WorkspaceExecutionService } from '../../../src/v2/application/worker/wo
 import { WorkerStore } from '../../../src/v2/application/worker/worker_store';
 import { CollaborationEngine } from '../../../src/v2/application/collaboration/collaboration_engine';
 import { SqliteSharedMemory } from '../../../src/v2/infrastructure/storage/sqlite_shared_memory';
+import { SqliteWorkforceRepository } from '../../../src/v2/infrastructure/storage/sqlite_workforce_repository';
 
 describe('workforce end-to-end invariants', () => {
   const tempRoots: string[] = [];
@@ -188,5 +189,26 @@ describe('workforce end-to-end invariants', () => {
     fs.rmSync(dbPath, { force: true });
 
     expect(memory[0]?.content).toBe('Use PostgreSQL migrations.');
+  });
+
+  it('persists projects, tasks, and worker mailbox messages across repository reopen', async () => {
+    const dbPath = path.join(os.tmpdir(), `se-workforce-repository-${Date.now()}.db`);
+    const first = new SqliteWorkforceRepository(dbPath);
+    await first.upsertProject({ projectId: 'project-1', goal: 'Build API', status: 'EXECUTING', workspacePath: '/tmp/project-1', updatedAt: new Date().toISOString() });
+    await first.upsertTask({ taskId: 'task-1', projectId: 'project-1', missionId: 'mission-1', workerId: 'emp-bob', status: 'COMPLETED', title: 'Implement API', updatedAt: new Date().toISOString() });
+    await first.recordMessage({
+      id: 'message-1', senderId: 'emp-bob', senderRole: 'Engineer', recipientId: 'emp-alice',
+      messageType: 'TASK_COMPLETION', missionId: 'mission-1', taskId: 'task-1',
+      summary: 'API implementation is ready.', timestamp: new Date().toISOString(),
+    });
+    await first.close();
+
+    const reopened = new SqliteWorkforceRepository(dbPath);
+    const messages = await reopened.listMessages('emp-alice');
+    await reopened.close();
+    fs.rmSync(dbPath, { force: true });
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0].summary).toBe('API implementation is ready.');
   });
 });

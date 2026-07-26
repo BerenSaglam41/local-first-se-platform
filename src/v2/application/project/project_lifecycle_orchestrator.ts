@@ -9,6 +9,7 @@ import {
 import { IProjectLifecycleStrategy } from '../../contracts/iproject_lifecycle_strategy';
 import { IEventStore } from '../../contracts/ievent_store';
 import { WorkspaceEngine } from '../workspace/workspace_engine';
+import { WorkforceRepository } from '../../contracts/iworkforce_repository';
 
 export class ProjectLifecycleOrchestrator extends EventEmitter {
   private activeProjects = new Map<string, ProjectExecutionState>();
@@ -18,7 +19,8 @@ export class ProjectLifecycleOrchestrator extends EventEmitter {
   constructor(
     private strategy: IProjectLifecycleStrategy,
     private eventStore?: IEventStore,
-    private workspaceEngine?: WorkspaceEngine
+    private workspaceEngine?: WorkspaceEngine,
+    private workforceRepository?: WorkforceRepository
   ) {
     super();
     this.loadHistory();
@@ -49,6 +51,7 @@ export class ProjectLifecycleOrchestrator extends EventEmitter {
     initialState.executionWorkspacePath = executionWorkspace;
 
     this.activeProjects.set(projectId, initialState);
+    await this.persistProject(projectId, goal, 'PLANNING', executionWorkspace || initialState.workspacePath);
 
     this.emitEvent('ProjectExecutionStarted', projectId, { goal });
 
@@ -74,6 +77,8 @@ export class ProjectLifecycleOrchestrator extends EventEmitter {
         this.emitEvent('ProjectExecutionFailed', projectId, { error: result.error || result.summary });
       }
 
+      await this.persistProject(projectId, goal, result.success ? 'COMPLETED' : 'FAILED', executionWorkspace || wsPathForState);
+
       // Materialize real output — success or failure — instead of only ever writing anything on
       // success. A partially-failed run still did real work a user should be able to see.
       this.materializeProjectOutput(projectId, goal, startTime, wsPathForState, result);
@@ -95,6 +100,7 @@ export class ProjectLifecycleOrchestrator extends EventEmitter {
 
       this.projectHistory.set(projectId, failedResult);
       this.persistHistory();
+      await this.persistProject(projectId, goal, 'FAILED', executionWorkspace || initialState.workspacePath);
       this.emitEvent('ProjectExecutionFailed', projectId, { error: err.message });
       return failedResult;
     }
@@ -127,6 +133,7 @@ export class ProjectLifecycleOrchestrator extends EventEmitter {
     }
 
     this.emitEvent('ProjectExecutionStarted', projectId, { goal: followUpGoal, continuation: true });
+    await this.persistProject(projectId, followUpGoal, 'EXECUTING', priorState.executionWorkspacePath || priorState.workspacePath);
 
     try {
       const result = await this.strategy.executeProjectLifecycle(projectId, followUpGoal, {
@@ -165,6 +172,7 @@ export class ProjectLifecycleOrchestrator extends EventEmitter {
       };
       this.projectHistory.set(projectId, mergedResult);
       this.persistHistory();
+      await this.persistProject(projectId, followUpGoal, result.success ? 'COMPLETED' : 'FAILED', mergedState.executionWorkspacePath || mergedState.workspacePath);
 
       this.emitEvent(
         result.success ? 'ProjectExecutionCompleted' : 'ProjectExecutionFailed',
@@ -193,6 +201,7 @@ export class ProjectLifecycleOrchestrator extends EventEmitter {
       };
       this.projectHistory.set(projectId, failedResult);
       this.persistHistory();
+      await this.persistProject(projectId, followUpGoal, 'FAILED', failedState.executionWorkspacePath || failedState.workspacePath);
       this.emitEvent('ProjectExecutionFailed', projectId, { error: err.message, continuation: true });
       return failedResult;
     }
@@ -219,6 +228,20 @@ export class ProjectLifecycleOrchestrator extends EventEmitter {
 
   getStrategy(): IProjectLifecycleStrategy {
     return this.strategy;
+  }
+
+  private async persistProject(projectId: string, goal: string, status: string, workspacePath?: string): Promise<void> {
+    try {
+      await this.workforceRepository?.upsertProject({
+        projectId,
+        goal,
+        status,
+        workspacePath,
+        updatedAt: new Date().toISOString(),
+      });
+    } catch {
+      // Operational persistence must not make a healthy worker run fail.
+    }
   }
 
   private loadHistory(): void {

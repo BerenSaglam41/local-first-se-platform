@@ -44,6 +44,7 @@ import { ProjectLifecycleOrchestrator } from '../application/project/project_lif
 import { VerificationPipeline } from '../application/verification/verification_pipeline';
 import { TelemetryAggregator } from '../application/telemetry/telemetry_aggregator';
 import * as fs from 'fs';
+import { SqliteWorkforceRepository } from '../infrastructure/storage/sqlite_workforce_repository';
 
 export class Kernel implements IKernel {
   private container = new DIContainer();
@@ -58,6 +59,8 @@ export class Kernel implements IKernel {
 
     const sharedMemory = new SqliteSharedMemory(dbPath);
     await sharedMemory.connect();
+    const workforceRepository = new SqliteWorkforceRepository(dbPath);
+    await workforceRepository.connect();
 
     const companyBus = new InMemoryCompanyBus();
     const scheduler = new SchedulerSkeleton();
@@ -70,7 +73,7 @@ export class Kernel implements IKernel {
     const telemetry = new TelemetryService();
     const contextCompiler = new ContextCompiler(sharedMemory, eventStore);
     const workspaceEngine = new WorkspaceEngine('./.se_workspaces', eventStore);
-    const collaborationEngine = new CollaborationEngine(companyBus, eventStore, sharedMemory);
+    const collaborationEngine = new CollaborationEngine(companyBus, eventStore, sharedMemory, workforceRepository);
 
     const verificationEngine = new VerificationEngine(
       { enableBuild: true, enableTests: true, enableLint: true, enableTypeCheck: true, minCoveragePercent: 80 },
@@ -103,12 +106,12 @@ export class Kernel implements IKernel {
     );
     const verificationPipeline = new VerificationPipeline(eventStore);
     const workerDispatcher = new DefaultWorkerDispatcher(workerExecutionEngine);
-    const missionExecutionOrchestrator = new MissionExecutionOrchestrator(workerDispatcher, eventStore, verificationPipeline, collaborationEngine);
+    const missionExecutionOrchestrator = new MissionExecutionOrchestrator(workerDispatcher, eventStore, verificationPipeline, collaborationEngine, workspaceEngine, workforceRepository);
     collaborationEngine.setReviewRejectionHandler((taskId, reviewerId, missionId, feedback) =>
       missionExecutionOrchestrator.retryTaskAfterReview(taskId, reviewerId, missionId, feedback)
     );
     const projectLifecycleStrategy = new DefaultProjectLifecycleStrategy(autonomousPlanner, missionEngine, missionExecutionOrchestrator);
-    const projectLifecycleOrchestrator = new ProjectLifecycleOrchestrator(projectLifecycleStrategy, eventStore, workspaceEngine);
+    const projectLifecycleOrchestrator = new ProjectLifecycleOrchestrator(projectLifecycleStrategy, eventStore, workspaceEngine, workforceRepository);
     const telemetryAggregator = new TelemetryAggregator(
       eventStore,
       projectLifecycleOrchestrator,
@@ -123,6 +126,7 @@ export class Kernel implements IKernel {
 
     this.container.registerSingleton<IEventStore>('IEventStore', eventStore);
     this.container.registerSingleton<ISharedMemory>('ISharedMemory', sharedMemory);
+    this.container.registerSingleton<SqliteWorkforceRepository>('WorkforceRepository', workforceRepository);
     this.container.registerSingleton<ICompanyBus>('ICompanyBus', companyBus);
     this.container.registerSingleton<IScheduler>('IScheduler', scheduler);
     this.container.registerSingleton<IPluginRegistry>('IPluginRegistry', pluginRegistry);
@@ -231,6 +235,8 @@ export class Kernel implements IKernel {
 
     const sharedMemory = this.container.resolve<SqliteSharedMemory>('ISharedMemory');
     await sharedMemory.close();
+    const workforceRepository = this.container.resolve<SqliteWorkforceRepository>('WorkforceRepository');
+    await workforceRepository.close();
 
     this.isBooted = false;
   }

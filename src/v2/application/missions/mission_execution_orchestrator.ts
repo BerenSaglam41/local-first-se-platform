@@ -11,6 +11,8 @@ import { TaskScheduler } from './task_scheduler';
 import { IEventStore } from '../../contracts/ievent_store';
 import { VerificationPipeline } from '../verification/verification_pipeline';
 import { CollaborationEngine } from '../collaboration/collaboration_engine';
+import { WorkspaceEngine } from '../workspace/workspace_engine';
+import { WorkforceRepository } from '../../contracts/iworkforce_repository';
 
 export class MissionExecutionOrchestrator extends EventEmitter {
   private states = new Map<string, MissionExecutionState>();
@@ -33,7 +35,9 @@ export class MissionExecutionOrchestrator extends EventEmitter {
     private dispatcher: IWorkerDispatcher,
     private eventStore?: IEventStore,
     verificationPipeline?: VerificationPipeline,
-    private collaborationEngine?: CollaborationEngine
+    private collaborationEngine?: CollaborationEngine,
+    private workspaceEngine?: WorkspaceEngine,
+    private workforceRepository?: WorkforceRepository
   ) {
     super();
     this.verificationPipeline = verificationPipeline || new VerificationPipeline(eventStore);
@@ -62,6 +66,8 @@ export class MissionExecutionOrchestrator extends EventEmitter {
     this.states.set(missionId, state);
     this.plans.set(missionId, plan);
     this.activeExecutions.add(missionId);
+
+    await Promise.all(plan.tasks.map((task) => this.persistTask(task, missionId, plan.projectId)));
 
     this.emitEvent('MissionExecutionStarted', missionId, {
       planId: plan.planId,
@@ -104,6 +110,7 @@ export class MissionExecutionOrchestrator extends EventEmitter {
         const promises = batchToRun.map(async (task) => {
           state.pendingTaskIds = state.pendingTaskIds.filter((id) => id !== task.id);
           state.runningTaskIds.push(task.id);
+          await this.persistTask(task, missionId, plan.projectId, 'RUNNING');
 
           this.emitEvent('TaskExecutionStarted', task.id, {
             missionId,
@@ -120,6 +127,8 @@ export class MissionExecutionOrchestrator extends EventEmitter {
 
           while (attempt <= policy.maxTaskRetries && !taskSuccess) {
             attempt++;
+            const taskWorktree = this.workspaceEngine?.createTaskWorktree(plan.workspacePath || '', task.assignedWorkerId || 'unassigned', missionId);
+            const executionWorkspacePath = taskWorktree?.worktreePath || plan.workspacePath || policy.workspacePath;
             const handoff: Record<string, any> = {};
             for (const dependencyId of task.dependencies) {
               const dependencyReport = reports[dependencyId];
@@ -142,6 +151,7 @@ export class MissionExecutionOrchestrator extends EventEmitter {
             }
             const res = await scheduler.scheduleTask(task, missionId, {
               ...policy,
+              workspacePath: executionWorkspacePath,
               contextPackage: Object.keys(handoff).length > 0 ? handoff : undefined,
             });
             lastReport = res.report;
@@ -158,7 +168,13 @@ export class MissionExecutionOrchestrator extends EventEmitter {
               lastVerification = vResult;
 
               if (vResult.success) {
-                taskSuccess = true;
+                if (taskWorktree && this.workspaceEngine) {
+                  const merge = this.workspaceEngine.commitAndMergeTaskWorktree(plan.workspacePath!, taskWorktree.worktreeId, `SE-OS: complete ${task.id}`);
+                  taskSuccess = merge.success;
+                  if (!merge.success && lastReport) lastReport.summary += ` [Git merge failed: ${merge.error}]`;
+                } else {
+                  taskSuccess = true;
+                }
               } else {
                 if (lastReport) {
                   lastReport.summary += ` [Verification Failed: ${vResult.errors.join(', ')}]`;
@@ -167,8 +183,14 @@ export class MissionExecutionOrchestrator extends EventEmitter {
                   await new Promise((res) => setTimeout(res, 100 * attempt));
                 }
               }
+              if (!taskSuccess && taskWorktree && this.workspaceEngine) {
+                this.workspaceEngine.removeTaskWorktree(plan.workspacePath!, taskWorktree.worktreeId);
+              }
             } else if (attempt <= policy.maxTaskRetries && policy.autoRetryOnFailure) {
+              if (taskWorktree && this.workspaceEngine) this.workspaceEngine.removeTaskWorktree(plan.workspacePath!, taskWorktree.worktreeId);
               await new Promise((res) => setTimeout(res, 100 * attempt));
+            } else if (taskWorktree && this.workspaceEngine) {
+              this.workspaceEngine.removeTaskWorktree(plan.workspacePath!, taskWorktree.worktreeId);
             }
           }
 
@@ -181,6 +203,7 @@ export class MissionExecutionOrchestrator extends EventEmitter {
 
           if (taskSuccess) {
             task.status = 'COMPLETED';
+            await this.persistTask(task, missionId, plan.projectId, 'COMPLETED');
             state.completedTaskIds.push(task.id);
             completedSet.add(task.id);
 
@@ -219,6 +242,7 @@ export class MissionExecutionOrchestrator extends EventEmitter {
             readyQueue.unlockReadyTasks(plan, completedSet);
           } else {
             task.status = 'FAILED';
+            await this.persistTask(task, missionId, plan.projectId, 'FAILED');
             state.failedTaskIds.push(task.id);
 
             this.emitEvent('TaskExecutionFailed', task.id, {
@@ -321,12 +345,14 @@ export class MissionExecutionOrchestrator extends EventEmitter {
 
     if (result.success && report?.status === 'COMPLETED' && verification?.success) {
       task.status = 'COMPLETED';
+      await this.persistTask(task, missionId, plan.projectId, 'COMPLETED');
       if (!state.completedTaskIds.includes(taskId)) state.completedTaskIds.push(taskId);
       state.failedTaskIds = state.failedTaskIds.filter((id) => id !== taskId);
       await this.collaborationEngine?.approveReview(taskId, reviewerId, missionId, 'Auto-repair passed verification.');
       this.emitEvent('TaskAutoRepaired', taskId, { missionId, reviewerId, feedback });
     } else {
       task.status = 'FAILED';
+      await this.persistTask(task, missionId, plan.projectId, 'FAILED');
       if (!state.failedTaskIds.includes(taskId)) state.failedTaskIds.push(taskId);
       this.emitEvent('TaskAutoRepairFailed', taskId, { missionId, reviewerId, errors: verification?.errors || [result.error || 'worker execution failed'] });
     }
@@ -345,6 +371,22 @@ export class MissionExecutionOrchestrator extends EventEmitter {
     this.emit(eventType, evt);
     if (this.eventStore) {
       this.eventStore.append(evt).catch(() => {});
+    }
+  }
+
+  private async persistTask(task: MissionTask, missionId: string, projectId?: string, status = task.status): Promise<void> {
+    try {
+      await this.workforceRepository?.upsertTask({
+        taskId: task.id,
+        projectId,
+        missionId,
+        workerId: task.assignedWorkerId,
+        status,
+        title: task.title,
+        updatedAt: new Date().toISOString(),
+      });
+    } catch {
+      // SQLite availability is observability, not the execution gate.
     }
   }
 }

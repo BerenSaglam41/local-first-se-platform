@@ -138,6 +138,25 @@ export class GitWorktreeManager extends EventEmitter {
     };
   }
 
+  commitAndMerge(worktreeId: string, message: string): { success: boolean; error?: string } {
+    const info = this.worktrees.get(worktreeId);
+    if (!info || !this.repositoryPath) return { success: false, error: 'Git worktree is not registered' };
+    try {
+      this.git(['add', '-A'], false, info.worktreePath);
+      const status = this.git(['status', '--porcelain'], true, info.worktreePath).trim();
+      if (status) {
+        this.git(['-c', 'user.name=SE-OS Worker', '-c', 'user.email=se-os@localhost', 'commit', '-m', message], false, info.worktreePath);
+      }
+      this.git(['merge', '--no-ff', '--no-edit', info.branchName, '-m', message]);
+      this.emitEvent('WorktreeMerged', worktreeId, { branchName: info.branchName, changed: !!status });
+      return { success: true };
+    } catch (error: any) {
+      this.git(['merge', '--abort'], true);
+      this.emitEvent('WorktreeMergeFailed', worktreeId, { branchName: info.branchName, error: error.message });
+      return { success: false, error: error.message };
+    }
+  }
+
   isGitRepository(): boolean {
     return !!this.repositoryPath;
   }
@@ -149,6 +168,7 @@ export class GitWorktreeManager extends EventEmitter {
   private resolveRepositoryPath(candidate?: string): string | undefined {
     try {
       const cwd = candidate ? path.resolve(candidate) : process.cwd();
+      if (candidate && !fs.existsSync(path.join(cwd, '.git'))) return undefined;
       return this.git(['rev-parse', '--show-toplevel'], true, cwd).trim() || undefined;
     } catch {
       return undefined;

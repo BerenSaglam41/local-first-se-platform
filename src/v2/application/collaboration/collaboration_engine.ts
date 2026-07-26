@@ -6,6 +6,7 @@ import { ConflictDetector } from './conflict_detector';
 import { ICompanyBus } from '../../contracts/icompany_bus';
 import { IEventStore } from '../../contracts/ievent_store';
 import { ISharedMemory } from '../../contracts/ishared_memory';
+import { WorkforceRepository } from '../../contracts/iworkforce_repository';
 
 export class CollaborationEngine extends EventEmitter {
   private ownershipManager = new TaskOwnershipManager();
@@ -18,12 +19,14 @@ export class CollaborationEngine extends EventEmitter {
   constructor(
     private companyBus?: ICompanyBus,
     private eventStore?: IEventStore,
-    private sharedMemory?: ISharedMemory
+    private sharedMemory?: ISharedMemory,
+    private repository?: WorkforceRepository
   ) {
     super();
   }
 
   async sendMessage(msg: CollaborationMessage): Promise<void> {
+    await this.repository?.recordMessage(msg);
     if (!this.outboxMap.has(msg.senderId)) {
       this.outboxMap.set(msg.senderId, []);
     }
