@@ -15,7 +15,11 @@ import { CliProcessSpawner, runCliProcess, defaultCliProcessSpawner, killProcess
 /** Injectable so callers (and tests) can replace the real OS process spawn with a fake one. */
 export type ClaudeProcessSpawner = CliProcessSpawner;
 
-const DEFAULT_EXECUTION_TIMEOUT_MS = 180000;
+// See ReasoningCoordinator/MissionExecutionOrchestrator (M29.1 Fix #3): real measured Claude Code CLI
+// latency for a complex prompt was ~125s. This plugin-level default only applies when a caller
+// invokes execute() directly without going through ReasoningCoordinator (which now always passes
+// its own, equally-realistic timeoutMs explicitly).
+const DEFAULT_EXECUTION_TIMEOUT_MS = 240000;
 
 /**
  * Executes at most one request per worker at a time — activeChildProcesses is keyed by workerId,

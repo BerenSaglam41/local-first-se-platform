@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v2.0.0-m29.1-fix3] - 2026-07-26
+
+### Fixed (Milestone 29.1, Fix #3: Realistic Reasoning Timeouts — Root Cause Was NOT Stdin)
+The original UAT reported this as a Claude Code CLI stdin hang. Direct, controlled reproduction
+against the real installed `claude` CLI disproved that: a real complex prompt legitimately takes
+~125s to complete (verified: 124,930ms, exit 0, correct output) — the actual bug was every
+timeout in the call chain defaulting to an unrealistic 60,000ms, killing genuine in-progress work
+mid-flight. See `docs/adr/ADR-0012-realistic-reasoning-timeouts.md`.
+
+- Raised `ReasoningCoordinator`/`MissionExecutionOrchestrator`/both CLI plugins' default timeouts
+  from 60s to 240s (comfortable headroom above measured real latency).
+- Fixed a separate, real gap found during investigation: `WorkerExecutionRequest.policy.
+  maxDurationMs` was already designed and populated by `TaskScheduler` but never read by
+  `WorkerExecutionEngine` — wired it through so mission-level timeout configuration actually works.
+- Closed the confusing (but not actually causal) stdin warning at the source by explicitly
+  closing stdin on every spawned CLI process — a real log-clarity fix.
+- New tests: `tests/v2/reliability/realistic_reasoning_timeout.test.ts`.
+- Verified against the real built TUI: a full 6-task mission against real Claude and Codex CLIs
+  completed 4/6 tasks successfully with 20 real files generated — zero stdin/timeout-related
+  failures; the 2 remaining failures were both legitimate, different, already-tracked issues
+  (Antigravity not installed; Gemini's trusted-directory gate, Fix #4).
+
+---
+
 ## [v2.0.0-m29.1-fix11] - 2026-07-26
 
 ### Fixed (Milestone 29.1, Fix #11: Real Effect for the Runtime Selection Screen)

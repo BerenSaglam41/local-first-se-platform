@@ -12,7 +12,12 @@ export type CliProcessSpawner = (executable: string, args: string[]) => ChildPro
  * that grandchild running, invisible to SE-OS, for as long as the real UAT observed it (minutes).
  */
 export const defaultCliProcessSpawner: CliProcessSpawner = (executable, args) =>
-  realSpawn(executable, args, { detached: true });
+  // stdin explicitly closed ('ignore'): SE-OS never pipes anything to a spawned CLI's stdin, but
+  // leaving it open (Node's default) makes some CLIs (verified: the real `claude` CLI) print a
+  // confusing "no stdin data received in 3s, proceeding without it" warning into every real
+  // execution's terminal log — noise that looks like a real problem but isn't (see M29.1 Fix #3 /
+  // ADR-0012). Closing it outright removes the warning at the source instead of just tolerating it.
+  realSpawn(executable, args, { detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
 
 /**
  * Kills a real spawned process AND every descendant it forked, not just the single process

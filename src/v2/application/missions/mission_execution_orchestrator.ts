@@ -18,7 +18,11 @@ export class MissionExecutionOrchestrator extends EventEmitter {
   private defaultPolicy: MissionExecutionPolicy = {
     maxParallelWorkers: 3,
     maxTaskRetries: 2,
-    timeoutMs: 60000,
+    // See ReasoningCoordinator's matching comment / ADR-0012 (M29.1 Fix #3): 60s was measured to
+    // be unrealistic for real Claude Code CLI latency on complex prompts (~125s observed for a
+    // genuine architecture-generation call). This value now actually reaches the real reasoning
+    // call via WorkerExecutionEngine -> ReasoningRequest.timeoutMs (previously silently discarded).
+    timeoutMs: 240000,
     autoRetryOnFailure: true,
   };
 

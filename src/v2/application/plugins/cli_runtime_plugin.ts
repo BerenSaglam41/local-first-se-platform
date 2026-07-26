@@ -12,7 +12,11 @@ import { IEventStore } from '../../contracts/ievent_store';
 import { CliDetector, CliDetectionResult } from './cli_detector';
 import { CliProcessSpawner, runCliProcess, defaultCliProcessSpawner, killProcessGroup } from './cli_process_executor';
 
-const DEFAULT_EXECUTION_TIMEOUT_MS = 180000;
+// See ReasoningCoordinator/MissionExecutionOrchestrator (M29.1 Fix #3): real measured Claude Code CLI
+// latency for a complex prompt was ~125s. This plugin-level default only applies when a caller
+// invokes execute() directly without going through ReasoningCoordinator (which now always passes
+// its own, equally-realistic timeoutMs explicitly).
+const DEFAULT_EXECUTION_TIMEOUT_MS = 240000;
 
 export interface CliPromptArgsOptions {
   conversationSessionId?: string;

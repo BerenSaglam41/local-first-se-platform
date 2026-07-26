@@ -61,6 +61,13 @@ export class WorkerExecutionEngine extends EventEmitter {
         context: {
           constraints: [`Execute strictly within workspace '${workspacePath}'`],
         },
+        // Wires the caller's real configured timeout (see MissionExecutionPolicy.timeoutMs via
+        // TaskScheduler) through to the actual reasoning call instead of silently discarding it
+        // and always falling back to ReasoningCoordinator's own default — see ADR-0012 / M29.1
+        // Fix #3: a real, complex Claude Code CLI call was measured taking ~125s, and the
+        // previously-unused config path meant every caller was stuck with whatever
+        // ReasoningCoordinator's internal default happened to be, with no way to override it.
+        timeoutMs: request.policy?.maxDurationMs,
       });
 
       if (!reasoningRes.success || !reasoningRes.response) {

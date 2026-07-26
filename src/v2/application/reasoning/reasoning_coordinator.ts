@@ -24,7 +24,13 @@ export class ReasoningCoordinator extends EventEmitter {
   private selectionStrategy: IRuntimeSelectionStrategy;
   private activeRequests = new Map<string, ReasoningRequest>();
   private defaultPolicy: ReasoningPolicy = {
-    maxTimeoutMs: 60000,
+    // 60s was measured, via the real installed Claude Code CLI, to be far too short for a
+    // genuine complex prompt (a real architecture-generation call took ~125s to legitimately
+    // finish with code 0 and real output) — every such call was being killed mid-flight and
+    // misreported as a failure, with an unrelated harmless CLI startup warning ("no stdin data
+    // received in 3s") coincidentally being the only captured stderr, making it look like a
+    // stdin bug rather than what it actually was: an unrealistic default timeout (M29.1 Fix #3).
+    maxTimeoutMs: 240000,
     maxConcurrentRequests: 5,
     retryCount: 2,
     backoffMs: 500,
